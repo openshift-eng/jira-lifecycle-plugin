@@ -36,7 +36,7 @@ type options struct {
 	github                   prowflagutil.GitHubOptions
 	jira                     prowflagutil.JiraOptions
 
-	dryRun bool
+	validateConfig string
 }
 
 func gatherOptions() options {
@@ -46,6 +46,7 @@ func gatherOptions() options {
 	fs := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 
 	fs.StringVar(&o.configPath, "config-path", "", "Path to jira lifecycle configuration.")
+	fs.StringVar(&o.validateConfig, "validate-config", "", "Validate config at specified directory and exit without running operator")
 	fs.StringVar(&o.webhookSecretFile, "hmac-secret-file", "", "Path to the file containing the GitHub HMAC secret.")
 
 	o.github.AddFlags(fs)
@@ -64,7 +65,11 @@ func gatherOptions() options {
 }
 
 func (o *options) Validate() error {
-	if err := o.github.Validate(o.dryRun); err != nil {
+	if err := o.github.Validate(false); err != nil {
+		return err
+	}
+
+	if err := o.jira.Validate(false); err != nil {
 		return err
 	}
 
@@ -122,6 +127,17 @@ func main() {
 	logger := logrus.WithField("plugin", "jira-lifecycle")
 
 	o := gatherOptions()
+	if o.validateConfig != "" {
+		bytes, err := gzip.ReadFileMaybeGZIP(o.validateConfig)
+		if err != nil {
+			logger.Fatalf("couldn't read configuration file %s: %v", o.configPath, err)
+		}
+		if err := validateConfig(bytes); err != nil {
+			fmt.Printf("Config is invalid: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
 	if err := o.Validate(); err != nil {
 		logger.Fatalf("Invalid options: %v", err)
 	}
@@ -142,7 +158,7 @@ func main() {
 		logger.WithError(err).Fatal("Error starting secrets agent.")
 	}
 
-	githubClient, err := o.github.GitHubClient(o.dryRun)
+	githubClient, err := o.github.GitHubClient(false)
 	if err != nil {
 		logger.WithError(err).Fatal("Error getting GitHub client.")
 	}
