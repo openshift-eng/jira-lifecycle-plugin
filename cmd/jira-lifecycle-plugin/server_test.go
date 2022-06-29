@@ -2387,6 +2387,13 @@ func TestValidateBug(t *testing.T) {
 			validations: []string{"bug is in the state MODIFIED, which is one of the valid states (MODIFIED)"},
 		},
 		{
+			name:        "matching status requirement means a valid bug (case-insensitive)",
+			issue:       &jira.Issue{Fields: &jira.IssueFields{Status: &jira.Status{Name: "Modified"}}},
+			options:     JiraBranchOptions{ValidStates: &modified},
+			valid:       true,
+			validations: []string{"bug is in the state Modified, which is one of the valid states (MODIFIED)"},
+		},
+		{
 			name:        "matching status requirement by being in the migrated state means a valid bug",
 			issue:       &jira.Issue{Fields: &jira.IssueFields{Status: &jira.Status{Name: "UPDATED"}}},
 			options:     JiraBranchOptions{ValidStates: &modified, StateAfterValidation: &updated},
@@ -2554,6 +2561,16 @@ func TestValidateBug(t *testing.T) {
 			options:     JiraBranchOptions{ValidStates: &[]JiraBugState{{Status: "CLOSED", Resolution: "ERRATA"}}},
 			valid:       true,
 			validations: []string{"bug is in the state CLOSED (ERRATA), which is one of the valid states (CLOSED (ERRATA))"},
+		},
+		{
+			name: "matching status and resolution means a valid bug when both are required (case-insensitive)",
+			issue: &jira.Issue{Fields: &jira.IssueFields{
+				Status:     &jira.Status{Name: "Closed"},
+				Resolution: &jira.Resolution{Name: "Errata"},
+			}},
+			options:     JiraBranchOptions{ValidStates: &[]JiraBugState{{Status: "CLOSED", Resolution: "ERRATA"}}},
+			valid:       true,
+			validations: []string{"bug is in the state Closed (Errata), which is one of the valid states (CLOSED (ERRATA))"},
 		},
 		{
 			name: "matching resolution means a valid bug when status is not required",

@@ -24,6 +24,7 @@ import (
 
 	"github.com/openshift-eng/jira-lifecycle-plugin/pkg/helpers"
 	"github.com/openshift-eng/jira-lifecycle-plugin/pkg/labels"
+	"github.com/openshift-eng/jira-lifecycle-plugin/pkg/status"
 )
 
 const (
@@ -416,12 +417,12 @@ To reference a bug, add 'OCPBUGS-XXX:' to the title of this pull request and req
 			response = fmt.Sprintf(`This pull request references `+bugLink+`, which is valid.`, e.key, jc.JiraURL(), e.key)
 			// if configured, move the bug to the new state
 			if options.StateAfterValidation != nil {
-				if options.StateAfterValidation.Status != "" && (bug.Fields.Status == nil || options.StateAfterValidation.Status != bug.Fields.Status.Name) {
+				if options.StateAfterValidation.Status != "" && (bug.Fields.Status == nil || !strings.EqualFold(options.StateAfterValidation.Status, bug.Fields.Status.Name)) {
 					if err := jc.UpdateStatus(bug.ID, options.StateAfterValidation.Status); err != nil {
 						log.WithError(err).Warn("Unexpected error updating jira issue.")
 						return comment(formatError(fmt.Sprintf("updating to the %s state", options.StateAfterValidation.Status), jc.JiraURL(), e.key, err))
 					}
-					if options.StateAfterValidation.Resolution != "" && (bug.Fields.Resolution == nil || options.StateAfterValidation.Resolution != bug.Fields.Resolution.Name) {
+					if options.StateAfterValidation.Resolution != "" && (bug.Fields.Resolution == nil || !strings.EqualFold(options.StateAfterValidation.Resolution, bug.Fields.Resolution.Name)) {
 						updateIssue := jira.Issue{ID: bug.ID, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterValidation.Resolution}}}
 						if _, err := jc.UpdateIssue(&updateIssue); err != nil {
 							log.WithError(err).Warn("Unexpected error updating jira issue.")
@@ -1008,8 +1009,8 @@ func bugMatchesStates(bug *jira.Issue, states []JiraBugState) bool {
 		return false
 	}
 	for _, state := range states {
-		if ((state.Status != "" && state.Status == bug.Fields.Status.Name) || state.Status == "") &&
-			((state.Resolution != "" && state.Resolution == bug.Fields.Resolution.Name) || state.Resolution == "") {
+		if ((state.Status != "" && strings.EqualFold(state.Status, bug.Fields.Status.Name)) || state.Status == "") &&
+			((state.Resolution != "" && strings.EqualFold(state.Resolution, bug.Fields.Resolution.Name)) || state.Resolution == "") {
 			return true
 		}
 	}
@@ -1029,7 +1030,7 @@ func validateBug(bug *jira.Issue, dependents []*jira.Issue, options JiraBranchOp
 	valid := true
 	var errors []string
 	var validations []string
-	if options.IsOpen != nil && (bug.Fields == nil || bug.Fields.Status == nil || *options.IsOpen != (bug.Fields.Status.Name != jiraclient.StatusClosed)) {
+	if options.IsOpen != nil && (bug.Fields == nil || bug.Fields.Status == nil || *options.IsOpen != !strings.EqualFold(bug.Fields.Status.Name, status.Closed)) {
 		valid = false
 		not := ""
 		was := "isn't"
@@ -1044,7 +1045,7 @@ func validateBug(bug *jira.Issue, dependents []*jira.Issue, options JiraBranchOp
 			expected = "not open"
 		}
 		was := "isn't"
-		if bug.Fields.Status.Name != jiraclient.StatusClosed {
+		if !strings.EqualFold(bug.Fields.Status.Name, status.Closed) {
 			was = "is"
 		}
 		validations = append(validations, fmt.Sprintf("bug %s open, matching expected state (%s)", was, expected))
@@ -1291,12 +1292,12 @@ These pull request must merge or be unlinked from the Jira bug in order for it t
 
 	if shouldMigrate {
 		if options.StateAfterMerge != nil {
-			if options.StateAfterMerge.Status != "" && (bug.Fields.Status == nil || options.StateAfterMerge.Status != bug.Fields.Status.Name) {
+			if options.StateAfterMerge.Status != "" && (bug.Fields.Status == nil || !strings.EqualFold(options.StateAfterMerge.Status, bug.Fields.Status.Name)) {
 				if err := jc.UpdateStatus(e.key, options.StateAfterMerge.Status); err != nil {
 					log.WithError(err).Warn("Unexpected error updating jira issue.")
 					return comment(formatError(fmt.Sprintf("updating to the %s state", options.StateAfterMerge.Status), jc.JiraURL(), e.key, err))
 				}
-				if options.StateAfterMerge.Resolution != "" && (bug.Fields.Resolution == nil || options.StateAfterMerge.Resolution != bug.Fields.Resolution.Name) {
+				if options.StateAfterMerge.Resolution != "" && (bug.Fields.Resolution == nil || !strings.EqualFold(options.StateAfterMerge.Resolution, bug.Fields.Resolution.Name)) {
 					updateIssue := jira.Issue{ID: bug.ID, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterMerge.Resolution}}}
 					if _, err := jc.UpdateIssue(&updateIssue); err != nil {
 						log.WithError(err).Warn("Unexpected error updating jira issue.")
@@ -1480,7 +1481,7 @@ func handleClose(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 				log.WithError(err).Warn("Unexpected error getting Jira issue.")
 				return comment(formatError("getting issue", jc.JiraURL(), e.key, err))
 			}
-			if issue.Fields.Status.Name != "CLOSED" {
+			if !strings.EqualFold(issue.Fields.Status.Name, status.Closed) {
 				links, err := jc.GetRemoteLinks(issue.ID)
 				if err != nil {
 					log.WithError(err).Warn("Unexpected error getting remote links for Jira issue.")
@@ -1491,12 +1492,12 @@ func handleClose(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 					if err != nil || bug == nil {
 						return err
 					}
-					if options.StateAfterClose.Status != "" && (bug.Fields.Status == nil || options.StateAfterClose.Status != bug.Fields.Status.Name) {
+					if options.StateAfterClose.Status != "" && (bug.Fields.Status == nil || !strings.EqualFold(options.StateAfterClose.Status, bug.Fields.Status.Name)) {
 						if err := jc.UpdateStatus(issue.ID, options.StateAfterClose.Status); err != nil {
 							log.WithError(err).Warn("Unexpected error updating jira issue.")
 							return comment(formatError(fmt.Sprintf("updating to the %s state", options.StateAfterClose.Status), jc.JiraURL(), e.key, err))
 						}
-						if options.StateAfterClose.Resolution != "" && (bug.Fields.Resolution == nil || options.StateAfterClose.Resolution != bug.Fields.Resolution.Name) {
+						if options.StateAfterClose.Resolution != "" && (bug.Fields.Resolution == nil || !strings.EqualFold(options.StateAfterClose.Resolution, bug.Fields.Resolution.Name)) {
 							updateIssue := jira.Issue{ID: bug.ID, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterClose.Resolution}}}
 							if _, err := jc.UpdateIssue(&updateIssue); err != nil {
 								log.WithError(err).Warn("Unexpected error updating jira issue.")
