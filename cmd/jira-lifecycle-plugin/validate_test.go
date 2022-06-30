@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"sort"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -87,7 +88,7 @@ func TestValidateStatuses(t *testing.T) {
 	testCases := []struct {
 		name        string
 		config      Config
-		expectedErr []error
+		expectedErr []string
 	}{{
 		name: "Basic config with valid states",
 		config: Config{
@@ -153,8 +154,8 @@ func TestValidateStatuses(t *testing.T) {
 				},
 			},
 		},
-		expectedErr: []error{
-			errors.New("Invalid statuses in `default`: my-branch has invalid status for `state_after_close`: `CLOSER`"),
+		expectedErr: []string{
+			"Invalid statuses in `default`: my-branch has invalid status for `state_after_close`: `CLOSER`",
 		},
 	}, {
 		name: "Invalid state in org default",
@@ -188,8 +189,8 @@ func TestValidateStatuses(t *testing.T) {
 				},
 			},
 		},
-		expectedErr: []error{
-			errors.New("Invalid statuses in `org1/default`: my-branch has invalid status for `state_after_close`: `CLOSER`"),
+		expectedErr: []string{
+			"Invalid statuses in `org1/default`: my-branch has invalid status for `state_after_close`: `CLOSER`",
 		},
 	}, {
 		name: "Invalid state in repo branch",
@@ -223,8 +224,8 @@ func TestValidateStatuses(t *testing.T) {
 				},
 			},
 		},
-		expectedErr: []error{
-			errors.New("Invalid statuses in `org1/my-repo`: my-branch has invalid status for `state_after_close`: `CLOSER`"),
+		expectedErr: []string{
+			"Invalid statuses in `org1/my-repo`: my-branch has invalid status for `state_after_close`: `CLOSER`",
 		},
 	}, {
 		name: "Multiple errors all reported",
@@ -258,11 +259,11 @@ func TestValidateStatuses(t *testing.T) {
 				},
 			},
 		},
-		expectedErr: []error{
-			errors.New("Invalid statuses in `default`: my-branch has invalid status for `state_after_close`: `HELLO`"),
-			errors.New("Invalid statuses in `org1/default`: my-branch has invalid status for `state_after_close`: `WORLD`"),
-			errors.New("Invalid statuses in `org1/my-repo`: my-branch has invalid status for `state_after_close`: `TEST`"),
-			errors.New("Invalid statuses in `org2/default`: my-branch has invalid status for `state_after_close`: `INVALID`"),
+		expectedErr: []string{
+			"Invalid statuses in `default`: my-branch has invalid status for `state_after_close`: `HELLO`",
+			"Invalid statuses in `org1/default`: my-branch has invalid status for `state_after_close`: `WORLD`",
+			"Invalid statuses in `org1/my-repo`: my-branch has invalid status for `state_after_close`: `TEST`",
+			"Invalid statuses in `org2/default`: my-branch has invalid status for `state_after_close`: `INVALID`",
 		},
 	}}
 	for _, tc := range testCases {
@@ -270,8 +271,13 @@ func TestValidateStatuses(t *testing.T) {
 		if len(errs) != len(tc.expectedErr) {
 			t.Errorf("%s: Got different number of errors (%d) than expected (%d): %+v", tc.name, len(errs), len(tc.expectedErr), errs)
 		} else {
-			for index, err := range errs {
-				if err.Error() != tc.expectedErr[index].Error() {
+			stringErrs := []string{}
+			for _, err := range errs {
+				stringErrs = append(stringErrs, err.Error())
+			}
+			sort.Strings(stringErrs)
+			for index, err := range stringErrs {
+				if err != tc.expectedErr[index] {
 					t.Errorf("%s: Got different error at index %d than expected: %v", tc.name, index, err)
 				}
 			}
