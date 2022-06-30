@@ -1125,7 +1125,7 @@ Instructions for interacting with me using PR comments are available [here](http
 					"customfield_12319940": &v2,
 				},
 			}}},
-			issueUpdateErrors:   map[string]error{"2": errors.New("injected error updating bug 2")},
+			issueUpdateErrors:   map[string]error{"OCPBUGS-124": errors.New("injected error updating bug OCPBUGS-124")},
 			prs:                 []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}, {Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] " + base.title}},
 			title:               "[v1] " + base.title,
 			cherryPick:          true,
@@ -1137,7 +1137,7 @@ Instructions for interacting with me using PR comments are available [here](http
 <details><summary>Full error message.</summary>
 
 <code>
-injected error updating bug 2
+injected error updating bug OCPBUGS-124
 </code>
 
 </details>
