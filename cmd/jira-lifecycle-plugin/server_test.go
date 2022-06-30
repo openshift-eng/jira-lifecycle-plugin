@@ -100,6 +100,15 @@ func TestHandle(t *testing.T) {
 			Inward:  "is cloned by",
 			Outward: "clones",
 		},
+		OutwardIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123"},
+	}
+	// the fake clone doesn't include the key in the link, which breaks our check; just make a second struct without the key set
+	fieldLinkTo123JustID := jira.IssueLink{
+		Type: jira.IssueLinkType{
+			Name:    "Cloners",
+			Inward:  "is cloned by",
+			Outward: "clones",
+		},
 		OutwardIssue: &jira.Issue{ID: "1"},
 	}
 	fieldLinkTo124 := jira.IssueLink{
@@ -116,8 +125,8 @@ func TestHandle(t *testing.T) {
 			Inward:  "is cloned by",
 			Outward: "clones",
 		},
-		InwardIssue:  &jira.Issue{ID: "2"},
-		OutwardIssue: &jira.Issue{ID: "1"},
+		InwardIssue:  &jira.Issue{ID: "2", Key: "OCPBUGS-124"},
+		OutwardIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123"},
 	}
 	base := &event{
 		org: "org", repo: "repo", baseRef: "branch", number: 1, key: "OCPBUGS-123", body: "This PR fixes OCPBUGS-123", title: "OCPBUGS-123: fixed it!", htmlUrl: "https://github.com/org/repo/pull/1", login: "user",
@@ -423,13 +432,16 @@ Instructions for interacting with me using PR comments are available [here](http
 		},
 		{
 			name: "failure to fetch dependent bug results in a comment",
-			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
-				IssueLinks: []*jira.IssueLink{&fieldLinkTo124},
+			issues: []jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+				IssueLinks: []*jira.IssueLink{&fieldLinkTo123},
 			}}},
+			overrideEvent: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 2, key: "OCPBUGS-124", body: "This PR fixes OCPBUGS-124", title: "OCPBUGS-124: fixed it!", htmlUrl: "https://github.com/org/repo/pull/2", login: "user",
+			},
 			existingIssueLinks: []*jira.IssueLink{&linkBetween123to124},
-			issueGetErrors:     map[string]error{"OCPBUGS-124": errors.New("injected error getting bug")},
+			issueGetErrors:     map[string]error{"OCPBUGS-123": errors.New("injected error getting bug")},
 			options:            JiraBranchOptions{DependentBugStates: &verified},
-			expectedComment: `org/repo#1:@user: An error was encountered searching for dependent bug OCPBUGS-124 for bug OCPBUGS-123 on the Jira server at https://my-jira.com. No known errors were detected, please see the full error message for details.
+			expectedComment: `org/repo#2:@user: An error was encountered searching for dependent bug OCPBUGS-123 for bug OCPBUGS-124 on the Jira server at https://my-jira.com. No known errors were detected, please see the full error message for details.
 
 <details><summary>Full error message.</summary>
 
@@ -443,9 +455,9 @@ Please contact an administrator to resolve this issue, then request a bug refres
 
 <details>
 
-In response to [this](https://github.com/org/repo/pull/1):
+In response to [this](https://github.com/org/repo/pull/2):
 
->This PR fixes OCPBUGS-123
+>This PR fixes OCPBUGS-124
 
 
 Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
@@ -454,38 +466,41 @@ Instructions for interacting with me using PR comments are available [here](http
 		{
 			name: "valid bug with dependent bugs removes invalid label, adds valid label, comments",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
-				Status:     &jira.Status{Name: "MODIFIED"},
-				IssueLinks: []*jira.IssueLink{&fieldLinkTo124},
-				Unknowns: tcontainer.MarshalMap{
-					"customfield_12319940": &v1,
-				},
-			},
-			}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				Status:     &jira.Status{Name: "VERIFIED"},
-				IssueLinks: []*jira.IssueLink{&fieldLinkTo123},
+				IssueLinks: []*jira.IssueLink{&fieldLinkTo124},
 				Unknowns: tcontainer.MarshalMap{
 					"customfield_12319940": &v2,
 				},
+			},
+			}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+				Status:     &jira.Status{Name: "MODIFIED"},
+				IssueLinks: []*jira.IssueLink{&fieldLinkTo123},
+				Unknowns: tcontainer.MarshalMap{
+					"customfield_12319940": &v1,
+				},
 			}}},
+			overrideEvent: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 2, key: "OCPBUGS-124", body: "This PR fixes OCPBUGS-124", title: "OCPBUGS-124: fixed it!", htmlUrl: "https://github.com/org/repo/pull/2", login: "user",
+			},
 			existingIssueLinks: []*jira.IssueLink{&linkBetween123to124},
 			options:            JiraBranchOptions{IsOpen: &yes, TargetVersion: &v1Str, DependentBugStates: &verified, DependentBugTargetVersions: &[]string{v2Str}},
 			labels:             []string{"jira/invalid-bug"},
 			expectedLabels:     []string{"jira/valid-bug"},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
+			expectedComment: `org/repo#2:@user: This pull request references [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124), which is valid.
 
 <details><summary>5 validation(s) were run on this bug</summary>
 
 * bug is open, matching expected state (open)
 * bug target version (v1) matches configured target version for branch (v1)
-* dependent bug [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) is in the state VERIFIED, which is one of the valid states (VERIFIED)
-* dependent [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) targets the "v2" version, which is one of the valid target versions: v2
+* dependent bug [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) is in the state VERIFIED, which is one of the valid states (VERIFIED)
+* dependent [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) targets the "v2" version, which is one of the valid target versions: v2
 * bug has dependents</details>
 
 <details>
 
-In response to [this](https://github.com/org/repo/pull/1):
+In response to [this](https://github.com/org/repo/pull/2):
 
->This PR fixes OCPBUGS-123
+>This PR fixes OCPBUGS-124
 
 
 Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
@@ -1032,7 +1047,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Project: jira.Project{
 					Name: "OCPBUGS",
 				},
-				IssueLinks: []*jira.IssueLink{&fieldLinkTo123},
+				IssueLinks: []*jira.IssueLink{&fieldLinkTo123JustID},
 				Unknowns: tcontainer.MarshalMap{
 					"customfield_12316142": map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
 					"customfield_12319940": []interface{}{map[string]interface{}{"name": v1Str}},
@@ -1235,7 +1250,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			expectedIssue: &jira.Issue{ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"}, // during a clone on a real jira server, this field would get unset/reset; the fake client copies
-				IssueLinks:  []*jira.IssueLink{&fieldLinkTo123},
+				IssueLinks:  []*jira.IssueLink{&fieldLinkTo123JustID},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
 					Body: "This is a bug",
 				}}},

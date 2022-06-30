@@ -392,7 +392,7 @@ To reference a bug, add 'OCPBUGS-XXX:' to the title of this pull request and req
 				// identify if bug depends on this link; multiple different types of links may be blocker types; more can be added as they are identified
 				dependsOn := false
 				dependsOn = dependsOn || (link.InwardIssue != nil && link.Type.Name == "Blocks" && link.Type.Inward == "is blocked by")
-				dependsOn = dependsOn || (link.InwardIssue != nil && link.Type.Name == "Cloners" && link.Type.Inward == "is cloned by")
+				dependsOn = dependsOn || (link.OutwardIssue != nil && link.Type.Name == "Cloners" && link.Type.Inward == "is cloned by")
 				if !dependsOn {
 					continue
 				}
