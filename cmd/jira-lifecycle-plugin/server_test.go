@@ -132,7 +132,6 @@ func TestHandle(t *testing.T) {
 		opened                     bool
 		cherryPick                 bool
 		cherryPickFromPRNum        int
-		cherryPickTo               string
 		body                       string
 		title                      string
 		remoteLinks                map[string][]jira.RemoteLink
@@ -1009,7 +1008,6 @@ Instructions for interacting with me using PR comments are available [here](http
 			title:               "[v1] " + base.title,
 			cherryPick:          true,
 			cherryPickFromPRNum: 1,
-			cherryPickTo:        "v1",
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
 			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). Retitling PR to link against new bug.
 /retitle [v1] OCPBUGS-124: fixed it!
@@ -1055,7 +1053,6 @@ Instructions for interacting with me using PR comments are available [here](http
 			title:               "[v1] " + base.title,
 			cherryPick:          true,
 			cherryPickFromPRNum: 1,
-			cherryPickTo:        "v1",
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
 			expectedComment: `org/repo#1:@user: Error creating a cherry-pick bug in Jira: failed to check the state of cherrypicked pull request at https://github.com/org/repo/pull/1: pull request number 1 does not exist.
 Please contact an administrator to resolve this issue, then request a bug refresh with <code>/jira refresh</code>.
@@ -1087,7 +1084,6 @@ Instructions for interacting with me using PR comments are available [here](http
 			title:               "[v1] " + base.title,
 			cherryPick:          true,
 			cherryPickFromPRNum: 1,
-			cherryPickTo:        "v1",
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
 			expectedComment: `org/repo#1:@user: An error was encountered searching for bug OCPBUGS-123 on the Jira server at https://my-jira.com. No known errors were detected, please see the full error message for details.
 
@@ -1130,7 +1126,6 @@ Instructions for interacting with me using PR comments are available [here](http
 			title:               "[v1] " + base.title,
 			cherryPick:          true,
 			cherryPickFromPRNum: 1,
-			cherryPickTo:        "v1",
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
 			expectedComment: `org/repo#1:@user: An error was encountered updating cherry-pick bug in Jira: Created cherrypick [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124), but encountered error updating target version for bug OCPBUGS-124 on the Jira server at https://my-jira.com. No known errors were detected, please see the full error message for details.
 
@@ -1178,7 +1173,6 @@ Instructions for interacting with me using PR comments are available [here](http
 			title:               "[v1] " + base.title,
 			cherryPick:          true,
 			cherryPickFromPRNum: 1,
-			cherryPickTo:        "v1",
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
 			expectedComment: `org/repo#1:@user: Detected clone of [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) with correct target version. Retitling PR to link to clone:
 /retitle [v1] OCPBUGS-124: fixed it!
@@ -1218,7 +1212,6 @@ Instructions for interacting with me using PR comments are available [here](http
 			title:               "[v1] " + base.title,
 			cherryPick:          true,
 			cherryPickFromPRNum: 1,
-			cherryPickTo:        "v1",
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
 			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-125](https://my-jira.com/browse/OCPBUGS-125). Retitling PR to link against new bug.
 /retitle [v1] OCPBUGS-125: fixed it!
@@ -1371,7 +1364,6 @@ Instructions for interacting with me using PR comments are available [here](http
 			testEvent.opened = tc.opened
 			testEvent.cherrypick = tc.cherryPick
 			testEvent.cherrypickFromPRNum = tc.cherryPickFromPRNum
-			testEvent.cherrypickTo = tc.cherryPickTo
 			if tc.body != "" {
 				testEvent.body = tc.body
 			}
@@ -1458,10 +1450,6 @@ func checkComments(client *fakegithub.FakeClient, name, expectedComment string, 
 			t.Errorf("%s: got incorrect comment: %v", name, cmp.Diff(expectedComment, client.IssueCommentsAdded[0]))
 		}
 	}
-}
-
-func intPtr(i int) *int {
-	return &i
 }
 
 func TestInsertLinksIntoComment(t *testing.T) {
@@ -1873,7 +1861,7 @@ func TestDigestPR(t *testing.T) {
 				},
 			},
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "release-4.4", number: 3, opened: true, body: "This is an automated cherry-pick of #2\n\n/assign user", title: "[release-4.4] fixing a typo", htmlUrl: "http.com", login: "user", cherrypick: true, cherrypickFromPRNum: 2, cherrypickTo: "release-4.4", missing: true,
+				org: "org", repo: "repo", baseRef: "release-4.4", number: 3, opened: true, body: "This is an automated cherry-pick of #2\n\n/assign user", title: "[release-4.4] fixing a typo", htmlUrl: "http.com", login: "user", cherrypick: true, cherrypickFromPRNum: 2, missing: true,
 			},
 		},
 		{
@@ -1902,7 +1890,7 @@ func TestDigestPR(t *testing.T) {
 				},
 			},
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "release-4.4", number: 3, opened: true, body: "This is an automated cherry-pick of #2\n\n/assign user", title: "[release-4.4] OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user", cherrypick: true, cherrypickFromPRNum: 2, cherrypickTo: "release-4.4", key: "OCPBUGS-123",
+				org: "org", repo: "repo", baseRef: "release-4.4", number: 3, opened: true, body: "This is an automated cherry-pick of #2\n\n/assign user", title: "[release-4.4] OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user", cherrypick: true, cherrypickFromPRNum: 2, key: "OCPBUGS-123",
 			},
 		},
 		{
@@ -2775,7 +2763,7 @@ func TestGetCherrypickPRMatch(t *testing.T) {
 	for _, testCase := range testCases {
 		testPR := *pr
 		testPR.PullRequest.Body = cherrypicker.CreateCherrypickBody(prNum, testCase.requestor, testCase.note)
-		cherrypick, cherrypickOfPRNum, cherrypickTo, err := getCherryPickMatch(testPR)
+		cherrypick, cherrypickOfPRNum, err := getCherryPickMatch(testPR)
 		if err != nil {
 			t.Fatalf("%s: Got error but did not expect one: %v", testCase.name, err)
 		}
@@ -2784,9 +2772,6 @@ func TestGetCherrypickPRMatch(t *testing.T) {
 		}
 		if cherrypickOfPRNum != prNum {
 			t.Errorf("%s: Got incorrect PR num: Expected %d, got %d", testCase.name, prNum, cherrypickOfPRNum)
-		}
-		if cherrypickTo != "v2" {
-			t.Errorf("%s: Got incorrect cherrypick to branch: Expected %s, got %s", testCase.name, branch, cherrypickTo)
 		}
 	}
 }

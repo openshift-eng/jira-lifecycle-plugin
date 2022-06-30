@@ -44,10 +44,6 @@ var (
 	cherrypickPRMatch    = regexp.MustCompile(`This is an automated cherry-pick of #([0-9]+)`)
 )
 
-var (
-	issueNameRegex = regexp.MustCompile(`\b([a-zA-Z]+-[0-9]+)(\s|:|$)`)
-)
-
 type server struct {
 	config func() *Config
 
@@ -737,24 +733,6 @@ func upsertGitHubLinkToIssue(log *logrus.Entry, issueID string, jc jiraclient.Cl
 	return true, nil
 }
 
-func filterOutDisabledJiraProjects(candidateNames []string, disabledProjects []string) []string {
-	if len(disabledProjects) == 0 {
-		return candidateNames
-	}
-
-	var result []string
-	for _, excludedProject := range disabledProjects {
-		for _, candidate := range candidateNames {
-			if strings.HasPrefix(strings.ToLower(candidate), strings.ToLower(excludedProject)) {
-				continue
-			}
-			result = append(result, candidate)
-		}
-	}
-
-	return result
-}
-
 func (s *server) handlePullRequest(l *logrus.Entry, pre github.PullRequestEvent) {
 	cfg := s.config()
 	options := cfg.OptionsForBranch(pre.PullRequest.Base.Repo.Owner.Login, pre.PullRequest.Base.Repo.Name, pre.PullRequest.Base.Ref)
@@ -769,17 +747,17 @@ func (s *server) handlePullRequest(l *logrus.Entry, pre github.PullRequestEvent)
 	}
 }
 
-func getCherryPickMatch(pre github.PullRequestEvent) (bool, int, string, error) {
+func getCherryPickMatch(pre github.PullRequestEvent) (bool, int, error) {
 	cherrypickMatch := cherrypickPRMatch.FindStringSubmatch(pre.PullRequest.Body)
 	if cherrypickMatch != nil {
 		cherrypickOf, err := strconv.Atoi(cherrypickMatch[1])
 		if err != nil {
 			// should be impossible based on the regex
-			return false, 0, "", fmt.Errorf("Failed to parse cherrypick jira issue - is the regex correct? Err: %w", err)
+			return false, 0, fmt.Errorf("Failed to parse cherrypick jira issue - is the regex correct? Err: %w", err)
 		}
-		return true, cherrypickOf, pre.PullRequest.Base.Ref, nil
+		return true, cherrypickOf, nil
 	}
-	return false, 0, "", nil
+	return false, 0, nil
 }
 
 // digestPR determines if any action is necessary and creates the objects for handle() if it is
@@ -813,7 +791,7 @@ func digestPR(log *logrus.Entry, pre github.PullRequestEvent, validateByDefault 
 	}
 
 	// Check if PR is a cherrypick
-	cherrypick, cherrypickFromPRNum, cherrypickTo, err := getCherryPickMatch(pre)
+	cherrypick, cherrypickFromPRNum, err := getCherryPickMatch(pre)
 	if err != nil {
 		log.WithError(err).Debug("Failed to identify if PR is a cherrypick")
 		return nil, err
@@ -821,7 +799,6 @@ func digestPR(log *logrus.Entry, pre github.PullRequestEvent, validateByDefault 
 		if pre.Action == github.PullRequestActionOpened {
 			e.cherrypick = true
 			e.cherrypickFromPRNum = cherrypickFromPRNum
-			e.cherrypickTo = cherrypickTo
 			return e, nil
 		}
 	}
@@ -929,7 +906,6 @@ type event struct {
 	cc                              bool
 	cherrypick                      bool
 	cherrypickFromPRNum             int
-	cherrypickTo                    string
 }
 
 func (e *event) comment(gc githubClient) func(body string) error {
