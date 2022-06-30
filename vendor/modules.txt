@@ -1012,7 +1012,7 @@ k8s.io/kube-openapi/pkg/generators/rules
 k8s.io/kube-openapi/pkg/util/proto
 k8s.io/kube-openapi/pkg/util/sets
 k8s.io/kube-openapi/pkg/validation/spec
-# k8s.io/test-infra v0.0.0-20220623081143-6f4ef9aab31e
+# k8s.io/test-infra v0.0.0-20220630180208-5b0309003f44
 ## explicit; go 1.18
 k8s.io/test-infra/ghproxy/ghcache
 k8s.io/test-infra/ghproxy/ghmetrics
