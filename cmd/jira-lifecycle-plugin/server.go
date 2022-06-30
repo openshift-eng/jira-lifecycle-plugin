@@ -423,7 +423,7 @@ To reference a bug, add 'OCPBUGS-XXX:' to the title of this pull request and req
 						return comment(formatError(fmt.Sprintf("updating to the %s state", options.StateAfterValidation.Status), jc.JiraURL(), e.key, err))
 					}
 					if options.StateAfterValidation.Resolution != "" && (bug.Fields.Resolution == nil || !strings.EqualFold(options.StateAfterValidation.Resolution, bug.Fields.Resolution.Name)) {
-						updateIssue := jira.Issue{ID: bug.ID, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterValidation.Resolution}}}
+						updateIssue := jira.Issue{Key: bug.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterValidation.Resolution}}}
 						if _, err := jc.UpdateIssue(&updateIssue); err != nil {
 							log.WithError(err).Warn("Unexpected error updating jira issue.")
 							return comment(formatError(fmt.Sprintf("updating to the %s resolution", options.StateAfterValidation.Resolution), jc.JiraURL(), e.key, err))
@@ -1298,7 +1298,7 @@ These pull request must merge or be unlinked from the Jira bug in order for it t
 					return comment(formatError(fmt.Sprintf("updating to the %s state", options.StateAfterMerge.Status), jc.JiraURL(), e.key, err))
 				}
 				if options.StateAfterMerge.Resolution != "" && (bug.Fields.Resolution == nil || !strings.EqualFold(options.StateAfterMerge.Resolution, bug.Fields.Resolution.Name)) {
-					updateIssue := jira.Issue{ID: bug.ID, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterMerge.Resolution}}}
+					updateIssue := jira.Issue{Key: bug.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterMerge.Resolution}}}
 					if _, err := jc.UpdateIssue(&updateIssue); err != nil {
 						log.WithError(err).Warn("Unexpected error updating jira issue.")
 						return comment(formatError(fmt.Sprintf("updating to the %s resolution", options.StateAfterMerge.Resolution), jc.JiraURL(), e.key, err))
@@ -1387,7 +1387,7 @@ func handleCherrypick(e event, gc githubClient, jc jiraclient.Client, options Ji
 	cloneLink := fmt.Sprintf(bugLink, clone.Key, jc.JiraURL(), clone.Key)
 	// Update the version of the bug to the target release
 	update := jira.Issue{
-		ID: clone.ID,
+		Key: clone.Key,
 		Fields: &jira.IssueFields{
 			Unknowns: tcontainer.MarshalMap{
 				"customfield_12319940": []*jira.Version{{Name: targetRelease}},
@@ -1498,7 +1498,7 @@ func handleClose(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 							return comment(formatError(fmt.Sprintf("updating to the %s state", options.StateAfterClose.Status), jc.JiraURL(), e.key, err))
 						}
 						if options.StateAfterClose.Resolution != "" && (bug.Fields.Resolution == nil || !strings.EqualFold(options.StateAfterClose.Resolution, bug.Fields.Resolution.Name)) {
-							updateIssue := jira.Issue{ID: bug.ID, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterClose.Resolution}}}
+							updateIssue := jira.Issue{Key: bug.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterClose.Resolution}}}
 							if _, err := jc.UpdateIssue(&updateIssue); err != nil {
 								log.WithError(err).Warn("Unexpected error updating jira issue.")
 								return comment(formatError(fmt.Sprintf("updating to the %s resolution", options.StateAfterClose.Resolution), jc.JiraURL(), e.key, err))
