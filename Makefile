@@ -13,3 +13,4 @@ SOURCE_GIT_TAG=v1.0.0+$(shell git rev-parse --short=7 HEAD)
 
 GO_LD_EXTRAFLAGS=-X github.com/openshift-eng/jira-lifecycle-plugin/vendor/k8s.io/client-go/pkg/version.gitCommit=$(shell git rev-parse HEAD) -X github.com/openshift-eng/jira-lifecycle-plugin/vendor/k8s.io/client-go/pkg/version.gitVersion=${SOURCE_GIT_TAG} -X k8s.io/test-infra/prow/version.Name=jira-lifecycle-plugin -X k8s.io/test-infra/prow/version.Version=${version}
 
+# comment
