@@ -9,6 +9,7 @@ import (
 
 	"github.com/andygrunwald/go-jira"
 	"github.com/google/go-cmp/cmp"
+	"github.com/openshift-eng/jira-lifecycle-plugin/pkg/helpers"
 	"github.com/sirupsen/logrus"
 	"github.com/trivago/tgo/tcontainer"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -204,7 +205,7 @@ Instructions for interacting with me using PR comments are available [here](http
 		},
 		{
 			name:           "valid bug removes invalid label, adds valid/severity labels and comments",
-			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{"customfield_12316142": severityCritical}}}},
+			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{"jira/invalid-bug"},
 			expectedLabels: []string{"jira/valid-bug", "jira/severity-critical"},
@@ -224,7 +225,7 @@ Instructions for interacting with me using PR comments are available [here](http
 		},
 		{
 			name:           "invalid bug adds invalid label, removes valid label and comments",
-			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{"customfield_12316142": severityImportant}}}},
+			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityImportant}}}},
 			options:        JiraBranchOptions{IsOpen: &open},
 			labels:         []string{"jira/valid-bug", "jira/severity-critical"},
 			expectedLabels: []string{"jira/invalid-bug", "jira/severity-important"},
@@ -245,7 +246,7 @@ Instructions for interacting with me using PR comments are available [here](http
 		},
 		{
 			name:           "invalid bug adds keeps human-added valid bug label",
-			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{"customfield_12316142": severityImportant}}}},
+			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityImportant}}}},
 			options:        JiraBranchOptions{IsOpen: &open},
 			humanLabelled:  true,
 			labels:         []string{"jira/valid-bug", "jira/severity-critical"},
@@ -286,7 +287,7 @@ Instructions for interacting with me using PR comments are available [here](http
 		},
 		{
 			name:   "valid bug with status update removes invalid label, adds valid label, comments and updates status",
-			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{"customfield_12316142": severityModerate}}}},
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityModerate}}}},
 			remoteLinks: map[string][]jira.RemoteLink{"OCPBUGS-123": {{ID: 1, Object: &jira.RemoteLinkObject{
 				URL:   "https://github.com/org/repo/pull/1",
 				Title: "org/repo#1: OCPBUGS-123: fixed it!",
@@ -314,12 +315,12 @@ Instructions for interacting with me using PR comments are available [here](http
 </details>`,
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status:   &jira.Status{Name: "UPDATED"},
-				Unknowns: tcontainer.MarshalMap{"customfield_12316142": severityModerate},
+				Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityModerate},
 			}},
 		},
 		{
 			name:           "valid bug with status update removes invalid label, adds valid label, comments and updates status with resolution",
-			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{"customfield_12316142": severityLow}}}},
+			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityLow}}}},
 			options:        JiraBranchOptions{StateAfterValidation: &JiraBugState{Status: "CLOSED", Resolution: "VALIDATED"}}, // no requirements --> always valid
 			labels:         []string{"jira/invalid-bug"},
 			expectedLabels: []string{"jira/valid-bug", "jira/severity-low"},
@@ -344,7 +345,7 @@ Instructions for interacting with me using PR comments are available [here](http
 					Name: "VALIDATED",
 				},
 				// due to the way `Unknowns` works, this has to be provided as a map[string]interface{}
-				Unknowns: tcontainer.MarshalMap{"customfield_12316142": map[string]interface{}{"Value": string(`<img alt="" src="/images/icons/priorities/low.svg" width="16" height="16"> Low`)}},
+				Unknowns: tcontainer.MarshalMap{helpers.SeverityField: map[string]interface{}{"Value": string(`<img alt="" src="/images/icons/priorities/low.svg" width="16" height="16"> Low`)}},
 			},
 			},
 		},
@@ -468,14 +469,14 @@ Instructions for interacting with me using PR comments are available [here](http
 				Status:     &jira.Status{Name: "VERIFIED"},
 				IssueLinks: []*jira.IssueLink{&fieldLinkTo124},
 				Unknowns: tcontainer.MarshalMap{
-					"customfield_12319940": &v2,
+					helpers.TargetVersionField: &v2,
 				},
 			},
 			}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				Status:     &jira.Status{Name: "MODIFIED"},
 				IssueLinks: []*jira.IssueLink{&fieldLinkTo123},
 				Unknowns: tcontainer.MarshalMap{
-					"customfield_12319940": &v1,
+					helpers.TargetVersionField: &v1,
 				},
 			}}},
 			overrideEvent: &event{
@@ -778,7 +779,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "CLOSED"},
 				Unknowns: tcontainer.MarshalMap{
-					"customfield_12316142": severityCritical,
+					helpers.SeverityField: severityCritical,
 				},
 			}}},
 			remoteLinks: map[string][]jira.RemoteLink{"OCPBUGS-123": {{ID: 1, Object: &jira.RemoteLinkObject{
@@ -807,7 +808,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "CLOSED"},
 				Unknowns: tcontainer.MarshalMap{
-					"customfield_12316142": severityCritical,
+					helpers.SeverityField: severityCritical,
 				},
 			}},
 		},
@@ -818,7 +819,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "CLOSED"},
 				Unknowns: tcontainer.MarshalMap{
-					"customfield_12316142": severityCritical,
+					helpers.SeverityField: severityCritical,
 				},
 			}}},
 			remoteLinks: map[string][]jira.RemoteLink{"OCPBUGS-123": {{ID: 1, Object: &jira.RemoteLinkObject{
@@ -846,7 +847,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "CLOSED"},
 				Unknowns: tcontainer.MarshalMap{
-					"customfield_12316142": severityCritical,
+					helpers.SeverityField: severityCritical,
 				},
 			}},
 			expectedRemovedRemoteLinks: []jira.RemoteLink{{ID: 1, Object: &jira.RemoteLinkObject{
@@ -866,7 +867,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "CLOSED"},
 				Unknowns: tcontainer.MarshalMap{
-					"customfield_12316142": severityCritical,
+					helpers.SeverityField: severityCritical,
 				},
 			}}},
 			prs:     []github.PullRequest{{Number: base.number, Merged: false}},
@@ -874,7 +875,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "CLOSED"},
 				Unknowns: tcontainer.MarshalMap{
-					"customfield_12316142": severityCritical,
+					helpers.SeverityField: severityCritical,
 				},
 			}},
 		},
@@ -888,7 +889,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Status: &jira.Status{Name: "POST"},
 				Unknowns: tcontainer.MarshalMap{
-					"customfield_12316142": severityCritical,
+					helpers.SeverityField: severityCritical,
 				},
 			}}},
 			remoteLinks: map[string][]jira.RemoteLink{"OCPBUGS-123": {{ID: 1, Object: &jira.RemoteLinkObject{
@@ -922,7 +923,7 @@ Instructions for interacting with me using PR comments are available [here](http
 					Visibility: PrivateVisibility,
 				}}},
 				Unknowns: tcontainer.MarshalMap{
-					"customfield_12316142": severityCritical,
+					helpers.SeverityField: severityCritical,
 				},
 			}},
 			expectedRemovedRemoteLinks: []jira.RemoteLink{{ID: 1, Object: &jira.RemoteLinkObject{
@@ -951,7 +952,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "POST"},
 				Unknowns: tcontainer.MarshalMap{
-					"customfield_12316142": severityCritical,
+					helpers.SeverityField: severityCritical,
 				},
 			}}},
 			remoteLinks: map[string][]jira.RemoteLink{"OCPBUGS-123": {{
@@ -991,7 +992,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "POST"},
 				Unknowns: tcontainer.MarshalMap{
-					"customfield_12316142": severityCritical,
+					helpers.SeverityField: severityCritical,
 				},
 			}},
 			expectedRemovedRemoteLinks: []jira.RemoteLink{{ID: 1, Object: &jira.RemoteLinkObject{
@@ -1015,8 +1016,8 @@ Instructions for interacting with me using PR comments are available [here](http
 					Name: "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
-					"customfield_12316142": severityCritical,
-					"customfield_12319940": &v2,
+					helpers.SeverityField:      severityCritical,
+					helpers.TargetVersionField: &v2,
 				},
 			}}},
 			prs:                 []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}, {Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] " + base.title}},
@@ -1047,8 +1048,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 				IssueLinks: []*jira.IssueLink{&fieldLinkTo123JustID},
 				Unknowns: tcontainer.MarshalMap{
-					"customfield_12316142": map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
-					"customfield_12319940": []interface{}{map[string]interface{}{"name": v1Str}},
+					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
+					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
 				},
 			}},
 		},
@@ -1060,8 +1061,8 @@ Instructions for interacting with me using PR comments are available [here](http
 					Body: "This is a bug",
 				}}},
 				Unknowns: tcontainer.MarshalMap{
-					"customfield_12316142": severityCritical,
-					"customfield_12319940": &v2,
+					helpers.SeverityField:      severityCritical,
+					helpers.TargetVersionField: &v2,
 				},
 			}}},
 			prs:                 []github.PullRequest{{Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] " + base.title}},
@@ -1090,8 +1091,8 @@ Instructions for interacting with me using PR comments are available [here](http
 					Body: "This is a bug",
 				}}},
 				Unknowns: tcontainer.MarshalMap{
-					"customfield_12316142": severityCritical,
-					"customfield_12319940": &v2,
+					helpers.SeverityField:      severityCritical,
+					helpers.TargetVersionField: &v2,
 				},
 			}}},
 			issueGetErrors:      map[string]error{"OCPBUGS-123": errors.New("injected error getting bug")},
@@ -1132,8 +1133,8 @@ Instructions for interacting with me using PR comments are available [here](http
 					Name: "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
-					"customfield_12316142": severityCritical,
-					"customfield_12319940": &v2,
+					helpers.SeverityField:      severityCritical,
+					helpers.TargetVersionField: &v2,
 				},
 			}}},
 			issueUpdateErrors:   map[string]error{"OCPBUGS-124": errors.New("injected error updating bug OCPBUGS-124")},
@@ -1172,15 +1173,15 @@ Instructions for interacting with me using PR comments are available [here](http
 					Body: "This is a bug",
 				}}},
 				Unknowns: tcontainer.MarshalMap{
-					"customfield_12316142": severityCritical,
-					"customfield_12319940": &v2,
+					helpers.SeverityField:      severityCritical,
+					helpers.TargetVersionField: &v2,
 				},
 			}}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				IssueLinks: []*jira.IssueLink{&fieldLinkTo123},
 				Status:     &jira.Status{Name: "NEW"},
 				Unknowns: tcontainer.MarshalMap{
-					"customfield_12316142": severityCritical,
-					"customfield_12319940": &v1,
+					helpers.SeverityField:      severityCritical,
+					helpers.TargetVersionField: &v1,
 				},
 			}},
 			},
@@ -1212,14 +1213,14 @@ Instructions for interacting with me using PR comments are available [here](http
 					Name: "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
-					"customfield_12316142": severityCritical,
-					"customfield_12319940": &v2,
+					helpers.SeverityField:      severityCritical,
+					helpers.TargetVersionField: &v2,
 				},
 			}}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "NEW"},
 				Unknowns: tcontainer.MarshalMap{
-					"customfield_12316142": severityCritical,
-					"customfield_12319940": &v3,
+					helpers.SeverityField:      severityCritical,
+					helpers.TargetVersionField: &v3,
 				},
 			}},
 			},
@@ -1251,8 +1252,8 @@ Instructions for interacting with me using PR comments are available [here](http
 					Name: "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
-					"customfield_12316142": map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
-					"customfield_12319940": []interface{}{map[string]interface{}{"name": v1Str}},
+					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
+					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
 				},
 			}},
 		}, {
@@ -1325,8 +1326,8 @@ Instructions for interacting with me using PR comments are available [here](http
 		}, {
 			name: "Bug with allowed group is properly handled",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{
-				"security":             jiraclient.SecurityLevel{Name: "security"},
-				"customfield_12316142": severityModerate,
+				"security":            jiraclient.SecurityLevel{Name: "security"},
+				helpers.SeverityField: severityModerate,
 			}}}},
 			options:        JiraBranchOptions{StateAfterValidation: &updated, AllowedSecurityLevels: []string{"security"}},
 			labels:         []string{"jira/invalid-bug"},
@@ -1346,8 +1347,8 @@ Instructions for interacting with me using PR comments are available [here](http
 </details>`,
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Unknowns: tcontainer.MarshalMap{
-					"security":             jiraclient.SecurityLevel{Name: "security"},
-					"customfield_12316142": severityModerate,
+					"security":            jiraclient.SecurityLevel{Name: "security"},
+					helpers.SeverityField: severityModerate,
 				}, Status: &jira.Status{Name: "UPDATED"},
 			}},
 		},
@@ -2357,7 +2358,7 @@ func TestValidateBug(t *testing.T) {
 			name: "matching target version requirement means a valid bug",
 			issue: &jira.Issue{Fields: &jira.IssueFields{
 				Unknowns: tcontainer.MarshalMap{
-					"customfield_12319940": &one,
+					helpers.TargetVersionField: &one,
 				},
 			}},
 			options:     JiraBranchOptions{TargetVersion: &oneStr},
@@ -2368,7 +2369,7 @@ func TestValidateBug(t *testing.T) {
 			name: "not matching target version requirement means an invalid bug",
 			issue: &jira.Issue{Fields: &jira.IssueFields{
 				Unknowns: tcontainer.MarshalMap{
-					"customfield_12319940": &two,
+					helpers.TargetVersionField: &two,
 				},
 			}},
 			options: JiraBranchOptions{TargetVersion: &oneStr},
@@ -2450,7 +2451,7 @@ func TestValidateBug(t *testing.T) {
 			dependents: []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "MODIFIED"},
 				Unknowns: tcontainer.MarshalMap{
-					"customfield_12319940": &two,
+					helpers.TargetVersionField: &two,
 				},
 			}}},
 			options:     JiraBranchOptions{DependentBugTargetVersions: &[]string{oneStr}},
@@ -2489,13 +2490,13 @@ func TestValidateBug(t *testing.T) {
 					OutwardIssue: &jira.Issue{ID: "2", Key: "OCPBUGS-124"},
 				}},
 				Unknowns: tcontainer.MarshalMap{
-					"customfield_12319940": &one,
+					helpers.TargetVersionField: &one,
 				},
 			}},
 			dependents: []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "MODIFIED"},
 				Unknowns: tcontainer.MarshalMap{
-					"customfield_12319940": &two,
+					helpers.TargetVersionField: &two,
 				},
 			}}},
 			options: JiraBranchOptions{IsOpen: &open, TargetVersion: &oneStr, ValidStates: &modified, DependentBugStates: &modified, DependentBugTargetVersions: &[]string{twoStr}},
@@ -2520,7 +2521,7 @@ func TestValidateBug(t *testing.T) {
 					OutwardIssue: &jira.Issue{ID: "2", Key: "OCPBUGS-124"},
 				}},
 				Unknowns: tcontainer.MarshalMap{
-					"customfield_12319940": &one,
+					helpers.TargetVersionField: &one,
 				},
 			}},
 			dependents:  []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Status: &jira.Status{Name: "MODIFIED"}}}},
