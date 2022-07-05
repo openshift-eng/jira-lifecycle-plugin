@@ -57,7 +57,7 @@ type SecurityLevel struct {
 
 func GetIssueQaContact(issue *jira.Issue) (*jira.User, error) {
 	var obj *jira.User
-	isSet, err := GetUnknownField("customfield_12316243", issue, func() interface{} {
+	isSet, err := GetUnknownField("customfield_12315948", issue, func() interface{} {
 		obj = &jira.User{}
 		return obj
 	})
