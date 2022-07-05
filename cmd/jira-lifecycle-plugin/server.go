@@ -1366,7 +1366,7 @@ func handleCherrypick(e event, gc githubClient, jc jiraclient.Client, options Ji
 		Key: clone.Key,
 		Fields: &jira.IssueFields{
 			Unknowns: tcontainer.MarshalMap{
-				"customfield_12319940": []*jira.Version{{Name: targetRelease}},
+				helpers.TargetVersionField: []*jira.Version{{Name: targetRelease}},
 			},
 		},
 	}
