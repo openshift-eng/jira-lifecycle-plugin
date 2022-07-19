@@ -494,11 +494,14 @@ Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jir
 	if err != nil {
 		log.WithError(err).Warn("Could not list labels on PR")
 	}
-	var hasValidLabel, hasInvalidLabel bool
+	var hasValidBZLabel, hasValidJiraLabel, hasInvalidLabel bool
 	var severityLabelToRemove string
 	for _, l := range currentLabels {
 		if l.Name == labels.ValidBug {
-			hasValidLabel = true
+			hasValidJiraLabel = true
+		}
+		if l.Name == labels.BugzillaValidBug {
+			hasValidBZLabel = true
 		}
 		if l.Name == labels.InvalidBug {
 			hasInvalidLabel = true
@@ -523,7 +526,7 @@ Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jir
 		}
 	}
 
-	if hasValidLabel && !needsValidLabel {
+	if hasValidJiraLabel && !needsValidLabel {
 		humanLabelled, err := ghc.WasLabelAddedByHuman(e.org, e.repo, e.number, labels.ValidBug)
 		if err != nil {
 			// Return rather than potentially doing the wrong thing. The user can re-trigger us.
@@ -539,13 +542,43 @@ Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jir
 		}
 	}
 
-	if needsValidLabel && !hasValidLabel {
-		if err := ghc.AddLabel(e.org, e.repo, e.number, labels.ValidBug); err != nil {
-			log.WithError(err).Error("Failed to add valid bug label.")
+	if hasValidBZLabel && !needsValidLabel {
+		humanLabelled, err := ghc.WasLabelAddedByHuman(e.org, e.repo, e.number, labels.BugzillaValidBug)
+		if err != nil {
+			// Return rather than potentially doing the wrong thing. The user can re-trigger us.
+			return fmt.Errorf("failed to check if %s label was added by a human: %w", labels.BugzillaValidBug, err)
 		}
-	} else if !needsValidLabel && hasValidLabel {
-		if err := ghc.RemoveLabel(e.org, e.repo, e.number, labels.ValidBug); err != nil {
-			log.WithError(err).Error("Failed to remove valid bug label.")
+		if humanLabelled {
+			// This will make us remove the invalid label if it exists but saves us another check if it was
+			// added by a human. It is reasonable to assume that it should be absent if the valid label was
+			// manually added.
+			needsInvalidLabel = false
+			needsValidLabel = true
+			response += fmt.Sprintf("\n\nRetaining the %s label as it was manually added.", labels.BugzillaValidBug)
+		}
+	}
+
+	if needsValidLabel {
+		if !hasValidJiraLabel {
+			if err := ghc.AddLabel(e.org, e.repo, e.number, labels.ValidBug); err != nil {
+				log.WithError(err).Error("Failed to add valid bug label.")
+			}
+		}
+		if !hasValidBZLabel {
+			if err := ghc.AddLabel(e.org, e.repo, e.number, labels.BugzillaValidBug); err != nil {
+				log.WithError(err).Error("Failed to add valid bugzilla bug label.")
+			}
+		}
+	} else if !needsValidLabel {
+		if hasValidJiraLabel {
+			if err := ghc.RemoveLabel(e.org, e.repo, e.number, labels.ValidBug); err != nil {
+				log.WithError(err).Error("Failed to remove valid bug label.")
+			}
+		}
+		if hasValidBZLabel {
+			if err := ghc.RemoveLabel(e.org, e.repo, e.number, labels.BugzillaValidBug); err != nil {
+				log.WithError(err).Error("Failed to remove valid bugzilla bug label.")
+			}
 		}
 	}
 
