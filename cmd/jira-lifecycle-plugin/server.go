@@ -569,7 +569,7 @@ Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jir
 				log.WithError(err).Error("Failed to add valid bugzilla bug label.")
 			}
 		}
-	} else if !needsValidLabel {
+	} else {
 		if hasValidJiraLabel {
 			if err := ghc.RemoveLabel(e.org, e.repo, e.number, labels.ValidBug); err != nil {
 				log.WithError(err).Error("Failed to remove valid bug label.")
