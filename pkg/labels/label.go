@@ -1,6 +1,7 @@
 package labels
 
 const (
+	BugzillaValidBug      = "bugzilla/valid-bug"
 	ValidBug              = "jira/valid-bug"
 	InvalidBug            = "jira/invalid-bug"
 	SeverityCritical      = "jira/severity-critical"
