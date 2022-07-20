@@ -10,6 +10,7 @@ import (
 	"github.com/andygrunwald/go-jira"
 	"github.com/google/go-cmp/cmp"
 	"github.com/openshift-eng/jira-lifecycle-plugin/pkg/helpers"
+	"github.com/openshift-eng/jira-lifecycle-plugin/pkg/labels"
 	"github.com/sirupsen/logrus"
 	"github.com/trivago/tgo/tcontainer"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -207,8 +208,8 @@ Instructions for interacting with me using PR comments are available [here](http
 			name:           "valid bug removes invalid label, adds valid/severity labels and comments",
 			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
 			options:        JiraBranchOptions{}, // no requirements --> always valid
-			labels:         []string{"jira/invalid-bug"},
-			expectedLabels: []string{"jira/valid-bug", "jira/severity-critical"},
+			labels:         []string{labels.InvalidBug},
+			expectedLabels: []string{labels.ValidBug, labels.SeverityCritical},
 			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
 
 <details><summary>No validations were run on this bug</summary></details>
@@ -227,8 +228,8 @@ Instructions for interacting with me using PR comments are available [here](http
 			name:           "invalid bug adds invalid label, removes valid label and comments",
 			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityImportant}}}},
 			options:        JiraBranchOptions{IsOpen: &open},
-			labels:         []string{"jira/valid-bug", "jira/severity-critical"},
-			expectedLabels: []string{"jira/invalid-bug", "jira/severity-important"},
+			labels:         []string{labels.ValidBug, labels.SeverityCritical},
+			expectedLabels: []string{labels.InvalidBug, labels.SeverityImportant},
 			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is invalid:
  - expected the bug to be open, but it isn't
 
@@ -249,8 +250,8 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityImportant}}}},
 			options:        JiraBranchOptions{IsOpen: &open},
 			humanLabelled:  true,
-			labels:         []string{"jira/valid-bug", "jira/severity-critical"},
-			expectedLabels: []string{"jira/valid-bug", "jira/severity-important"},
+			labels:         []string{labels.ValidBug, labels.SeverityCritical},
+			expectedLabels: []string{labels.ValidBug, labels.SeverityImportant},
 			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is invalid:
  - expected the bug to be open, but it isn't
 
@@ -271,7 +272,7 @@ Instructions for interacting with me using PR comments are available [here](http
 		{
 			name:    "no bug removes all labels and comments",
 			missing: true,
-			labels:  []string{"jira/valid-bug", "jira/invalid-bug"},
+			labels:  []string{labels.ValidBug, labels.InvalidBug},
 			expectedComment: `org/repo#1:@user: No Jira bug is referenced in the title of this pull request.
 To reference a bug, add 'OCPBUGS-XXX:' to the title of this pull request and request another bug refresh with <code>/jira refresh</code>.
 
@@ -298,8 +299,8 @@ Instructions for interacting with me using PR comments are available [here](http
 			}},
 			}},
 			options:        JiraBranchOptions{StateAfterValidation: &updated}, // no requirements --> always valid
-			labels:         []string{"jira/invalid-bug"},
-			expectedLabels: []string{"jira/valid-bug", "jira/severity-moderate"},
+			labels:         []string{labels.InvalidBug},
+			expectedLabels: []string{labels.ValidBug, labels.SeverityModerate},
 			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid. The bug has been moved to the UPDATED state.
 
 <details><summary>No validations were run on this bug</summary></details>
@@ -322,8 +323,8 @@ Instructions for interacting with me using PR comments are available [here](http
 			name:           "valid bug with status update removes invalid label, adds valid label, comments and updates status with resolution",
 			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityLow}}}},
 			options:        JiraBranchOptions{StateAfterValidation: &JiraBugState{Status: "CLOSED", Resolution: "VALIDATED"}}, // no requirements --> always valid
-			labels:         []string{"jira/invalid-bug"},
-			expectedLabels: []string{"jira/valid-bug", "jira/severity-low"},
+			labels:         []string{labels.InvalidBug},
+			expectedLabels: []string{labels.ValidBug, labels.SeverityLow},
 			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid. The bug has been moved to the CLOSED (VALIDATED) state.
 
 <details><summary>No validations were run on this bug</summary></details>
@@ -353,8 +354,8 @@ Instructions for interacting with me using PR comments are available [here](http
 			name:           "valid bug with status update removes invalid label, adds valid label, comments and does not update status when it is already correct",
 			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: "UPDATED"}}}},
 			options:        JiraBranchOptions{StateAfterValidation: &updated}, // no requirements --> always valid
-			labels:         []string{"jira/invalid-bug"},
-			expectedLabels: []string{"jira/valid-bug"},
+			labels:         []string{labels.InvalidBug},
+			expectedLabels: []string{labels.ValidBug},
 			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
 
 <details><summary>No validations were run on this bug</summary></details>
@@ -374,8 +375,8 @@ Instructions for interacting with me using PR comments are available [here](http
 			name:           "valid bug with external link removes invalid label, adds valid label, comments, makes an external bug link",
 			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123"}},
 			options:        JiraBranchOptions{AddExternalLink: &yes}, // no requirements --> always valid
-			labels:         []string{"jira/invalid-bug"},
-			expectedLabels: []string{"jira/valid-bug"},
+			labels:         []string{labels.InvalidBug},
+			expectedLabels: []string{labels.ValidBug},
 			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid. The bug has been updated to refer to the pull request using the external bug tracker.
 
 <details><summary>No validations were run on this bug</summary></details>
@@ -413,8 +414,8 @@ Instructions for interacting with me using PR comments are available [here](http
 			}},
 			}},
 			options:        JiraBranchOptions{AddExternalLink: &yes}, // no requirements --> always valid
-			labels:         []string{"jira/invalid-bug"},
-			expectedLabels: []string{"jira/valid-bug"},
+			labels:         []string{labels.InvalidBug},
+			expectedLabels: []string{labels.ValidBug},
 			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
 
 <details><summary>No validations were run on this bug</summary></details>
@@ -484,8 +485,8 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			existingIssueLinks: []*jira.IssueLink{&linkBetween123to124},
 			options:            JiraBranchOptions{IsOpen: &yes, TargetVersion: &v1Str, DependentBugStates: &verified, DependentBugTargetVersions: &[]string{v2Str}},
-			labels:             []string{"jira/invalid-bug"},
-			expectedLabels:     []string{"jira/valid-bug"},
+			labels:             []string{labels.InvalidBug},
+			expectedLabels:     []string{labels.ValidBug},
 			expectedComment: `org/repo#2:@user: This pull request references [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124), which is valid.
 
 <details><summary>5 validation(s) were run on this bug</summary>
@@ -1268,7 +1269,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			prs:            []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}},
 			body:           "/jira refresh",
 			isComment:      true,
-			expectedLabels: []string{"jira/valid-bug"},
+			expectedLabels: []string{labels.ValidBug},
 			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
 
 <details><summary>No validations were run on this bug</summary></details>
@@ -1330,8 +1331,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				helpers.SeverityField: severityModerate,
 			}}}},
 			options:        JiraBranchOptions{StateAfterValidation: &updated, AllowedSecurityLevels: []string{"security"}},
-			labels:         []string{"jira/invalid-bug"},
-			expectedLabels: []string{"jira/valid-bug", "jira/severity-moderate"},
+			labels:         []string{labels.InvalidBug},
+			expectedLabels: []string{labels.ValidBug, labels.SeverityModerate},
 			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid. The bug has been moved to the UPDATED state.
 
 <details><summary>No validations were run on this bug</summary></details>
