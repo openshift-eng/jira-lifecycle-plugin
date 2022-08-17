@@ -964,18 +964,20 @@ type querySearch struct {
 	Edges []queryEdge
 }
 
-/* emailToLoginQuery is a graphql query struct that should result in this graphql query:
-   {
-     search(type: USER, query: "email", first: 5) {
-       edges {
-         node {
-           ... on User {
-             login
-           }
-         }
-       }
-     }
-   }
+/*
+emailToLoginQuery is a graphql query struct that should result in this graphql query:
+
+	{
+	  search(type: USER, query: "email", first: 5) {
+	    edges {
+	      node {
+	        ... on User {
+	          login
+	        }
+	      }
+	    }
+	  }
+	}
 */
 type emailToLoginQuery struct {
 	Search querySearch `graphql:"search(type:USER query:$email first:5)"`
@@ -1086,7 +1088,16 @@ func validateBug(bug *jira.Issue, dependents []*jira.Issue, options JiraBranchOp
 		var allowed []JiraBugState
 		allowed = append(allowed, *options.ValidStates...)
 		if options.StateAfterValidation != nil {
-			allowed = append(allowed, *options.StateAfterValidation)
+			stateAlreadyExists := false
+			for _, state := range allowed {
+				if strings.EqualFold(state.Status, options.StateAfterValidation.Status) && strings.EqualFold(state.Resolution, options.StateAfterValidation.Resolution) {
+					stateAlreadyExists = true
+					break
+				}
+			}
+			if !stateAlreadyExists {
+				allowed = append(allowed, *options.StateAfterValidation)
+			}
 		}
 		var status, resolution string
 		if bug.Fields.Status != nil {
