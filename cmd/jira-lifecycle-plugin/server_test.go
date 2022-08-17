@@ -2309,8 +2309,8 @@ func TestValidateBug(t *testing.T) {
 	oneStr, twoStr := "v1", "v2"
 	one := []*jira.Version{{Name: "v1"}}
 	two := []*jira.Version{{Name: "v2"}}
-	verified := []JiraBugState{{Status: "VERIFIED"}}
-	modified := []JiraBugState{{Status: "MODIFIED"}}
+	verified := JiraBugState{Status: "VERIFIED"}
+	modified := JiraBugState{Status: "MODIFIED"}
 	updated := JiraBugState{Status: "UPDATED"}
 	var testCases = []struct {
 		name        string
@@ -2387,35 +2387,35 @@ func TestValidateBug(t *testing.T) {
 		{
 			name:        "matching status requirement means a valid bug",
 			issue:       &jira.Issue{Fields: &jira.IssueFields{Status: &jira.Status{Name: "MODIFIED"}}},
-			options:     JiraBranchOptions{ValidStates: &modified},
+			options:     JiraBranchOptions{ValidStates: &[]JiraBugState{modified}},
 			valid:       true,
 			validations: []string{"bug is in the state MODIFIED, which is one of the valid states (MODIFIED)"},
 		},
 		{
 			name:        "matching status requirement means a valid bug (case-insensitive)",
 			issue:       &jira.Issue{Fields: &jira.IssueFields{Status: &jira.Status{Name: "Modified"}}},
-			options:     JiraBranchOptions{ValidStates: &modified},
+			options:     JiraBranchOptions{ValidStates: &[]JiraBugState{modified}},
 			valid:       true,
 			validations: []string{"bug is in the state Modified, which is one of the valid states (MODIFIED)"},
 		},
 		{
 			name:        "matching status requirement by being in the migrated state means a valid bug",
 			issue:       &jira.Issue{Fields: &jira.IssueFields{Status: &jira.Status{Name: "UPDATED"}}},
-			options:     JiraBranchOptions{ValidStates: &modified, StateAfterValidation: &updated},
+			options:     JiraBranchOptions{ValidStates: &[]JiraBugState{modified}, StateAfterValidation: &updated},
 			valid:       true,
 			validations: []string{"bug is in the state UPDATED, which is one of the valid states (MODIFIED, UPDATED)"},
 		},
 		{
 			name:    "not matching status requirement means an invalid bug",
 			issue:   &jira.Issue{Fields: &jira.IssueFields{Status: &jira.Status{Name: "MODIFIED"}}},
-			options: JiraBranchOptions{ValidStates: &verified},
+			options: JiraBranchOptions{ValidStates: &[]JiraBugState{verified}},
 			valid:   false,
 			why:     []string{"expected the bug to be in one of the following states: VERIFIED, but it is MODIFIED instead"},
 		},
 		{
 			name:    "dependent status requirement with no dependent bugs means a valid bug",
 			issue:   &jira.Issue{Key: "OCPBUGS-123", Fields: &jira.IssueFields{}},
-			options: JiraBranchOptions{DependentBugStates: &verified},
+			options: JiraBranchOptions{DependentBugStates: &[]JiraBugState{verified}},
 			valid:   false,
 			why:     []string{"expected [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) to depend on a bug in one of the following states: VERIFIED, but no dependents were found"},
 		},
@@ -2432,7 +2432,7 @@ func TestValidateBug(t *testing.T) {
 				}},
 			}},
 			dependents:  []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Status: &jira.Status{Name: "MODIFIED"}}}},
-			options:     JiraBranchOptions{DependentBugStates: &verified},
+			options:     JiraBranchOptions{DependentBugStates: &[]JiraBugState{verified}},
 			valid:       false,
 			validations: []string{"bug has dependents"},
 			why:         []string{"expected dependent [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) to be in one of the following states: VERIFIED, but it is MODIFIED instead"},
@@ -2500,7 +2500,7 @@ func TestValidateBug(t *testing.T) {
 					helpers.TargetVersionField: &two,
 				},
 			}}},
-			options: JiraBranchOptions{IsOpen: &open, TargetVersion: &oneStr, ValidStates: &modified, DependentBugStates: &modified, DependentBugTargetVersions: &[]string{twoStr}},
+			options: JiraBranchOptions{IsOpen: &open, TargetVersion: &oneStr, ValidStates: &[]JiraBugState{modified}, DependentBugStates: &[]JiraBugState{modified}, DependentBugTargetVersions: &[]string{twoStr}},
 			validations: []string{`bug is open, matching expected state (open)`,
 				`bug target version (v1) matches configured target version for branch (v1)`,
 				"bug is in the state MODIFIED, which is one of the valid states (MODIFIED)",
@@ -2526,7 +2526,7 @@ func TestValidateBug(t *testing.T) {
 				},
 			}},
 			dependents:  []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Status: &jira.Status{Name: "MODIFIED"}}}},
-			options:     JiraBranchOptions{IsOpen: &open, TargetVersion: &twoStr, ValidStates: &verified, DependentBugStates: &verified},
+			options:     JiraBranchOptions{IsOpen: &open, TargetVersion: &twoStr, ValidStates: &[]JiraBugState{verified}, DependentBugStates: &[]JiraBugState{verified}},
 			valid:       false,
 			validations: []string{"bug has dependents"},
 			why: []string{"expected the bug to be open, but it isn't",
@@ -2667,6 +2667,20 @@ func TestValidateBug(t *testing.T) {
 			options:     JiraBranchOptions{DependentBugStates: &[]JiraBugState{{Status: "CLOSED", Resolution: "ERRATA"}}},
 			valid:       true,
 			validations: []string{"dependent bug [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) is in the state CLOSED (ERRATA), which is one of the valid states (CLOSED (ERRATA))", "bug has dependents"},
+		},
+		{
+			name:        "valid states include the state after validation",
+			issue:       &jira.Issue{Fields: &jira.IssueFields{Status: &jira.Status{Name: "MODIFIED"}}},
+			options:     JiraBranchOptions{ValidStates: &[]JiraBugState{modified}, StateAfterValidation: &verified},
+			valid:       true,
+			validations: []string{"bug is in the state MODIFIED, which is one of the valid states (MODIFIED, VERIFIED)"},
+		},
+		{
+			name:        "valid states include the state after validation, but does not duplicate it",
+			issue:       &jira.Issue{Fields: &jira.IssueFields{Status: &jira.Status{Name: "MODIFIED"}}},
+			options:     JiraBranchOptions{ValidStates: &[]JiraBugState{modified, verified}, StateAfterValidation: &verified},
+			valid:       true,
+			validations: []string{"bug is in the state MODIFIED, which is one of the valid states (MODIFIED, VERIFIED)"},
 		},
 	}
 
