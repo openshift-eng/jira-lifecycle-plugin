@@ -96,7 +96,7 @@ func TestHandle(t *testing.T) {
 	severityLow := struct {
 		Value string
 	}{Value: "<img alt=\"\" src=\"/images/icons/priorities/low.svg\" width=\"16\" height=\"16\"> Low"}
-	fieldLinkTo123 := jira.IssueLink{
+	cloneLinkTo123 := jira.IssueLink{
 		Type: jira.IssueLinkType{
 			Name:    "Cloners",
 			Inward:  "is cloned by",
@@ -104,8 +104,16 @@ func TestHandle(t *testing.T) {
 		},
 		OutwardIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123"},
 	}
+	blocksLinkTo123 := jira.IssueLink{
+		Type: jira.IssueLinkType{
+			Name:    "Blocks",
+			Inward:  "is blocked by",
+			Outward: "blocks",
+		},
+		InwardIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123"},
+	}
 	// the fake clone doesn't include the key in the link, which breaks our check; just make a second struct without the key set
-	fieldLinkTo123JustID := jira.IssueLink{
+	cloneLinkTo123JustID := jira.IssueLink{
 		Type: jira.IssueLinkType{
 			Name:    "Cloners",
 			Inward:  "is cloned by",
@@ -113,7 +121,15 @@ func TestHandle(t *testing.T) {
 		},
 		OutwardIssue: &jira.Issue{ID: "1"},
 	}
-	fieldLinkTo124 := jira.IssueLink{
+	blocksLinkTo123JustID := jira.IssueLink{
+		Type: jira.IssueLinkType{
+			Name:    "Blocks",
+			Inward:  "is blocked by",
+			Outward: "blocks",
+		},
+		InwardIssue: &jira.Issue{ID: "1"},
+	}
+	cloneLinkTo124 := jira.IssueLink{
 		Type: jira.IssueLinkType{
 			Name:    "Cloners",
 			Inward:  "is cloned by",
@@ -121,7 +137,15 @@ func TestHandle(t *testing.T) {
 		},
 		InwardIssue: &jira.Issue{ID: "2", Key: "OCPBUGS-124"},
 	}
-	linkBetween123to124 := jira.IssueLink{
+	blocksLinkTo124 := jira.IssueLink{
+		Type: jira.IssueLinkType{
+			Name:    "Blocks",
+			Inward:  "is blocked by",
+			Outward: "blocks",
+		},
+		OutwardIssue: &jira.Issue{ID: "2", Key: "OCPBUGS-124"},
+	}
+	cloneBetween123to124 := jira.IssueLink{
 		Type: jira.IssueLinkType{
 			Name:    "Cloners",
 			Inward:  "is cloned by",
@@ -129,6 +153,15 @@ func TestHandle(t *testing.T) {
 		},
 		InwardIssue:  &jira.Issue{ID: "2", Key: "OCPBUGS-124"},
 		OutwardIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123"},
+	}
+	blocksBetween123to124 := jira.IssueLink{
+		Type: jira.IssueLinkType{
+			Name:    "Blocks",
+			Inward:  "is blocked by",
+			Outward: "blocks",
+		},
+		OutwardIssue: &jira.Issue{ID: "2", Key: "OCPBUGS-124"},
+		InwardIssue:  &jira.Issue{ID: "1", Key: "OCPBUGS-123"},
 	}
 	base := &event{
 		org: "org", repo: "repo", baseRef: "branch", number: 1, key: "OCPBUGS-123", body: "This PR fixes OCPBUGS-123", title: "OCPBUGS-123: fixed it!", htmlUrl: "https://github.com/org/repo/pull/1", login: "user",
@@ -434,12 +467,12 @@ Instructions for interacting with me using PR comments are available [here](http
 		{
 			name: "failure to fetch dependent bug results in a comment",
 			issues: []jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
-				IssueLinks: []*jira.IssueLink{&fieldLinkTo123},
+				IssueLinks: []*jira.IssueLink{&cloneLinkTo123, &blocksLinkTo123},
 			}}},
 			overrideEvent: &event{
 				org: "org", repo: "repo", baseRef: "branch", number: 2, key: "OCPBUGS-124", body: "This PR fixes OCPBUGS-124", title: "OCPBUGS-124: fixed it!", htmlUrl: "https://github.com/org/repo/pull/2", login: "user",
 			},
-			existingIssueLinks: []*jira.IssueLink{&linkBetween123to124},
+			existingIssueLinks: []*jira.IssueLink{&cloneBetween123to124, &blocksBetween123to124},
 			issueGetErrors:     map[string]error{"OCPBUGS-123": errors.New("injected error getting bug")},
 			options:            JiraBranchOptions{DependentBugStates: &verified},
 			expectedComment: `org/repo#2:@user: An error was encountered searching for dependent bug OCPBUGS-123 for bug OCPBUGS-124 on the Jira server at https://my-jira.com. No known errors were detected, please see the full error message for details.
@@ -468,14 +501,14 @@ Instructions for interacting with me using PR comments are available [here](http
 			name: "valid bug with dependent bugs removes invalid label, adds valid label, comments",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status:     &jira.Status{Name: "VERIFIED"},
-				IssueLinks: []*jira.IssueLink{&fieldLinkTo124},
+				IssueLinks: []*jira.IssueLink{&cloneLinkTo124, &blocksLinkTo124},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.TargetVersionField: &v2,
 				},
 			},
 			}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				Status:     &jira.Status{Name: "MODIFIED"},
-				IssueLinks: []*jira.IssueLink{&fieldLinkTo123},
+				IssueLinks: []*jira.IssueLink{&cloneLinkTo123, &blocksLinkTo123},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.TargetVersionField: &v1,
 				},
@@ -483,7 +516,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			overrideEvent: &event{
 				org: "org", repo: "repo", baseRef: "branch", number: 2, key: "OCPBUGS-124", body: "This PR fixes OCPBUGS-124", title: "OCPBUGS-124: fixed it!", htmlUrl: "https://github.com/org/repo/pull/2", login: "user",
 			},
-			existingIssueLinks: []*jira.IssueLink{&linkBetween123to124},
+			existingIssueLinks: []*jira.IssueLink{&cloneBetween123to124, &blocksBetween123to124},
 			options:            JiraBranchOptions{IsOpen: &yes, TargetVersion: &v1Str, DependentBugStates: &verified, DependentBugTargetVersions: &[]string{v2Str}},
 			labels:             []string{labels.InvalidBug},
 			expectedLabels:     []string{labels.ValidBug, labels.BugzillaValidBug},
@@ -1047,7 +1080,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Project: jira.Project{
 					Name: "OCPBUGS",
 				},
-				IssueLinks: []*jira.IssueLink{&fieldLinkTo123JustID},
+				IssueLinks: []*jira.IssueLink{&cloneLinkTo123JustID, &blocksLinkTo123JustID},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
 					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
@@ -1168,7 +1201,7 @@ Instructions for interacting with me using PR comments are available [here](http
 		}, {
 			name: "If bug clone with correct target version already exists, just retitle PR",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
-				IssueLinks: []*jira.IssueLink{&fieldLinkTo124},
+				IssueLinks: []*jira.IssueLink{&cloneLinkTo124, &blocksLinkTo124},
 				Status:     &jira.Status{Name: "CLOSED"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
 					Body: "This is a bug",
@@ -1178,7 +1211,7 @@ Instructions for interacting with me using PR comments are available [here](http
 					helpers.TargetVersionField: &v2,
 				},
 			}}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
-				IssueLinks: []*jira.IssueLink{&fieldLinkTo123},
+				IssueLinks: []*jira.IssueLink{&cloneLinkTo123, &blocksLinkTo123},
 				Status:     &jira.Status{Name: "NEW"},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      severityCritical,
@@ -1245,7 +1278,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			expectedIssue: &jira.Issue{ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"}, // during a clone on a real jira server, this field would get unset/reset; the fake client copies
-				IssueLinks:  []*jira.IssueLink{&fieldLinkTo123JustID},
+				IssueLinks:  []*jira.IssueLink{&cloneLinkTo123JustID, &blocksLinkTo123JustID},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
 					Body: "This is a bug",
 				}}},
@@ -1356,7 +1389,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			name: "Bug with dependent bug not in OCPBUGS is invalid",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGSM-123", Fields: &jira.IssueFields{
 				Status:     &jira.Status{Name: "VERIFIED"},
-				IssueLinks: []*jira.IssueLink{&fieldLinkTo124},
+				IssueLinks: []*jira.IssueLink{&cloneLinkTo124, &blocksLinkTo124},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.TargetVersionField: &v2,
 				},
@@ -1365,11 +1398,11 @@ Instructions for interacting with me using PR comments are available [here](http
 				Status: &jira.Status{Name: "MODIFIED"},
 				IssueLinks: []*jira.IssueLink{{
 					Type: jira.IssueLinkType{
-						Name:    "Cloners",
-						Inward:  "is cloned by",
-						Outward: "clones",
+						Name:    "Blocks",
+						Inward:  "is blocked by",
+						Outward: "blocks",
 					},
-					OutwardIssue: &jira.Issue{ID: "1", Key: "OCPBUGSM-123"},
+					InwardIssue: &jira.Issue{ID: "1", Key: "OCPBUGSM-123"},
 				}},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.TargetVersionField: &v1,
@@ -1380,12 +1413,12 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			existingIssueLinks: []*jira.IssueLink{{
 				Type: jira.IssueLinkType{
-					Name:    "Cloners",
-					Inward:  "is cloned by",
-					Outward: "clones",
+					Name:    "Blocks",
+					Inward:  "is blocked by",
+					Outward: "blocks",
 				},
-				OutwardIssue: &jira.Issue{ID: "1", Key: "OCPBUGSM-123"},
-				InwardIssue:  &jira.Issue{ID: "2", Key: "OCPBUGS-124"},
+				InwardIssue:  &jira.Issue{ID: "1", Key: "OCPBUGSM-123"},
+				OutwardIssue: &jira.Issue{ID: "2", Key: "OCPBUGS-124"},
 			}},
 			options:        JiraBranchOptions{IsOpen: &yes, TargetVersion: &v1Str, DependentBugStates: &verified, DependentBugTargetVersions: &[]string{v2Str}},
 			labels:         []string{},
@@ -1398,8 +1431,12 @@ Instructions for interacting with me using PR comments are available [here](http
 
 All dependent bugs must be part of the OCPBUGS project. If you are backporting a fix that was originally tracked in Bugzilla, follow these steps to handle the backport:
 1. Create a new bug in the OCPBUGS Jira project to match the original bugzilla bug. The important fields that should match are the title, description, target version, and status.
-2. Use the Jira UI to clone the Jira bug and set the target version of the clone to the release you are cherrypicking to.
+2. Use the Jira UI to clone the Jira bug, then in the clone bug:
+  a. Set the target version to the release you are cherrypicking to.
+  b. Add an issue link “is blocked by”, which links to the original jira bug
 3. Use the cherrypick github command to create the cherrypicked PR. Once that new PR is created, retitle the PR and replace the BUG XXX: with OCPBUGS-XXX: to match the new Jira story.
+
+Note that the mirrored bug in OCPBUGSM should not be involved in this process at all.
 
 Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jira bug are made, or edit the title of this pull request to link to a different bug.
 
@@ -2481,17 +2518,8 @@ func TestValidateBug(t *testing.T) {
 			why:     []string{"expected [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) to depend on a bug in one of the following states: VERIFIED, but no dependents were found"},
 		},
 		{
-			name: "not matching dependent bug status requirement means an invalid bug",
-			issue: &jira.Issue{Fields: &jira.IssueFields{
-				IssueLinks: []*jira.IssueLink{{
-					Type: jira.IssueLinkType{
-						Name:    "Cloners",
-						Inward:  "is cloned by",
-						Outward: "clones",
-					},
-					OutwardIssue: &jira.Issue{ID: "2", Key: "OCPBUGS-124"},
-				}},
-			}},
+			name:        "not matching dependent bug status requirement means an invalid bug",
+			issue:       &jira.Issue{Fields: &jira.IssueFields{}},
 			dependents:  []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Status: &jira.Status{Name: "MODIFIED"}}}},
 			options:     JiraBranchOptions{DependentBugStates: &[]JiraBugState{verified}},
 			valid:       false,
@@ -2499,17 +2527,8 @@ func TestValidateBug(t *testing.T) {
 			why:         []string{"expected dependent [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) to be in one of the following states: VERIFIED, but it is MODIFIED instead"},
 		},
 		{
-			name: "not matching dependent bug target version requirement means an invalid bug",
-			issue: &jira.Issue{Fields: &jira.IssueFields{
-				IssueLinks: []*jira.IssueLink{{
-					Type: jira.IssueLinkType{
-						Name:    "Cloners",
-						Inward:  "is cloned by",
-						Outward: "clones",
-					},
-					OutwardIssue: &jira.Issue{ID: "2", Key: "OCPBUGS-124"},
-				}},
-			}},
+			name:  "not matching dependent bug target version requirement means an invalid bug",
+			issue: &jira.Issue{Fields: &jira.IssueFields{}},
 			dependents: []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "MODIFIED"},
 				Unknowns: tcontainer.MarshalMap{
@@ -2522,17 +2541,8 @@ func TestValidateBug(t *testing.T) {
 			why:         []string{"expected dependent [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) to target a version in v1, but it targets \"v2\" instead"},
 		},
 		{
-			name: "not having a dependent bug target version means an invalid bug",
-			issue: &jira.Issue{Fields: &jira.IssueFields{
-				IssueLinks: []*jira.IssueLink{{
-					Type: jira.IssueLinkType{
-						Name:    "Cloners",
-						Inward:  "is cloned by",
-						Outward: "clones",
-					},
-					OutwardIssue: &jira.Issue{ID: "2", Key: "OCPBUGS-124"},
-				}},
-			}},
+			name:        "not having a dependent bug target version means an invalid bug",
+			issue:       &jira.Issue{Fields: &jira.IssueFields{}},
 			dependents:  []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Status: &jira.Status{Name: "MODIFIED"}}}},
 			options:     JiraBranchOptions{DependentBugTargetVersions: &[]string{oneStr}},
 			valid:       false,
@@ -2543,14 +2553,6 @@ func TestValidateBug(t *testing.T) {
 			name: "matching all requirements means a valid bug",
 			issue: &jira.Issue{Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "MODIFIED"},
-				IssueLinks: []*jira.IssueLink{{
-					Type: jira.IssueLinkType{
-						Name:    "Cloners",
-						Inward:  "is cloned by",
-						Outward: "clones",
-					},
-					OutwardIssue: &jira.Issue{ID: "2", Key: "OCPBUGS-124"},
-				}},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.TargetVersionField: &one,
 				},
@@ -2574,14 +2576,6 @@ func TestValidateBug(t *testing.T) {
 			name: "matching no requirements means an invalid bug",
 			issue: &jira.Issue{Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "CLOSED"},
-				IssueLinks: []*jira.IssueLink{{
-					Type: jira.IssueLinkType{
-						Name:    "Cloners",
-						Inward:  "is cloned by",
-						Outward: "clones",
-					},
-					OutwardIssue: &jira.Issue{ID: "2", Key: "OCPBUGS-124"},
-				}},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.TargetVersionField: &one,
 				},
@@ -2665,14 +2659,6 @@ func TestValidateBug(t *testing.T) {
 			issue: &jira.Issue{Fields: &jira.IssueFields{
 				Status:     &jira.Status{Name: "CLOSED"},
 				Resolution: &jira.Resolution{Name: "LOL_GO_AWAY"},
-				IssueLinks: []*jira.IssueLink{{
-					Type: jira.IssueLinkType{
-						Name:    "Cloners",
-						Inward:  "is cloned by",
-						Outward: "clones",
-					},
-					OutwardIssue: &jira.Issue{ID: "2", Key: "OCPBUGS-124"},
-				}},
 			}},
 			dependents: []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				Status:     &jira.Status{Name: "CLOSED"},
@@ -2687,14 +2673,6 @@ func TestValidateBug(t *testing.T) {
 			issue: &jira.Issue{Fields: &jira.IssueFields{
 				Status:     &jira.Status{Name: "CLOSED"},
 				Resolution: &jira.Resolution{Name: "LOL_GO_AWAY"},
-				IssueLinks: []*jira.IssueLink{{
-					Type: jira.IssueLinkType{
-						Name:    "Cloners",
-						Inward:  "is cloned by",
-						Outward: "clones",
-					},
-					OutwardIssue: &jira.Issue{ID: "2", Key: "OCPBUGS-124"},
-				}},
 			}},
 			dependents: []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				Status:     &jira.Status{Name: "CLOSED"},
@@ -2712,14 +2690,6 @@ func TestValidateBug(t *testing.T) {
 			issue: &jira.Issue{Fields: &jira.IssueFields{
 				Status:     &jira.Status{Name: "CLOSED"},
 				Resolution: &jira.Resolution{Name: "ERRATA"},
-				IssueLinks: []*jira.IssueLink{{
-					Type: jira.IssueLinkType{
-						Name:    "Cloners",
-						Inward:  "is cloned by",
-						Outward: "clones",
-					},
-					OutwardIssue: &jira.Issue{ID: "2", Key: "OCPBUGS-124"},
-				}},
 			}},
 			dependents: []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				Status:     &jira.Status{Name: "CLOSED"},
@@ -2748,14 +2718,6 @@ func TestValidateBug(t *testing.T) {
 			issue: &jira.Issue{Fields: &jira.IssueFields{
 				Status:     &jira.Status{Name: "CLOSED"},
 				Resolution: &jira.Resolution{Name: "ERRATA"},
-				IssueLinks: []*jira.IssueLink{{
-					Type: jira.IssueLinkType{
-						Name:    "Cloners",
-						Inward:  "is cloned by",
-						Outward: "clones",
-					},
-					OutwardIssue: &jira.Issue{ID: "2", Key: "OCPBUGSM-38676"},
-				}},
 			}},
 			dependents: []*jira.Issue{{ID: "2", Key: "OCPBUGSM-38676", Fields: &jira.IssueFields{
 				Status:     &jira.Status{Name: "CLOSED"},

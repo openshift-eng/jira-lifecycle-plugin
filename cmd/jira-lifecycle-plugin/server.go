@@ -388,7 +388,6 @@ To reference a bug, add 'OCPBUGS-XXX:' to the title of this pull request and req
 				// identify if bug depends on this link; multiple different types of links may be blocker types; more can be added as they are identified
 				dependsOn := false
 				dependsOn = dependsOn || (link.InwardIssue != nil && link.Type.Name == "Blocks" && link.Type.Inward == "is blocked by")
-				dependsOn = dependsOn || (link.OutwardIssue != nil && link.Type.Name == "Cloners" && link.Type.Inward == "is cloned by")
 				dependsOn = dependsOn || (link.OutwardIssue != nil && link.Type.Name == "Depend" && link.Type.Outward == "depends on")
 				if !dependsOn {
 					continue
@@ -486,8 +485,12 @@ To reference a bug, add 'OCPBUGS-XXX:' to the title of this pull request and req
 				formattedReasons += `
 All dependent bugs must be part of the OCPBUGS project. If you are backporting a fix that was originally tracked in Bugzilla, follow these steps to handle the backport:
 1. Create a new bug in the OCPBUGS Jira project to match the original bugzilla bug. The important fields that should match are the title, description, target version, and status.
-2. Use the Jira UI to clone the Jira bug and set the target version of the clone to the release you are cherrypicking to.
+2. Use the Jira UI to clone the Jira bug, then in the clone bug:
+  a. Set the target version to the release you are cherrypicking to.
+  b. Add an issue link “is blocked by”, which links to the original jira bug
 3. Use the cherrypick github command to create the cherrypicked PR. Once that new PR is created, retitle the PR and replace the BUG XXX: with OCPBUGS-XXX: to match the new Jira story.
+
+Note that the mirrored bug in OCPBUGSM should not be involved in this process at all.
 `
 			}
 			response = fmt.Sprintf(`This pull request references `+bugLink+`, which is invalid:
@@ -1443,6 +1446,20 @@ func handleCherrypick(e event, gc githubClient, jc jiraclient.Client, options Ji
 	if err != nil {
 		log.WithError(err).Debugf("Unable to update target version and dependencies for bug %s", clone.Key)
 		return comment(formatError(fmt.Sprintf("updating cherry-pick bug in Jira: Created cherrypick %s, but encountered error updating target version", cloneLink), jc.JiraURL(), clone.Key, err))
+	}
+	// add blocking issue link between parent and clone
+	blockLink := jira.IssueLink{
+		OutwardIssue: &jira.Issue{ID: clone.ID},
+		InwardIssue:  &jira.Issue{ID: bug.ID},
+		Type: jira.IssueLinkType{
+			Name:    "Blocks",
+			Inward:  "is blocked by",
+			Outward: "blocks",
+		},
+	}
+	if err := jc.CreateIssueLink(&blockLink); err != nil {
+		log.WithError(err).Debugf("Unable to create blocks link for bug %s", clone.Key)
+		return comment(formatError(fmt.Sprintf("updating cherry-pick bug in Jira: Created cherrypick %s, but encountered error creating `Blocks` type link with original bug", cloneLink), jc.JiraURL(), clone.Key, err))
 	}
 	// Replace old bugID in title with new cloneID
 	newTitle := strings.ReplaceAll(e.title, bugKey, clone.Key)
