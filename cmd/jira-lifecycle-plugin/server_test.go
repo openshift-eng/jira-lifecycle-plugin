@@ -1352,6 +1352,66 @@ Instructions for interacting with me using PR comments are available [here](http
 					helpers.SeverityField: severityModerate,
 				}, Status: &jira.Status{Name: "UPDATED"},
 			}},
+		}, {
+			name: "Bug with dependent bug not in OCPBUGS is invalid",
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGSM-123", Fields: &jira.IssueFields{
+				Status:     &jira.Status{Name: "VERIFIED"},
+				IssueLinks: []*jira.IssueLink{&fieldLinkTo124},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.TargetVersionField: &v2,
+				},
+			},
+			}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+				Status: &jira.Status{Name: "MODIFIED"},
+				IssueLinks: []*jira.IssueLink{{
+					Type: jira.IssueLinkType{
+						Name:    "Cloners",
+						Inward:  "is cloned by",
+						Outward: "clones",
+					},
+					OutwardIssue: &jira.Issue{ID: "1", Key: "OCPBUGSM-123"},
+				}},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.TargetVersionField: &v1,
+				},
+			}}},
+			overrideEvent: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 2, key: "OCPBUGS-124", body: "This PR fixes OCPBUGS-124", title: "OCPBUGS-124: fixed it!", htmlUrl: "https://github.com/org/repo/pull/2", login: "user",
+			},
+			existingIssueLinks: []*jira.IssueLink{{
+				Type: jira.IssueLinkType{
+					Name:    "Cloners",
+					Inward:  "is cloned by",
+					Outward: "clones",
+				},
+				OutwardIssue: &jira.Issue{ID: "1", Key: "OCPBUGSM-123"},
+				InwardIssue:  &jira.Issue{ID: "2", Key: "OCPBUGS-124"},
+			}},
+			options:        JiraBranchOptions{IsOpen: &yes, TargetVersion: &v1Str, DependentBugStates: &verified, DependentBugTargetVersions: &[]string{v2Str}},
+			labels:         []string{},
+			expectedLabels: []string{labels.InvalidBug},
+			expectedComment: `org/repo#2:@user: This pull request references [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124), which is invalid:
+ - bug is open, matching expected state (open)
+ - bug target version (v1) matches configured target version for branch (v1)
+ - bug has dependents
+ - dependent bug OCPBUGSM-123 is not in the required ` + "`OCPBUGS`" + ` project
+
+All dependent bugs must be part of the OCPBUGS project. If you are backporting a fix that was originally tracked in Bugzilla, follow these steps to handle the backport:
+1. Create a new bug in the OCPBUGS Jira project to match the original bugzilla bug. The important fields that should match are the title, description, target version, and status.
+2. Use the Jira UI to clone the Jira bug and set the target version of the clone to the release you are cherrypicking to.
+3. Use the cherrypick github command to create the cherrypicked PR. Once that new PR is created, retitle the PR and replace the BUG XXX: with OCPBUGS-XXX: to match the new Jira story.
+
+Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jira bug are made, or edit the title of this pull request to link to a different bug.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/2):
+
+>This PR fixes OCPBUGS-124
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`,
 		},
 	}
 
@@ -2313,13 +2373,14 @@ func TestValidateBug(t *testing.T) {
 	modified := JiraBugState{Status: "MODIFIED"}
 	updated := JiraBugState{Status: "UPDATED"}
 	var testCases = []struct {
-		name        string
-		issue       *jira.Issue
-		dependents  []*jira.Issue
-		options     JiraBranchOptions
-		valid       bool
-		validations []string
-		why         []string
+		name                    string
+		issue                   *jira.Issue
+		dependents              []*jira.Issue
+		options                 JiraBranchOptions
+		valid                   bool
+		validations             []string
+		why                     []string
+		invalidDependentProject bool
 	}{
 		{
 			name:    "no requirements means a valid bug",
@@ -2682,11 +2743,38 @@ func TestValidateBug(t *testing.T) {
 			valid:       true,
 			validations: []string{"bug is in the state MODIFIED, which is one of the valid states (MODIFIED, VERIFIED)"},
 		},
+		{
+			name: "dependent bug not being in OCPBUGS project results in failure",
+			issue: &jira.Issue{Fields: &jira.IssueFields{
+				Status:     &jira.Status{Name: "CLOSED"},
+				Resolution: &jira.Resolution{Name: "ERRATA"},
+				IssueLinks: []*jira.IssueLink{{
+					Type: jira.IssueLinkType{
+						Name:    "Cloners",
+						Inward:  "is cloned by",
+						Outward: "clones",
+					},
+					OutwardIssue: &jira.Issue{ID: "2", Key: "OCPBUGSM-38676"},
+				}},
+			}},
+			dependents: []*jira.Issue{{ID: "2", Key: "OCPBUGSM-38676", Fields: &jira.IssueFields{
+				Status:     &jira.Status{Name: "CLOSED"},
+				Resolution: &jira.Resolution{Name: "ERRATA"},
+			}}},
+			options:     JiraBranchOptions{DependentBugStates: &[]JiraBugState{{Status: "CLOSED", Resolution: "ERRATA"}}},
+			valid:       false,
+			validations: []string{"bug has dependents"},
+			why: []string{
+				"bug has dependents",
+				"dependent bug OCPBUGSM-38676 is not in the required `OCPBUGS` project",
+			},
+			invalidDependentProject: true,
+		},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			valid, validations, why := validateBug(testCase.issue, testCase.dependents, testCase.options, "https://my-jira.com")
+			valid, invalidDependentProject, validations, why := validateBug(testCase.issue, testCase.dependents, testCase.options, "https://my-jira.com")
 			if valid != testCase.valid {
 				t.Errorf("%s: didn't validate bug correctly, expected %t got %t", testCase.name, testCase.valid, valid)
 			}
@@ -2695,6 +2783,9 @@ func TestValidateBug(t *testing.T) {
 			}
 			if !reflect.DeepEqual(why, testCase.why) {
 				t.Errorf("%s: didn't get correct reasons why: %v", testCase.name, cmp.Diff(testCase.why, why, allowEventAndDate))
+			}
+			if invalidDependentProject != testCase.invalidDependentProject {
+				t.Errorf("%s: didn't get correct dependent bug project validation, expected %t got %t", testCase.name, testCase.invalidDependentProject, invalidDependentProject)
 			}
 		})
 	}
