@@ -407,7 +407,7 @@ To reference a bug, add 'OCPBUGS-XXX:' to the title of this pull request and req
 			}
 		}
 
-		valid, validationsRun, why := validateBug(bug, dependents, options, jc.JiraURL())
+		valid, invalidDependentProject, validationsRun, why := validateBug(bug, dependents, options, jc.JiraURL())
 		needsValidLabel, needsInvalidLabel = valid, !valid
 		if valid {
 			log.Debug("Valid bug found.")
@@ -481,6 +481,14 @@ To reference a bug, add 'OCPBUGS-XXX:' to the title of this pull request and req
 			var formattedReasons string
 			for _, reason := range why {
 				formattedReasons += fmt.Sprintf(" - %s\n", reason)
+			}
+			if invalidDependentProject {
+				formattedReasons += `
+All dependent bugs must be part of the OCPBUGS project. If you are backporting a fix that was originally tracked in Bugzilla, follow these steps to handle the backport:
+1. Create a new bug in the OCPBUGS Jira project to match the original bugzilla bug. The important fields that should match are the title, description, target version, and status.
+2. Use the Jira UI to clone the Jira bug and set the target version of the clone to the release you are cherrypicking to.
+3. Use the cherrypick github command to create the cherrypicked PR. Once that new PR is created, retitle the PR and replace the BUG XXX: with OCPBUGS-XXX: to match the new Jira story.
+`
 			}
 			response = fmt.Sprintf(`This pull request references `+bugLink+`, which is invalid:
 %s
@@ -1038,7 +1046,7 @@ func prettyStates(statuses []JiraBugState) []string {
 }
 
 // validateBug determines if the bug matches the options and returns a description of why not
-func validateBug(bug *jira.Issue, dependents []*jira.Issue, options JiraBranchOptions, endpoint string) (bool, []string, []string) {
+func validateBug(bug *jira.Issue, dependents []*jira.Issue, options JiraBranchOptions, endpoint string) (bool, bool, []string, []string) {
 	valid := true
 	var errors []string
 	var validations []string
@@ -1116,6 +1124,9 @@ func validateBug(bug *jira.Issue, dependents []*jira.Issue, options JiraBranchOp
 
 	if options.DependentBugStates != nil {
 		for _, bug := range dependents {
+			if !strings.HasPrefix(bug.Key, "OCPBUGS-") {
+				continue
+			}
 			var status, resolution string
 			if bug.Fields.Status != nil {
 				status = bug.Fields.Status.Name
@@ -1136,6 +1147,9 @@ func validateBug(bug *jira.Issue, dependents []*jira.Issue, options JiraBranchOp
 
 	if options.DependentBugTargetVersions != nil {
 		for _, bug := range dependents {
+			if !strings.HasPrefix(bug.Key, "OCPBUGS-") {
+				continue
+			}
 			targetVersion, err := helpers.GetIssueTargetVersion(bug)
 			if err != nil {
 				valid = false
@@ -1176,7 +1190,17 @@ func validateBug(bug *jira.Issue, dependents []*jira.Issue, options JiraBranchOp
 		validations = append(validations, "bug has dependents")
 	}
 
-	return valid, validations, errors
+	// make sure all dependents are part of OCPBUGS
+	invalidDependentProject := false
+	for _, dependent := range dependents {
+		if !strings.HasPrefix(dependent.Key, "OCPBUGS-") {
+			valid = false
+			errors = append(validations, fmt.Sprintf("dependent bug %s is not in the required `OCPBUGS` project", dependent.Key))
+			invalidDependentProject = true
+		}
+	}
+
+	return valid, invalidDependentProject, validations, errors
 }
 
 type prParts struct {
