@@ -38,7 +38,7 @@ const (
 )
 
 var (
-	titleMatch           = regexp.MustCompile(`(?i)OCPBUGS-([0-9]+):`)
+	titleMatch           = regexp.MustCompile(`(?i)(OCPBUGS|OCPBUGSM|MGMT|MGMTBUGS)-([0-9]+):`)
 	refreshCommandMatch  = regexp.MustCompile(`(?mi)^/jira refresh\s*$`)
 	qaReviewCommandMatch = regexp.MustCompile(`(?mi)^/jira cc-qa\s*$`)
 	cherrypickPRMatch    = regexp.MustCompile(`This is an automated cherry-pick of #([0-9]+)`)
@@ -314,7 +314,10 @@ func (s *server) handleIssueComment(l *logrus.Entry, e github.IssueCommentEvent)
 }
 
 func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, log *logrus.Entry, e event, allRepos sets.String) error {
-	if e.key == "" || !strings.HasPrefix(e.key, "OCPBUGS-") {
+	if e.key == "" || !(strings.HasPrefix(e.key, "OCPBUGS-") ||
+		strings.HasPrefix(e.key, "OCPBUGSM-") ||
+		strings.HasPrefix(e.key, "MGMT-") ||
+		strings.HasPrefix(e.key, "MGMTBUGS-")) {
 		return nil
 	}
 

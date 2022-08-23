@@ -104,6 +104,14 @@ func TestHandle(t *testing.T) {
 		},
 		OutwardIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123"},
 	}
+	fieldLinkToMGMT123 := jira.IssueLink{
+		Type: jira.IssueLinkType{
+			Name:    "Cloners",
+			Inward:  "is cloned by",
+			Outward: "clones",
+		},
+		OutwardIssue: &jira.Issue{ID: "1", Key: "MGMT-123"},
+	}
 	// the fake clone doesn't include the key in the link, which breaks our check; just make a second struct without the key set
 	fieldLinkTo123JustID := jira.IssueLink{
 		Type: jira.IssueLinkType{
@@ -121,6 +129,14 @@ func TestHandle(t *testing.T) {
 		},
 		InwardIssue: &jira.Issue{ID: "2", Key: "OCPBUGS-124"},
 	}
+	fieldLinkToMGMT124 := jira.IssueLink{
+		Type: jira.IssueLinkType{
+			Name:    "Cloners",
+			Inward:  "is cloned by",
+			Outward: "clone",
+		},
+		InwardIssue: &jira.Issue{ID: "2", Key: "MGMT-124"},
+	}
 	linkBetween123to124 := jira.IssueLink{
 		Type: jira.IssueLinkType{
 			Name:    "Cloners",
@@ -129,6 +145,15 @@ func TestHandle(t *testing.T) {
 		},
 		InwardIssue:  &jira.Issue{ID: "2", Key: "OCPBUGS-124"},
 		OutwardIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123"},
+	}
+	linkBetweenMGMT123toMGMT124 := jira.IssueLink{
+		Type: jira.IssueLinkType{
+			Name:    "Cloners",
+			Inward:  "is cloned by",
+			Outward: "clones",
+		},
+		InwardIssue:  &jira.Issue{ID: "2", Key: "MGMT-124"},
+		OutwardIssue: &jira.Issue{ID: "1", Key: "MGMT-123"},
 	}
 	base := &event{
 		org: "org", repo: "repo", baseRef: "branch", number: 1, key: "OCPBUGS-123", body: "This PR fixes OCPBUGS-123", title: "OCPBUGS-123: fixed it!", htmlUrl: "https://github.com/org/repo/pull/1", login: "user",
@@ -1352,6 +1377,49 @@ Instructions for interacting with me using PR comments are available [here](http
 					helpers.SeverityField: severityModerate,
 				}, Status: &jira.Status{Name: "UPDATED"},
 			}},
+		},
+		{
+			name: "valid MGMT bug with dependent bugs removes invalid label, adds valid label, comments",
+			issues: []jira.Issue{{ID: "1", Key: "MGMT-123", Fields: &jira.IssueFields{
+				Status:     &jira.Status{Name: "VERIFIED"},
+				IssueLinks: []*jira.IssueLink{&fieldLinkToMGMT124},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.TargetVersionField: &v2,
+				},
+			},
+			}, {ID: "2", Key: "MGMT-124", Fields: &jira.IssueFields{
+				Status:     &jira.Status{Name: "MODIFIED"},
+				IssueLinks: []*jira.IssueLink{&fieldLinkToMGMT123},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.TargetVersionField: &v1,
+				},
+			}}},
+			overrideEvent: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 2, key: "MGMT-124", body: "This PR fixes MGMT-124", title: "MGMT-124: fixed it!", htmlUrl: "https://github.com/org/repo/pull/2", login: "user",
+			},
+			existingIssueLinks: []*jira.IssueLink{&linkBetweenMGMT123toMGMT124},
+			options:            JiraBranchOptions{IsOpen: &yes, TargetVersion: &v1Str, DependentBugStates: &verified, DependentBugTargetVersions: &[]string{v2Str}},
+			labels:             []string{labels.InvalidBug},
+			expectedLabels:     []string{labels.ValidBug, labels.BugzillaValidBug},
+			expectedComment: `org/repo#2:@user: This pull request references [Jira Issue MGMT-124](https://my-jira.com/browse/MGMT-124), which is valid.
+
+<details><summary>5 validation(s) were run on this bug</summary>
+
+* bug is open, matching expected state (open)
+* bug target version (v1) matches configured target version for branch (v1)
+* dependent bug [Jira Issue MGMT-123](https://my-jira.com/browse/MGMT-123) is in the state VERIFIED, which is one of the valid states (VERIFIED)
+* dependent [Jira Issue MGMT-123](https://my-jira.com/browse/MGMT-123) targets the "v2" version, which is one of the valid target versions: v2
+* bug has dependents</details>
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/2):
+
+>This PR fixes MGMT-124
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`,
 		},
 	}
 
