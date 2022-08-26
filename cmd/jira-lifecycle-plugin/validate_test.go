@@ -40,7 +40,6 @@ func TestValidateConfig(t *testing.T) {
     valid_states:
     - status: NEW
     - status: ASSIGNED
-    - status: ON_DEV
     - status: POST`,
 		expected: nil,
 	}, {
