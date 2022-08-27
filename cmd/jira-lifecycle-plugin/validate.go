@@ -78,12 +78,9 @@ func checkBranchStatuses(name string, options JiraBranchOptions) []error {
 }
 
 var validStatusSet = sets.NewString(status.Assigned,
-	status.Backlog,
 	status.Closed,
-	status.InProgess,
 	status.Modified,
 	status.New,
-	status.OnDev,
 	status.OnQA,
 	status.Post,
 	status.ReleasePending,
