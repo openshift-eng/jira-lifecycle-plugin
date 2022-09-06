@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/yaml"
 
+	"k8s.io/test-infra/prow/bugzilla"
 	prowconfig "k8s.io/test-infra/prow/config"
 	cherrypicker "k8s.io/test-infra/prow/external-plugins/cherrypicker/lib"
 	"k8s.io/test-infra/prow/github"
@@ -196,6 +197,9 @@ func TestHandle(t *testing.T) {
 		overrideEvent          *event
 		disabledProjects       []string
 		expectedCommentUpdates []string
+		bugs                   []bugzilla.Bug
+		bugComments            map[int][]bugzilla.Comment
+		bugSubComponents       map[int]map[string][]string
 	}{
 		{
 			name: "no bug found leaves a comment",
@@ -1451,6 +1455,174 @@ In response to [this](https://github.com/org/repo/pull/2):
 
 Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
 </details>`,
+		}, {
+			name: "Cherrypick PR on Bugzilla cherrypick creates new issues with BZ link",
+			bugs: []bugzilla.Bug{{
+				Summary:       "This is a title",
+				TargetRelease: []string{v2Str},
+				ID:            1,
+				Component:     []string{"Installer"},
+			}},
+			bugComments: map[int][]bugzilla.Comment{
+				1: {{
+					Text: "This is a description",
+				}},
+			},
+			bugSubComponents: map[int]map[string][]string{
+				1: {
+					"Installer": {
+						"openshift-ansible",
+					},
+				},
+			},
+			overrideEvent: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 2, key: "", body: "This is an automated cherry-pick of #1.\n\n/assign user", title: "[v1] Bug 1: fixed it!", htmlUrl: "https://github.com/org/repo/pull/2", login: "user",
+			},
+			prs:                 []github.PullRequest{{Number: base.number, Body: base.body, Title: "Bug 1: fixed it!"}, {Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] " + "Bug 1: fixed it!"}},
+			title:               "[v1] Bug 1: fixed it!",
+			cherryPick:          true,
+			cherryPickFromPRNum: 1,
+			options:             JiraBranchOptions{TargetVersion: &v1Str},
+			expectedComment: `org/repo#2:@user: [Bugzilla bug 1](www.bugzilla/show_bug.cgi?id=1) has been cloned as [Jira Issue OCPBUGS-1](https://my-jira.com/browse/OCPBUGS-1). Retitling PR to link against new bug.
+/retitle [v1] OCPBUGS-1: fixed it!
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/2):
+
+>This is an automated cherry-pick of #1.
+>
+>/assign user
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`,
+			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-1", Fields: &jira.IssueFields{
+				Summary:     "This is a title",
+				Description: "This bug is a backport clone of [Bugzilla bug 1](www.bugzilla/show_bug.cgi?id=1). The following is the description of the original bug:\n---\nThis is a description",
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				Components: []*jira.Component{{Name: "Installer / openshift-ansible"}},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.TargetVersionField: v1,
+					helpers.BlockedByBZ:        "www.bugzilla/show_bug.cgi?id=1",
+				},
+			}},
+		}, {
+			name: "Cherrypick PR on Bugzilla cherrypick for CVE creates new bug with correct labels",
+			bugs: []bugzilla.Bug{{
+				Summary:       "This is a title",
+				TargetRelease: []string{v2Str},
+				ID:            1,
+				Component:     []string{"Installer"},
+				Keywords:      []string{"Security", "SecurityTracking"},
+				Whiteboard:    "component:test-component",
+				Blocks:        []int{2},
+			}, {
+				ID:    2,
+				Alias: []string{"CVE-2022-12345"},
+			}},
+			bugComments: map[int][]bugzilla.Comment{
+				1: {{
+					Text: "This is a description",
+				}},
+			},
+			bugSubComponents: map[int]map[string][]string{
+				1: {
+					"Installer": {
+						"openshift-ansible",
+					},
+				},
+			},
+			overrideEvent: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 2, key: "", body: "This is an automated cherry-pick of #1.\n\n/assign user", title: "[v1] Bug 1: fixed it!", htmlUrl: "https://github.com/org/repo/pull/2", login: "user",
+			},
+			prs:                 []github.PullRequest{{Number: base.number, Body: base.body, Title: "Bug 1: fixed it!"}, {Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] " + "Bug 1: fixed it!"}},
+			title:               "[v1] Bug 1: fixed it!",
+			cherryPick:          true,
+			cherryPickFromPRNum: 1,
+			options:             JiraBranchOptions{TargetVersion: &v1Str},
+			expectedComment: `org/repo#2:@user: [Bugzilla bug 1](www.bugzilla/show_bug.cgi?id=1) has been cloned as [Jira Issue OCPBUGS-1](https://my-jira.com/browse/OCPBUGS-1). Retitling PR to link against new bug.
+/retitle [v1] OCPBUGS-1: fixed it!
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/2):
+
+>This is an automated cherry-pick of #1.
+>
+>/assign user
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`,
+			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-1", Fields: &jira.IssueFields{
+				Summary:     "This is a title",
+				Description: "This bug is a backport clone of [Bugzilla bug 1](www.bugzilla/show_bug.cgi?id=1). The following is the description of the original bug:\n---\nThis is a description",
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				Components: []*jira.Component{{Name: "Installer / openshift-ansible"}},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.TargetVersionField: v1,
+					helpers.BlockedByBZ:        "www.bugzilla/show_bug.cgi?id=1",
+				},
+				Labels: []string{"Security", "SecurityTracking", "component:test-component", "CVE-2022-12345", "flaw:bz#2"},
+			}},
+		}, {
+			name: "Existing issue has labels updated on refresh",
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Status: &jira.Status{Name: "MODIFIED"},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.BlockedByBZ:        helpers.URL{Value: "www.bugzilla/show_bug.cgi?id=1"},
+					helpers.TargetVersionField: v1,
+				}}},
+			},
+			body:      "/jira refresh",
+			isComment: true,
+			opened:    true,
+			bugs: []bugzilla.Bug{{
+				ID:            1,
+				TargetRelease: []string{v2Str},
+				Status:        "VERIFIED",
+				Keywords:      []string{"Security", "SecurityTracking"},
+				Whiteboard:    "component:test-component",
+				Blocks:        []int{2},
+			}, {
+				ID:    2,
+				Alias: []string{"CVE-2022-12345"},
+			}},
+			title:   "Bug 1: fixed it!",
+			options: JiraBranchOptions{ValidateByDefault: &yes, IsOpen: &yes, TargetVersion: &v1Str, DependentBugStates: &verified, DependentBugTargetVersions: &[]string{v2Str}},
+			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
+
+<details><summary>5 validation(s) were run on this bug</summary>
+
+* bug is open, matching expected state (open)
+* bug target version (v1) matches configured target version for branch (v1)
+* dependent bug [Bugzilla bug %!d(string=1)](www.bugzilla/show_bug.cgi?id=%!d(string=1)) is in the state VERIFIED, which is one of the valid states (VERIFIED)
+* dependent [Bugzilla bug %!d(string=1)](www.bugzilla/show_bug.cgi?id=%!d(string=1)) targets the "v2" version, which is one of the valid target versions: v2
+* bug has dependents</details>
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>/jira refresh
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`,
+			expectedLabels: []string{labels.ValidBug, labels.BugzillaValidBug},
+			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Status: &jira.Status{Name: "MODIFIED"},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": string("v1")}},
+					helpers.BlockedByBZ:        map[string]interface{}{"value": string("www.bugzilla/show_bug.cgi?id=1")},
+				},
+				Labels: []string{"CVE-2022-12345", "Security", "SecurityTracking", "component:test-component", "flaw:bz#2"},
+			}},
 		},
 	}
 
@@ -1502,7 +1674,19 @@ Instructions for interacting with me using PR comments are available [here](http
 			// client with a custom one that has an empty Query function
 			// TODO: implement a basic fake query function in test-infra fakegithub library and start unit testing the query path
 			fakeClient := fakeGHClient{gc}
-			if err := handle(jiraClient, fakeClient, tc.options, logrus.WithField("testCase", tc.name), testEvent, sets.NewString("org/repo")); err != nil {
+			bc := bugzilla.Fake{
+				EndpointString: "www.bugzilla",
+				Bugs:           map[int]bugzilla.Bug{},
+				BugComments:    tc.bugComments,
+				SubComponents:  map[int]map[string][]string{},
+			}
+			for _, bug := range tc.bugs {
+				bc.Bugs[bug.ID] = bug
+			}
+			for id, subComponent := range tc.bugSubComponents {
+				bc.SubComponents[id] = subComponent
+			}
+			if err := handle(jiraClient, fakeClient, &bc, tc.options, logrus.WithField("testCase", tc.name), testEvent, sets.NewString("org/repo")); err != nil {
 				t.Fatalf("handle failed: %v", err)
 			}
 
@@ -2389,12 +2573,58 @@ func TestBugKeyFromTitle(t *testing.T) {
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.title, func(t *testing.T) {
-			key, notFound, err := bugKeyFromTitle(testCase.title)
-			if err != nil {
-				t.Errorf("%s: Unexpected error: %v", testCase.title, err)
-			}
+			key, notFound := bugKeyFromTitle(testCase.title)
 			if key != testCase.expectedKey {
 				t.Errorf("%s: unexpected %s != %s", testCase.title, key, testCase.expectedKey)
+			}
+			if notFound != testCase.expectedNotFound {
+				t.Errorf("%s: unexpected %t != %t", testCase.title, notFound, testCase.expectedNotFound)
+			}
+		})
+	}
+}
+
+func TestBZIDFromTitle(t *testing.T) {
+	var testCases = []struct {
+		title            string
+		expectedID       int
+		expectedNotFound bool
+	}{
+		{
+			title:            "no match",
+			expectedID:       0,
+			expectedNotFound: true,
+		},
+		{
+			title:      "Bug 12: Canonical",
+			expectedID: 12,
+		},
+		{
+			title:            "Bug 12 : Space before colon",
+			expectedID:       0,
+			expectedNotFound: true,
+		},
+		{
+			title:      "[rebase release-1.0] Bug 12: Prefix",
+			expectedID: 12,
+		},
+		{
+			title:      "Revert: \"Bug 12: Revert default\"",
+			expectedID: 12,
+		},
+		{
+			title:      "Bug 34: Revert: \"Bug 12: Revert default\"",
+			expectedID: 34,
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.title, func(t *testing.T) {
+			key, notFound, err := bzIDFromTitle(testCase.title)
+			if err != nil {
+				t.Errorf("%s: unexpected error: %v", testCase.title, err)
+			}
+			if key != testCase.expectedID {
+				t.Errorf("%s: unexpected %d != %d", testCase.title, key, testCase.expectedID)
 			}
 			if notFound != testCase.expectedNotFound {
 				t.Errorf("%s: unexpected %t != %t", testCase.title, notFound, testCase.expectedNotFound)
@@ -2414,7 +2644,7 @@ func TestValidateBug(t *testing.T) {
 	var testCases = []struct {
 		name                    string
 		issue                   *jira.Issue
-		dependents              []*jira.Issue
+		dependents              []dependent
 		options                 JiraBranchOptions
 		valid                   bool
 		validations             []string
@@ -2522,21 +2752,16 @@ func TestValidateBug(t *testing.T) {
 		{
 			name:        "not matching dependent bug status requirement means an invalid bug",
 			issue:       &jira.Issue{Fields: &jira.IssueFields{}},
-			dependents:  []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Status: &jira.Status{Name: "MODIFIED"}}}},
+			dependents:  []dependent{{key: "OCPBUGS-124", bugState: JiraBugState{Status: "MODIFIED"}}},
 			options:     JiraBranchOptions{DependentBugStates: &[]JiraBugState{verified}},
 			valid:       false,
 			validations: []string{"bug has dependents"},
 			why:         []string{"expected dependent [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) to be in one of the following states: VERIFIED, but it is MODIFIED instead"},
 		},
 		{
-			name:  "not matching dependent bug target version requirement means an invalid bug",
-			issue: &jira.Issue{Fields: &jira.IssueFields{}},
-			dependents: []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
-				Status: &jira.Status{Name: "MODIFIED"},
-				Unknowns: tcontainer.MarshalMap{
-					helpers.TargetVersionField: &two,
-				},
-			}}},
+			name:        "not matching dependent bug target version requirement means an invalid bug",
+			issue:       &jira.Issue{Fields: &jira.IssueFields{}},
+			dependents:  []dependent{{key: "OCPBUGS-124", bugState: JiraBugState{Status: "MODIFIED"}, targetVersion: &twoStr}},
 			options:     JiraBranchOptions{DependentBugTargetVersions: &[]string{oneStr}},
 			valid:       false,
 			validations: []string{"bug has dependents"},
@@ -2545,7 +2770,7 @@ func TestValidateBug(t *testing.T) {
 		{
 			name:        "not having a dependent bug target version means an invalid bug",
 			issue:       &jira.Issue{Fields: &jira.IssueFields{}},
-			dependents:  []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Status: &jira.Status{Name: "MODIFIED"}}}},
+			dependents:  []dependent{{key: "OCPBUGS-124", bugState: JiraBugState{Status: "MODIFIED"}}},
 			options:     JiraBranchOptions{DependentBugTargetVersions: &[]string{oneStr}},
 			valid:       false,
 			validations: []string{"bug has dependents"},
@@ -2559,13 +2784,8 @@ func TestValidateBug(t *testing.T) {
 					helpers.TargetVersionField: &one,
 				},
 			}},
-			dependents: []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
-				Status: &jira.Status{Name: "MODIFIED"},
-				Unknowns: tcontainer.MarshalMap{
-					helpers.TargetVersionField: &two,
-				},
-			}}},
-			options: JiraBranchOptions{IsOpen: &open, TargetVersion: &oneStr, ValidStates: &[]JiraBugState{modified}, DependentBugStates: &[]JiraBugState{modified}, DependentBugTargetVersions: &[]string{twoStr}},
+			dependents: []dependent{{key: "OCPBUGS-124", bugState: JiraBugState{Status: "MODIFIED"}, targetVersion: &twoStr}},
+			options:    JiraBranchOptions{IsOpen: &open, TargetVersion: &oneStr, ValidStates: &[]JiraBugState{modified}, DependentBugStates: &[]JiraBugState{modified}, DependentBugTargetVersions: &[]string{twoStr}},
 			validations: []string{`bug is open, matching expected state (open)`,
 				`bug target version (v1) matches configured target version for branch (v1)`,
 				"bug is in the state MODIFIED, which is one of the valid states (MODIFIED)",
@@ -2582,7 +2802,7 @@ func TestValidateBug(t *testing.T) {
 					helpers.TargetVersionField: &one,
 				},
 			}},
-			dependents:  []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Status: &jira.Status{Name: "MODIFIED"}}}},
+			dependents:  []dependent{{key: "OCPBUGS-124", bugState: JiraBugState{Status: "MODIFIED"}, targetVersion: &twoStr}},
 			options:     JiraBranchOptions{IsOpen: &open, TargetVersion: &twoStr, ValidStates: &[]JiraBugState{verified}, DependentBugStates: &[]JiraBugState{verified}},
 			valid:       false,
 			validations: []string{"bug has dependents"},
@@ -2662,10 +2882,7 @@ func TestValidateBug(t *testing.T) {
 				Status:     &jira.Status{Name: "CLOSED"},
 				Resolution: &jira.Resolution{Name: "LOL_GO_AWAY"},
 			}},
-			dependents: []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
-				Status:     &jira.Status{Name: "CLOSED"},
-				Resolution: &jira.Resolution{Name: "LOL_GO_AWAY"},
-			}}},
+			dependents:  []dependent{{key: "OCPBUGS-124", bugState: JiraBugState{Status: "CLOSED", Resolution: "LOL_GO_AWAY"}}},
 			options:     JiraBranchOptions{DependentBugStates: &[]JiraBugState{{Status: "CLOSED"}}},
 			valid:       true,
 			validations: []string{"dependent bug [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) is in the state CLOSED (LOL_GO_AWAY), which is one of the valid states (CLOSED)", "bug has dependents"},
@@ -2676,10 +2893,7 @@ func TestValidateBug(t *testing.T) {
 				Status:     &jira.Status{Name: "CLOSED"},
 				Resolution: &jira.Resolution{Name: "LOL_GO_AWAY"},
 			}},
-			dependents: []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
-				Status:     &jira.Status{Name: "CLOSED"},
-				Resolution: &jira.Resolution{Name: "LOL_GO_AWAY"},
-			}}},
+			dependents:  []dependent{{key: "OCPBUGS-124", bugState: JiraBugState{Status: "CLOSED", Resolution: "LOL_GO_AWAY"}}},
 			options:     JiraBranchOptions{DependentBugStates: &[]JiraBugState{{Status: "CLOSED", Resolution: "ERRATA"}}},
 			valid:       false,
 			validations: []string{"bug has dependents"},
@@ -2693,10 +2907,7 @@ func TestValidateBug(t *testing.T) {
 				Status:     &jira.Status{Name: "CLOSED"},
 				Resolution: &jira.Resolution{Name: "ERRATA"},
 			}},
-			dependents: []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
-				Status:     &jira.Status{Name: "CLOSED"},
-				Resolution: &jira.Resolution{Name: "ERRATA"},
-			}}},
+			dependents:  []dependent{{key: "OCPBUGS-124", bugState: JiraBugState{Status: "CLOSED", Resolution: "ERRATA"}}},
 			options:     JiraBranchOptions{DependentBugStates: &[]JiraBugState{{Status: "CLOSED", Resolution: "ERRATA"}}},
 			valid:       true,
 			validations: []string{"dependent bug [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) is in the state CLOSED (ERRATA), which is one of the valid states (CLOSED (ERRATA))", "bug has dependents"},
@@ -2721,10 +2932,7 @@ func TestValidateBug(t *testing.T) {
 				Status:     &jira.Status{Name: "CLOSED"},
 				Resolution: &jira.Resolution{Name: "ERRATA"},
 			}},
-			dependents: []*jira.Issue{{ID: "2", Key: "OCPBUGSM-38676", Fields: &jira.IssueFields{
-				Status:     &jira.Status{Name: "CLOSED"},
-				Resolution: &jira.Resolution{Name: "ERRATA"},
-			}}},
+			dependents:  []dependent{{key: "OCPBUGSM-38676", bugState: JiraBugState{Status: "CLOSED", Resolution: "ERRATA"}}},
 			options:     JiraBranchOptions{DependentBugStates: &[]JiraBugState{{Status: "CLOSED", Resolution: "ERRATA"}}},
 			valid:       false,
 			validations: []string{"bug has dependents"},
@@ -2738,7 +2946,7 @@ func TestValidateBug(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			valid, invalidDependentProject, validations, why := validateBug(testCase.issue, testCase.dependents, testCase.options, "https://my-jira.com")
+			valid, invalidDependentProject, validations, why := validateBug(testCase.issue, testCase.dependents, testCase.options, "https://my-jira.com", "https://my-bugzilla.com")
 			if valid != testCase.valid {
 				t.Errorf("%s: didn't validate bug correctly, expected %t got %t", testCase.name, testCase.valid, valid)
 			}

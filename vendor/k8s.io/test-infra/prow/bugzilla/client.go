@@ -232,6 +232,11 @@ func (c *client) GetBug(id int) (*Bug, error) {
 	if err != nil {
 		return nil, err
 	}
+	values := req.URL.Query()
+	values.Add("include_fields", "_default")
+	// redhat bugzilla docs claim that flags are a default field, but they are actually not returned unless added to include_fields
+	values.Add("include_fields", "flags")
+	req.URL.RawQuery = values.Encode()
 	raw, err := c.request(req, logger)
 	if err != nil {
 		return nil, err
@@ -796,7 +801,10 @@ func IsAccessDenied(err error) bool {
 	if !ok {
 		return false
 	}
-	return reqError.bugzillaCode == 102
+	if reqError.bugzillaCode == 102 || reqError.statusCode == 401 {
+		return true
+	}
+	return false
 }
 
 // AddPullRequestAsExternalBug attempts to add a PR to the external tracker list.

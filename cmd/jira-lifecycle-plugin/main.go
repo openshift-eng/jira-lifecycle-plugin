@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"k8s.io/test-infra/prow/bugzilla"
 	prowconfig "k8s.io/test-infra/prow/config"
 	"k8s.io/test-infra/prow/config/secret"
 	prowflagutil "k8s.io/test-infra/prow/flagutil"
@@ -35,6 +36,7 @@ type options struct {
 	githubEventServerOptions githubeventserver.Options
 	github                   prowflagutil.GitHubOptions
 	jira                     prowflagutil.JiraOptions
+	bugzilla                 prowflagutil.BugzillaOptions
 
 	validateConfig string
 }
@@ -57,6 +59,7 @@ func gatherOptions() options {
 	// change config flag name so it doesn't conflict with the plugin's config flah name
 	o.prowConfig.ConfigPathFlagName = "prow-config-path"
 	o.prowConfig.AddFlags(fs)
+	o.bugzilla.AddFlags(fs)
 
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		logrus.WithError(err).Fatalf("cannot parse args: '%s'", os.Args[1:])
@@ -154,8 +157,23 @@ func main() {
 		logger.WithError(err).Fatal("Error starting config agent.")
 	}
 
-	if err := secret.Add(o.github.TokenPath, o.webhookSecretFile); err != nil {
-		logger.WithError(err).Fatal("Error starting secrets agent.")
+	var tokens []string
+
+	// Append the path of hmac and github secrets.
+	if o.github.TokenPath != "" {
+		tokens = append(tokens, o.github.TokenPath)
+	}
+	if o.github.AppPrivateKeyPath != "" {
+		tokens = append(tokens, o.github.AppPrivateKeyPath)
+	}
+	tokens = append(tokens, o.webhookSecretFile)
+
+	if o.bugzilla.ApiKeyPath != "" {
+		tokens = append(tokens, o.bugzilla.ApiKeyPath)
+	}
+
+	if err := secret.Add(tokens...); err != nil {
+		logrus.WithError(err).Fatal("Error starting secrets agent.")
 	}
 
 	githubClient, err := o.github.GitHubClient(false)
@@ -168,6 +186,14 @@ func main() {
 		logrus.WithError(err).Fatal("Failed to construct Jira Client")
 	}
 
+	var bzClient bugzilla.Client
+	if o.bugzilla.ApiKeyPath != "" {
+		bzClient, err = o.bugzilla.BugzillaClient()
+		if err != nil {
+			logrus.WithError(err).Fatal("Failed to create bugzilla client")
+		}
+	}
+
 	serv := &server{
 		config: func() *Config {
 			o.mut.Lock()
@@ -177,6 +203,7 @@ func main() {
 		ghc:             githubClient.WithFields(logger.Data).ForPlugin(PluginName),
 		jc:              jiraClient.WithFields(logger.Data).ForPlugin(PluginName),
 		prowConfigAgent: configAgent,
+		bc:              bzClient,
 	}
 
 	eventServer := githubeventserver.New(o.githubEventServerOptions, secret.GetTokenGenerator(o.webhookSecretFile), logger)
