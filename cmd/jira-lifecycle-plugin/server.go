@@ -428,16 +428,6 @@ To reference a bug, add 'OCPBUGS-XXX:' to the title of this pull request and req
 					response += fmt.Sprintf(" The bug has been moved to the %s state.", options.StateAfterValidation)
 				}
 			}
-			if options.AddExternalLink != nil && *options.AddExternalLink {
-				changed, err := upsertGitHubLinkToIssue(log, bug.ID, jc, e)
-				if err != nil {
-					log.WithError(err).Warn("Unexpected error adding external tracker bug to Jira bug.")
-					return comment(formatError("adding this pull request to the external tracker bugs", jc.JiraURL(), e.key, err))
-				}
-				if changed {
-					response += " The bug has been updated to refer to the pull request using the external bug tracker."
-				}
-			}
 
 			response += "\n\n<details>"
 			if len(validationsRun) == 0 {
@@ -497,6 +487,18 @@ Note that the mirrored bug in OCPBUGSM should not be involved in this process at
 %s
 Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jira bug are made, or edit the title of this pull request to link to a different bug.`, e.key, jc.JiraURL(), e.key, formattedReasons)
 		}
+
+		if options.AddExternalLink != nil && *options.AddExternalLink {
+			changed, err := upsertGitHubLinkToIssue(log, bug.ID, jc, e)
+			if err != nil {
+				log.WithError(err).Warn("Unexpected error adding external tracker bug to Jira bug.")
+				return comment(formatError("adding this pull request to the external tracker bugs", jc.JiraURL(), e.key, err))
+			}
+			if changed {
+				response += "\n\nThe bug has been updated to refer to the pull request using the external bug tracker."
+			}
+		}
+
 	}
 
 	// ensure label state is correct. Do not propagate errors

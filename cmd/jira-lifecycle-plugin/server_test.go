@@ -410,9 +410,11 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{AddExternalLink: &yes}, // no requirements --> always valid
 			labels:         []string{labels.InvalidBug},
 			expectedLabels: []string{labels.ValidBug, labels.BugzillaValidBug},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid. The bug has been updated to refer to the pull request using the external bug tracker.
+			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
 
 <details><summary>No validations were run on this bug</summary></details>
+
+The bug has been updated to refer to the pull request using the external bug tracker.
 
 <details>
 
