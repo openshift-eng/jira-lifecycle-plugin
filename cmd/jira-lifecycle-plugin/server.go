@@ -1542,8 +1542,12 @@ func handleBZCherrypick(e event, gc githubClient, jc jiraclient.Client, bc bugzi
 		Project: jira.Project{
 			Key: "OCPBUGS",
 		},
-		Description: fmt.Sprintf("This bug is a backport clone of "+bzLink+". The following is the description of the original bug:\n---\n%s", parentBug.ID, bc.Endpoint(), parentBug.ID, comments[0].Text),
-		Summary:     parentBug.Summary,
+		Type: jira.IssueType{
+			Name: "Bug",
+		},
+		AffectsVersions: []*jira.AffectsVersion{{Name: targetVersion}},
+		Description:     fmt.Sprintf("This bug is a backport clone of "+bzLink+". The following is the description of the original bug:\n---\n%s", parentBug.ID, bc.Endpoint(), parentBug.ID, comments[0].Text),
+		Summary:         parentBug.Summary,
 		Unknowns: tcontainer.MarshalMap{
 			helpers.BlockedByBugzillaBug: fmt.Sprintf("%s/show_bug.cgi?id=%d", bc.Endpoint(), parentBZID),
 			helpers.TargetVersionField:   []*jira.Version{{Name: targetVersion}},

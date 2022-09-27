@@ -1503,7 +1503,11 @@ Instructions for interacting with me using PR comments are available [here](http
 				Project: jira.Project{
 					Key: "OCPBUGS",
 				},
-				Components: []*jira.Component{{Name: "Installer / openshift-ansible"}},
+				Type: jira.IssueType{
+					Name: "Bug",
+				},
+				AffectsVersions: []*jira.AffectsVersion{{Name: v1Str}},
+				Components:      []*jira.Component{{Name: "Installer / openshift-ansible"}},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.TargetVersionField:   v1,
 					helpers.BlockedByBugzillaBug: "www.bugzilla/show_bug.cgi?id=1",
@@ -1563,7 +1567,11 @@ Instructions for interacting with me using PR comments are available [here](http
 				Project: jira.Project{
 					Key: "OCPBUGS",
 				},
-				Components: []*jira.Component{{Name: "Installer / openshift-ansible"}},
+				Type: jira.IssueType{
+					Name: "Bug",
+				},
+				AffectsVersions: []*jira.AffectsVersion{{Name: v1Str}},
+				Components:      []*jira.Component{{Name: "Installer / openshift-ansible"}},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.TargetVersionField:   v1,
 					helpers.BlockedByBugzillaBug: "www.bugzilla/show_bug.cgi?id=1",
