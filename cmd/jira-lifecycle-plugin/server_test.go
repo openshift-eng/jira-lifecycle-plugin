@@ -1483,8 +1483,8 @@ Instructions for interacting with me using PR comments are available [here](http
 			cherryPick:          true,
 			cherryPickFromPRNum: 1,
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
-			expectedComment: `org/repo#2:@user: [Bugzilla bug 1](www.bugzilla/show_bug.cgi?id=1) has been cloned as [Jira Issue OCPBUGS-1](https://my-jira.com/browse/OCPBUGS-1). Retitling PR to link against new bug.
-/retitle [v1] OCPBUGS-1: fixed it!
+			expectedComment: `org/repo#2:@user: [Bugzilla bug 1](www.bugzilla/show_bug.cgi?id=1) has been cloned as [Jira Issue -1](https://my-jira.com/browse/-1). Retitling PR to link against new bug.
+/retitle [v1] -1: fixed it!
 
 <details>
 
@@ -1497,11 +1497,11 @@ In response to [this](https://github.com/org/repo/pull/2):
 
 Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-1", Fields: &jira.IssueFields{
+			expectedIssue: &jira.Issue{ID: "1", Key: "-1", Fields: &jira.IssueFields{
 				Summary:     "This is a title",
 				Description: "This bug is a backport clone of [Bugzilla bug 1](www.bugzilla/show_bug.cgi?id=1). The following is the description of the original bug:\n---\nThis is a description",
 				Project: jira.Project{
-					Name: "OCPBUGS",
+					Key: "OCPBUGS",
 				},
 				Components: []*jira.Component{{Name: "Installer / openshift-ansible"}},
 				Unknowns: tcontainer.MarshalMap{
@@ -1543,8 +1543,8 @@ Instructions for interacting with me using PR comments are available [here](http
 			cherryPick:          true,
 			cherryPickFromPRNum: 1,
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
-			expectedComment: `org/repo#2:@user: [Bugzilla bug 1](www.bugzilla/show_bug.cgi?id=1) has been cloned as [Jira Issue OCPBUGS-1](https://my-jira.com/browse/OCPBUGS-1). Retitling PR to link against new bug.
-/retitle [v1] OCPBUGS-1: fixed it!
+			expectedComment: `org/repo#2:@user: [Bugzilla bug 1](www.bugzilla/show_bug.cgi?id=1) has been cloned as [Jira Issue -1](https://my-jira.com/browse/-1). Retitling PR to link against new bug.
+/retitle [v1] -1: fixed it!
 
 <details>
 
@@ -1557,11 +1557,11 @@ In response to [this](https://github.com/org/repo/pull/2):
 
 Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-1", Fields: &jira.IssueFields{
+			expectedIssue: &jira.Issue{ID: "1", Key: "-1", Fields: &jira.IssueFields{
 				Summary:     "This is a title",
 				Description: "This bug is a backport clone of [Bugzilla bug 1](www.bugzilla/show_bug.cgi?id=1). The following is the description of the original bug:\n---\nThis is a description",
 				Project: jira.Project{
-					Name: "OCPBUGS",
+					Key: "OCPBUGS",
 				},
 				Components: []*jira.Component{{Name: "Installer / openshift-ansible"}},
 				Unknowns: tcontainer.MarshalMap{

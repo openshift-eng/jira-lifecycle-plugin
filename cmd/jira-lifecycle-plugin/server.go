@@ -1540,7 +1540,7 @@ func handleBZCherrypick(e event, gc githubClient, jc jiraclient.Client, bc bugzi
 	oldLink := ""
 	newIssue = &jira.Issue{Fields: &jira.IssueFields{
 		Project: jira.Project{
-			Name: "OCPBUGS",
+			Key: "OCPBUGS",
 		},
 		Description: fmt.Sprintf("This bug is a backport clone of "+bzLink+". The following is the description of the original bug:\n---\n%s", parentBug.ID, bc.Endpoint(), parentBug.ID, comments[0].Text),
 		Summary:     parentBug.Summary,
