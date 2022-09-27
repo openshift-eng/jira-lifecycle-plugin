@@ -461,11 +461,11 @@ To reference a bug, add 'OCPBUGS-XXX:' to the title of this pull request and req
 				dependents = append(dependents, newDependent)
 			}
 			if bc != nil {
-				bzDependsOn, _ := helpers.GetIssueBlockedByBZ(bug)
+				bzDependsOn, _ := helpers.GetIssueBlockedByBugzillaBug(bug)
 				if bzDependsOn != nil {
-					bzIDInt, err := bzURLToID(bzDependsOn.Value)
+					bzIDInt, err := bzURLToID(*bzDependsOn)
 					if err != nil {
-						return comment(formatError(fmt.Sprintf("converting bugzilla URL %s to an ID", bzDependsOn.Value), bc.Endpoint(), e.key, err))
+						return comment(formatError(fmt.Sprintf("converting bugzilla URL %s to an ID", *bzDependsOn), bc.Endpoint(), e.key, err))
 					}
 
 					bzDependent, err := getBZBug(bc, bzIDInt, log, comment)
@@ -1545,8 +1545,8 @@ func handleBZCherrypick(e event, gc githubClient, jc jiraclient.Client, bc bugzi
 		Description: fmt.Sprintf("This bug is a backport clone of "+bzLink+". The following is the description of the original bug:\n---\n%s", parentBug.ID, bc.Endpoint(), parentBug.ID, comments[0].Text),
 		Summary:     parentBug.Summary,
 		Unknowns: tcontainer.MarshalMap{
-			helpers.BlockedByBZ:        fmt.Sprintf("%s/show_bug.cgi?id=%d", bc.Endpoint(), parentBZID),
-			helpers.TargetVersionField: []*jira.Version{{Name: targetVersion}},
+			helpers.BlockedByBugzillaBug: fmt.Sprintf("%s/show_bug.cgi?id=%d", bc.Endpoint(), parentBZID),
+			helpers.TargetVersionField:   []*jira.Version{{Name: targetVersion}},
 		},
 	}}
 	if markAsPrivate {

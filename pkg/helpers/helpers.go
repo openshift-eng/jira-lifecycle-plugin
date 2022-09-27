@@ -8,11 +8,11 @@ import (
 )
 
 const (
-	QAContactField      = "customfield_12315948"
-	SeverityField       = "customfield_12316142"
-	TargetVersionField  = "customfield_12319940"
-	BlockedByBZ         = "customfield_XXXXXXXX"
-	ReleaseBlockerField = "customfield_12319743"
+	QAContactField       = "customfield_12315948"
+	SeverityField        = "customfield_12316142"
+	TargetVersionField   = "customfield_12319940"
+	BlockedByBugzillaBug = "customfield_12322152"
+	ReleaseBlockerField  = "customfield_12319743"
 )
 
 // GetUnknownField will attempt to get the specified field from the Unknowns struct and unmarshal
@@ -99,10 +99,10 @@ func GetIssueSeverity(issue *jira.Issue) (*CustomField, error) {
 	return obj, err
 }
 
-func GetIssueBlockedByBZ(issue *jira.Issue) (*URL, error) {
-	var obj *URL
-	isSet, err := GetUnknownField(BlockedByBZ, issue, func() interface{} {
-		obj = &URL{}
+func GetIssueBlockedByBugzillaBug(issue *jira.Issue) (*string, error) {
+	var obj *string
+	isSet, err := GetUnknownField(BlockedByBugzillaBug, issue, func() interface{} {
+		obj = func(s string) *string { return &s }("")
 		return obj
 	})
 	if !isSet {
@@ -116,8 +116,4 @@ type CustomField struct {
 	ID       string `json:"id"`
 	Value    string `json:"value"`
 	Disabled bool   `json:"disabled"`
-}
-
-type URL struct {
-	Value string `json:"value"`
 }

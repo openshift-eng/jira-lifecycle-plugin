@@ -1505,8 +1505,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 				Components: []*jira.Component{{Name: "Installer / openshift-ansible"}},
 				Unknowns: tcontainer.MarshalMap{
-					helpers.TargetVersionField: v1,
-					helpers.BlockedByBZ:        "www.bugzilla/show_bug.cgi?id=1",
+					helpers.TargetVersionField:   v1,
+					helpers.BlockedByBugzillaBug: "www.bugzilla/show_bug.cgi?id=1",
 				},
 			}},
 		}, {
@@ -1565,8 +1565,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 				Components: []*jira.Component{{Name: "Installer / openshift-ansible"}},
 				Unknowns: tcontainer.MarshalMap{
-					helpers.TargetVersionField: v1,
-					helpers.BlockedByBZ:        "www.bugzilla/show_bug.cgi?id=1",
+					helpers.TargetVersionField:   v1,
+					helpers.BlockedByBugzillaBug: "www.bugzilla/show_bug.cgi?id=1",
 				},
 				Labels: []string{"Security", "SecurityTracking", "component:test-component", "CVE-2022-12345", "flaw:bz#2"},
 			}},
@@ -1575,8 +1575,8 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "MODIFIED"},
 				Unknowns: tcontainer.MarshalMap{
-					helpers.BlockedByBZ:        helpers.URL{Value: "www.bugzilla/show_bug.cgi?id=1"},
-					helpers.TargetVersionField: v1,
+					helpers.BlockedByBugzillaBug: "www.bugzilla/show_bug.cgi?id=1",
+					helpers.TargetVersionField:   v1,
 				}}},
 			},
 			body:      "/jira refresh",
@@ -1618,8 +1618,8 @@ Instructions for interacting with me using PR comments are available [here](http
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "MODIFIED"},
 				Unknowns: tcontainer.MarshalMap{
-					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": string("v1")}},
-					helpers.BlockedByBZ:        map[string]interface{}{"value": string("www.bugzilla/show_bug.cgi?id=1")},
+					helpers.TargetVersionField:   []interface{}{map[string]interface{}{"name": string("v1")}},
+					helpers.BlockedByBugzillaBug: "www.bugzilla/show_bug.cgi?id=1",
 				},
 				Labels: []string{"CVE-2022-12345", "Security", "SecurityTracking", "component:test-component", "flaw:bz#2"},
 			}},
