@@ -15,6 +15,7 @@ import (
 	"github.com/trivago/tgo/tcontainer"
 
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/test-infra/prow/bugzilla"
 	"k8s.io/test-infra/prow/config"
 	prowconfig "k8s.io/test-infra/prow/config"
 	"k8s.io/test-infra/prow/github"
@@ -30,6 +31,7 @@ import (
 const (
 	PluginName            = "jira-lifecycle"
 	bugLink               = `[Jira Issue %s](%s/browse/%s)`
+	bzLink                = `[Bugzilla bug %d](%s/show_bug.cgi?id=%d)`
 	criticalSeverity      = "Critical"
 	importantSeverity     = "Important"
 	moderateSeverity      = "Moderate"
@@ -39,10 +41,19 @@ const (
 
 var (
 	titleMatch           = regexp.MustCompile(`(?i)OCPBUGS-([0-9]+):`)
+	bzTitleMatch         = regexp.MustCompile(`(?i)Bug\s+([0-9]+):`)
 	refreshCommandMatch  = regexp.MustCompile(`(?mi)^/jira refresh\s*$`)
 	qaReviewCommandMatch = regexp.MustCompile(`(?mi)^/jira cc-qa\s*$`)
 	cherrypickPRMatch    = regexp.MustCompile(`This is an automated cherry-pick of #([0-9]+)`)
 )
+
+type dependent struct {
+	isBZ             bool
+	key              string
+	targetVersion    *string
+	multipleVersions bool
+	bugState         JiraBugState
+}
 
 type server struct {
 	config func() *Config
@@ -50,6 +61,7 @@ type server struct {
 	prowConfigAgent *prowconfig.Agent
 	ghc             githubClient
 	jc              jiraclient.Client
+	bc              bugzilla.Client
 }
 
 func (s *server) helpProvider(enabledRepos []config.OrgRepo) (*pluginhelp.PluginHelp, error) {
@@ -307,20 +319,44 @@ func (s *server) handleIssueComment(l *logrus.Entry, e github.IssueCommentEvent)
 	}
 	if event != nil {
 		options := cfg.OptionsForBranch(event.org, event.repo, event.baseRef)
-		if err := handle(s.jc, s.ghc, options, l, *event, s.prowConfigAgent.Config().AllRepos); err != nil {
+		if err := handle(s.jc, s.ghc, s.bc, options, l, *event, s.prowConfigAgent.Config().AllRepos); err != nil {
 			l.Errorf("failed to handle comment: %v", err)
 		}
 	}
 }
 
-func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, log *logrus.Entry, e event, allRepos sets.String) error {
-	if e.key == "" || !strings.HasPrefix(e.key, "OCPBUGS-") {
+func bugzillaBugToDependent(bug *bugzilla.Bug) dependent {
+	result := dependent{
+		isBZ: true,
+		key:  strconv.Itoa(bug.ID),
+		bugState: JiraBugState{
+			Status:     bug.Status,
+			Resolution: bug.Resolution,
+		},
+	}
+	if len(bug.TargetRelease) != 0 {
+		result.targetVersion = &bug.TargetRelease[0]
+	}
+	if len(bug.TargetRelease) > 1 {
+		result.multipleVersions = true
+	}
+	return result
+}
+
+func bzURLToID(url string) (int, error) {
+	splitURL := strings.Split(url, "=")
+	bzID := splitURL[len(splitURL)-1]
+	return strconv.Atoi(bzID)
+}
+
+func handle(jc jiraclient.Client, ghc githubClient, bc bugzilla.Client, options JiraBranchOptions, log *logrus.Entry, e event, allRepos sets.String) error {
+	if (e.key == "" || !strings.HasPrefix(e.key, "OCPBUGS-")) && !e.cherrypick {
 		return nil
 	}
 
 	comment := e.comment(ghc)
-	// check if bug is part of a restricted security level
-	if !e.missing {
+	// check if bug is part of a restricted security level; if e.key is not set, this is a bz cherrypick, so we can ignore as the bz cherrypick function checks allowed groups for us
+	if !e.missing && (e.key != "") {
 		bug, err := getBug(jc, e.key, log, comment)
 		if err != nil || bug == nil {
 			return err
@@ -346,6 +382,10 @@ func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, l
 			return nil
 		}
 	}
+	// cherrypicks follow a different pattern than normal validation
+	if e.cherrypick {
+		return handleCherrypick(e, ghc, jc, bc, options, log)
+	}
 	// merges follow a different pattern from the normal validation
 	if e.merged {
 		return handleMerge(e, ghc, jc, options, log, allRepos)
@@ -353,10 +393,6 @@ func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, l
 	// close events follow a different pattern from the normal validation
 	if e.closed && !e.merged {
 		return handleClose(e, ghc, jc, options, log)
-	}
-	// cherrypicks follow a different pattern than normal validation
-	if e.cherrypick {
-		return handleCherrypick(e, ghc, jc, options, log)
 	}
 
 	var needsValidLabel, needsInvalidLabel bool
@@ -382,7 +418,7 @@ To reference a bug, add 'OCPBUGS-XXX:' to the title of this pull request and req
 
 		severityLabel = getSeverityLabel(severity)
 
-		var dependents []*jira.Issue
+		var dependents []dependent
 		if options.DependentBugStates != nil || options.DependentBugTargetVersions != nil {
 			for _, link := range bug.Fields.IssueLinks {
 				// identify if bug depends on this link; multiple different types of links may be blocker types; more can be added as they are identified
@@ -397,16 +433,87 @@ To reference a bug, add 'OCPBUGS-XXX:' to the title of this pull request and req
 				if linkIssue == nil {
 					linkIssue = link.OutwardIssue
 				}
-				// the issue in the link is very trimmed down; get full link for dependent list
-				dependent, err := jc.GetIssue(linkIssue.Key)
+				// the issue in the link is very trimmed down; get full link for dependentIssue list
+				dependentIssue, err := jc.GetIssue(linkIssue.Key)
 				if err != nil {
 					return comment(formatError(fmt.Sprintf("searching for dependent bug %s", linkIssue.Key), jc.JiraURL(), e.key, err))
 				}
-				dependents = append(dependents, dependent)
+				targetVersion, err := helpers.GetIssueTargetVersion(dependentIssue)
+				if err != nil {
+					return comment(formatError(fmt.Sprintf("failed to get target version for %s", dependentIssue.Key), jc.JiraURL(), e.key, err))
+				}
+				var targetVersionString *string
+				if len(targetVersion) != 0 {
+					targetVersionString = &targetVersion[0].Name
+				}
+				dependentState := JiraBugState{}
+				if dependentIssue.Fields.Status != nil {
+					dependentState.Status = dependentIssue.Fields.Status.Name
+				}
+				if dependentIssue.Fields.Resolution != nil {
+					dependentState.Resolution = dependentIssue.Fields.Resolution.Name
+				}
+				newDependent := dependent{
+					key:           dependentIssue.Key,
+					targetVersion: targetVersionString,
+					bugState:      dependentState,
+				}
+				dependents = append(dependents, newDependent)
+			}
+			if bc != nil {
+				bzDependsOn, _ := helpers.GetIssueBlockedByBugzillaBug(bug)
+				if bzDependsOn != nil {
+					bzIDInt, err := bzURLToID(*bzDependsOn)
+					if err != nil {
+						return comment(formatError(fmt.Sprintf("converting bugzilla URL %s to an ID", *bzDependsOn), bc.Endpoint(), e.key, err))
+					}
+
+					bzDependent, err := getBZBug(bc, bzIDInt, log, comment)
+					if err != nil {
+						return err
+					}
+					dependents = append(dependents, bugzillaBugToDependent(bzDependent))
+				}
 			}
 		}
 
-		valid, invalidDependentProject, validationsRun, why := validateBug(bug, dependents, options, jc.JiraURL())
+		bugzillaURL := ""
+		if bc != nil {
+			bugzillaURL = bc.Endpoint()
+
+			// if bug depends on a bugzilla bug, sync keywords, whiteboard, and CVE info to labels
+			for _, dependent := range dependents {
+				if dependent.isBZ {
+					// this cannot error here, as we converted the key for bugzilla bugs from int to string above
+					bzID, _ := strconv.Atoi(dependent.key)
+					bzDependent, err := getBZBug(bc, bzID, log, comment)
+					if err != nil {
+						return err
+					}
+					labels, err := getBZLabels(bc, bzDependent)
+					if err != nil {
+						return comment(formatError("identifying labels from dependent bugzilla bug", bc.Endpoint(), e.key, err))
+					}
+					existingLabels := sets.NewString(bug.Fields.Labels...)
+					allLabels := sets.NewString()
+					changed := false
+					for _, label := range labels {
+						allLabels.Insert(label)
+						if !existingLabels.Has(label) {
+							changed = true
+						}
+					}
+					if changed {
+						updateIssue := jira.Issue{Key: bug.Key, Fields: &jira.IssueFields{Labels: allLabels.List()}}
+						if _, err := jc.UpdateIssue(&updateIssue); err != nil {
+							log.WithError(err).Warn("Unexpected error updating jira issue.")
+							return comment(formatError(fmt.Sprintf("updating list of labels to: %+v", allLabels.List()), jc.JiraURL(), e.key, err))
+						}
+					}
+				}
+			}
+		}
+		valid, invalidDependentProject, validationsRun, why := validateBug(bug, dependents, options, jc.JiraURL(), bugzillaURL)
 		needsValidLabel, needsInvalidLabel = valid, !valid
 		if valid {
 			log.Debug("Valid bug found.")
@@ -788,7 +895,7 @@ func (s *server) handlePullRequest(l *logrus.Entry, pre github.PullRequestEvent)
 		l.Errorf("failed to digest PR: %v", err)
 	}
 	if event != nil {
-		if err := handle(s.jc, s.ghc, options, l, *event, s.prowConfigAgent.Config().AllRepos); err != nil {
+		if err := handle(s.jc, s.ghc, s.bc, options, l, *event, s.prowConfigAgent.Config().AllRepos); err != nil {
 			l.Errorf("failed to handle PR: %v", err)
 		}
 	}
@@ -829,13 +936,9 @@ func digestPR(log *logrus.Entry, pre github.PullRequestEvent, validateByDefault 
 	e := &event{org: org, repo: repo, baseRef: baseRef, number: number, merged: pre.PullRequest.Merged, closed: pre.Action == github.PullRequestActionClosed, opened: pre.Action == github.PullRequestActionOpened, state: pre.PullRequest.State, body: body, title: title, htmlUrl: pre.PullRequest.HTMLURL, login: pre.PullRequest.User.Login}
 	// Make sure the PR title is referencing a bug
 	var err error
-	e.key, e.missing, err = bugKeyFromTitle(title)
+	e.key, e.missing = bugKeyFromTitle(title)
 	// in the case that the title used to reference a bug and no longer does we
 	// want to handle this to remove labels
-	if err != nil {
-		log.WithError(err).Debug("Failed to get bug ID from title")
-		return nil, err
-	}
 
 	// Check if PR is a cherrypick
 	cherrypick, cherrypickFromPRNum, err := getCherryPickMatch(pre)
@@ -875,13 +978,9 @@ func digestPR(log *logrus.Entry, pre github.PullRequestEvent, validateByDefault 
 		// we're detecting this best-effort so we can handle it anyway
 		return intermediate, nil
 	}
-	prevId, missing, err := bugKeyFromTitle(changes.Title.From)
+	prevId, missing := bugKeyFromTitle(changes.Title.From)
 	if missing {
 		// title did not previously reference a bug
-		return intermediate, nil
-	} else if err != nil {
-		// should be impossible based on the regex, ignore err as this is best-effort
-		log.WithError(err).Debug("Failed get previous bug ID")
 		return intermediate, nil
 	}
 
@@ -933,12 +1032,7 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 
 	e := &event{org: org, repo: repo, baseRef: pr.Base.Ref, number: number, merged: pr.Merged, state: pr.State, body: ice.Comment.Body, title: ice.Issue.Title, htmlUrl: ice.Comment.HTMLURL, login: ice.Comment.User.Login, cc: cc}
 
-	e.key, e.missing, err = bugKeyFromTitle(pr.Title)
-	if err != nil {
-		// should be impossible based on the regex
-		log.WithError(err).Debug("Failed to get Jira bug ID from PR title")
-		return nil, err
-	}
+	e.key, e.missing = bugKeyFromTitle(pr.Title)
 
 	return e, nil
 }
@@ -1033,9 +1127,21 @@ func bugMatchesStates(bug *jira.Issue, states []JiraBugState) bool {
 	if bug == nil {
 		return false
 	}
+
+	bugState := JiraBugState{}
+	if bug.Fields.Status != nil {
+		bugState.Status = bug.Fields.Status.Name
+	}
+	if bug.Fields.Resolution != nil {
+		bugState.Resolution = bug.Fields.Resolution.Name
+	}
+	return bugState.matches(states)
+}
+
+func (bs *JiraBugState) matches(states []JiraBugState) bool {
 	for _, state := range states {
-		if ((state.Status != "" && strings.EqualFold(state.Status, bug.Fields.Status.Name)) || state.Status == "") &&
-			((state.Resolution != "" && strings.EqualFold(state.Resolution, bug.Fields.Resolution.Name)) || state.Resolution == "") {
+		if ((state.Status != "" && strings.EqualFold(state.Status, bs.Status)) || state.Status == "") &&
+			((state.Resolution != "" && strings.EqualFold(state.Resolution, bs.Resolution)) || state.Resolution == "") {
 			return true
 		}
 	}
@@ -1051,7 +1157,7 @@ func prettyStates(statuses []JiraBugState) []string {
 }
 
 // validateBug determines if the bug matches the options and returns a description of why not
-func validateBug(bug *jira.Issue, dependents []*jira.Issue, options JiraBranchOptions, endpoint string) (bool, bool, []string, []string) {
+func validateBug(bug *jira.Issue, dependents []dependent, options JiraBranchOptions, jiraEndpoint, bzEndpoint string) (bool, bool, []string, []string) {
 	valid := true
 	var errors []string
 	var validations []string
@@ -1129,49 +1235,54 @@ func validateBug(bug *jira.Issue, dependents []*jira.Issue, options JiraBranchOp
 
 	if options.DependentBugStates != nil {
 		for _, bug := range dependents {
-			if !strings.HasPrefix(bug.Key, "OCPBUGS-") {
+			if !bug.isBZ && !strings.HasPrefix(bug.key, "OCPBUGS-") {
 				continue
 			}
-			var status, resolution string
-			if bug.Fields.Status != nil {
-				status = bug.Fields.Status.Name
+			link := ""
+			endpoint := ""
+			if bug.isBZ {
+				link = bzLink
+				endpoint = bzEndpoint
+			} else {
+				link = bugLink
+				endpoint = jiraEndpoint
 			}
-			if bug.Fields.Resolution != nil {
-				resolution = bug.Fields.Resolution.Name
-			}
-			if !bugMatchesStates(bug, *options.DependentBugStates) {
+			if !bug.bugState.matches(*options.DependentBugStates) {
 				valid = false
 				expected := strings.Join(prettyStates(*options.DependentBugStates), ", ")
-				actual := PrettyStatus(status, resolution)
-				errors = append(errors, fmt.Sprintf("expected dependent "+bugLink+" to be in one of the following states: %s, but it is %s instead", bug.Key, endpoint, bug.Key, expected, actual))
+				actual := PrettyStatus(bug.bugState.Status, bug.bugState.Resolution)
+				errors = append(errors, fmt.Sprintf("expected dependent "+link+" to be in one of the following states: %s, but it is %s instead", bug.key, endpoint, bug.key, expected, actual))
 			} else {
-				validations = append(validations, fmt.Sprintf("dependent bug "+bugLink+" is in the state %s, which is one of the valid states (%s)", bug.Key, endpoint, bug.Key, PrettyStatus(status, resolution), strings.Join(prettyStates(*options.DependentBugStates), ", ")))
+				validations = append(validations, fmt.Sprintf("dependent bug "+link+" is in the state %s, which is one of the valid states (%s)", bug.key, endpoint, bug.key, PrettyStatus(bug.bugState.Status, bug.bugState.Resolution), strings.Join(prettyStates(*options.DependentBugStates), ", ")))
 			}
 		}
 	}
 
 	if options.DependentBugTargetVersions != nil {
 		for _, bug := range dependents {
-			if !strings.HasPrefix(bug.Key, "OCPBUGS-") {
+			if !bug.isBZ && !strings.HasPrefix(bug.key, "OCPBUGS-") {
 				continue
 			}
-			targetVersion, err := helpers.GetIssueTargetVersion(bug)
-			if err != nil {
-				valid = false
-				errors = append(errors, fmt.Sprintf("failed to get target version for bug: %v", err))
+			link := ""
+			endpoint := ""
+			if bug.isBZ {
+				link = bzLink
+				endpoint = bzEndpoint
 			} else {
-				if len(targetVersion) == 0 {
-					valid = false
-					errors = append(errors, fmt.Sprintf("expected dependent "+bugLink+" to target a version in %s, but no target version was set", bug.Key, endpoint, bug.Key, strings.Join(*options.DependentBugTargetVersions, ", ")))
-				} else if len(targetVersion) > 1 {
-					valid = false
-					errors = append(errors, fmt.Sprintf("expected dependent "+bugLink+" to target a version in %s, but it has multiple target versions", bug.Key, endpoint, bug.Key, strings.Join(*options.DependentBugTargetVersions, ", ")))
-				} else if sets.NewString(*options.DependentBugTargetVersions...).Has(targetVersion[0].Name) {
-					validations = append(validations, fmt.Sprintf("dependent "+bugLink+" targets the %q version, which is one of the valid target versions: %s", bug.Key, endpoint, bug.Key, targetVersion[0].Name, strings.Join(*options.DependentBugTargetVersions, ", ")))
-				} else {
-					valid = false
-					errors = append(errors, fmt.Sprintf("expected dependent "+bugLink+" to target a version in %s, but it targets %q instead", bug.Key, endpoint, bug.Key, strings.Join(*options.DependentBugTargetVersions, ", "), targetVersion[0].Name))
-				}
+				link = bugLink
+				endpoint = jiraEndpoint
+			}
+			if bug.targetVersion == nil {
+				valid = false
+				errors = append(errors, fmt.Sprintf("expected dependent "+link+" to target a version in %s, but no target version was set", bug.key, endpoint, bug.key, strings.Join(*options.DependentBugTargetVersions, ", ")))
+			} else if bug.multipleVersions {
+				valid = false
+				errors = append(errors, fmt.Sprintf("expected dependent "+link+" to target a version in %s, but it has multiple target versions", bug.key, endpoint, bug.key, strings.Join(*options.DependentBugTargetVersions, ", ")))
+			} else if sets.NewString(*options.DependentBugTargetVersions...).Has(*bug.targetVersion) {
+				validations = append(validations, fmt.Sprintf("dependent "+link+" targets the %q version, which is one of the valid target versions: %s", bug.key, endpoint, bug.key, *bug.targetVersion, strings.Join(*options.DependentBugTargetVersions, ", ")))
+			} else {
+				valid = false
+				errors = append(errors, fmt.Sprintf("expected dependent "+link+" to target a version in %s, but it targets %q instead", bug.key, endpoint, bug.key, strings.Join(*options.DependentBugTargetVersions, ", "), *bug.targetVersion))
 			}
 		}
 	}
@@ -1181,14 +1292,14 @@ func validateBug(bug *jira.Issue, dependents []*jira.Issue, options JiraBranchOp
 		case options.DependentBugStates != nil && options.DependentBugTargetVersions != nil:
 			valid = false
 			expected := strings.Join(prettyStates(*options.DependentBugStates), ", ")
-			errors = append(errors, fmt.Sprintf("expected "+bugLink+" to depend on a bug targeting a version in %s and in one of the following states: %s, but no dependents were found", bug.Key, endpoint, bug.Key, strings.Join(*options.DependentBugTargetVersions, ", "), expected))
+			errors = append(errors, fmt.Sprintf("expected "+bugLink+" to depend on a bug targeting a version in %s and in one of the following states: %s, but no dependents were found", bug.Key, jiraEndpoint, bug.Key, strings.Join(*options.DependentBugTargetVersions, ", "), expected))
 		case options.DependentBugStates != nil:
 			valid = false
 			expected := strings.Join(prettyStates(*options.DependentBugStates), ", ")
-			errors = append(errors, fmt.Sprintf("expected "+bugLink+" to depend on a bug in one of the following states: %s, but no dependents were found", bug.Key, endpoint, bug.Key, expected))
+			errors = append(errors, fmt.Sprintf("expected "+bugLink+" to depend on a bug in one of the following states: %s, but no dependents were found", bug.Key, jiraEndpoint, bug.Key, expected))
 		case options.DependentBugTargetVersions != nil:
 			valid = false
-			errors = append(errors, fmt.Sprintf("expected "+bugLink+" to depend on a bug targeting a version in %s, but no dependents were found", bug.Key, endpoint, bug.Key, strings.Join(*options.DependentBugTargetVersions, ", ")))
+			errors = append(errors, fmt.Sprintf("expected "+bugLink+" to depend on a bug targeting a version in %s, but no dependents were found", bug.Key, jiraEndpoint, bug.Key, strings.Join(*options.DependentBugTargetVersions, ", ")))
 		default:
 		}
 	} else {
@@ -1198,9 +1309,9 @@ func validateBug(bug *jira.Issue, dependents []*jira.Issue, options JiraBranchOp
 	// make sure all dependents are part of OCPBUGS
 	invalidDependentProject := false
 	for _, dependent := range dependents {
-		if !strings.HasPrefix(dependent.Key, "OCPBUGS-") {
+		if !dependent.isBZ && !strings.HasPrefix(dependent.key, "OCPBUGS-") {
 			valid = false
-			errors = append(validations, fmt.Sprintf("dependent bug %s is not in the required `OCPBUGS` project", dependent.Key))
+			errors = append(validations, fmt.Sprintf("dependent bug %s is not in the required `OCPBUGS` project", dependent.key))
 			invalidDependentProject = true
 		}
 	}
@@ -1373,7 +1484,107 @@ func identifyClones(issue *jira.Issue) []*jira.Issue {
 	return clones
 }
 
-func handleCherrypick(e event, gc githubClient, jc jiraclient.Client, options JiraBranchOptions, log *logrus.Entry) error {
+func bzComponentsToJiraComponents(component string, subcomponents map[string][]string) ([]string, error) {
+	// if no subcomponent, just process component
+	if _, ok := subcomponents[component]; !ok {
+		if jiraComp, ok := bzToJiraComponentMapping[component]; !ok {
+			return nil, fmt.Errorf("No mapping from bz component %s to a jira component found", component)
+		} else {
+			return []string{jiraComp}, nil
+		}
+	}
+	components := []string{}
+	for _, sc := range subcomponents[component] {
+		if jiraComp, ok := bzToJiraComponentMapping[fmt.Sprintf("%s/%s", component, sc)]; !ok {
+			return nil, fmt.Errorf("No mapping from bz component %s with subcomponent %s to a jira component found", component, sc)
+		} else {
+			components = append(components, jiraComp)
+		}
+	}
+	return components, nil
+}
+
+func handleBZCherrypick(e event, gc githubClient, jc jiraclient.Client, bc bugzilla.Client, parentBZID int, parentPR *github.PullRequest, options JiraBranchOptions, log *logrus.Entry) error {
+	comment := e.comment(gc)
+	parentBug, err := getBZBug(bc, parentBZID, log, comment)
+	if err != nil {
+		return err
+	}
+	// check if in allowed groups; as BZ handling it a temporary measure, we can hardcode allowed groups
+	markAsPrivate := false
+	for _, group := range parentBug.Groups {
+		if (group != "redhat") && (group != "qe_staff") && (group != "nec") {
+			log.Infof("Cherrypick PR https://github.com/%s/%s/pull/%d being ignored as it is in a non-allowed group", e.org, e.repo, e.number)
+			return nil
+		}
+		if group == "redhat" {
+			markAsPrivate = true
+		}
+	}
+	// description is stored as the first comment on the bug
+	comments, err := bc.GetComments(parentBZID)
+	if err != nil {
+		log.WithError(err).Errorf("failed to get comments for BZ ID %d", parentBZID)
+		return comment(formatBZError("getting description for bugzilla bug", bc.Endpoint(), parentBZID, err))
+	}
+	if len(comments) == 0 {
+		log.Errorf("comment list empty for bugzilla ID %d", parentBZID)
+		return comment(formatBZError("getting description for bugzilla bug", bc.Endpoint(), parentBZID, err))
+	}
+	if options.TargetVersion == nil {
+		return comment(fmt.Sprintf("Could not make automatic cherrypick of %s for this PR as the target version is not set for this branch in the jira plugin config. Running refresh:\n/jira refresh", parentPR.HTMLURL))
+	}
+	targetVersion := *options.TargetVersion
+	var newIssue *jira.Issue
+	response := ""
+	oldLink := ""
+	newIssue = &jira.Issue{Fields: &jira.IssueFields{
+		Project: jira.Project{
+			Name: "OCPBUGS",
+		},
+		Description: fmt.Sprintf("This bug is a backport clone of "+bzLink+". The following is the description of the original bug:\n---\n%s", parentBug.ID, bc.Endpoint(), parentBug.ID, comments[0].Text),
+		Summary:     parentBug.Summary,
+		Unknowns: tcontainer.MarshalMap{
+			helpers.BlockedByBugzillaBug: fmt.Sprintf("%s/show_bug.cgi?id=%d", bc.Endpoint(), parentBZID),
+			helpers.TargetVersionField:   []*jira.Version{{Name: targetVersion}},
+		},
+	}}
+	if markAsPrivate {
+		newIssue.Fields.Unknowns["security"] = helpers.SecurityLevel{Name: "Red Hat Employee"}
+	}
+	// subcomponents are not returned by default
+	subcomponents, err := bc.GetSubComponentsOnBug(parentBug.ID)
+	if err != nil {
+		return comment(formatBZError("getting subcomponents", bc.Endpoint(), parentBZID, err))
+	}
+	for _, component := range parentBug.Component {
+		newComponents, err := bzComponentsToJiraComponents(component, subcomponents)
+		if err != nil {
+			return comment(formatBZError("translating bugzilla components to jira components", bc.Endpoint(), parentBZID, err))
+		}
+		for _, newComp := range newComponents {
+			newIssue.Fields.Components = append(newIssue.Fields.Components, &jira.Component{Name: newComp})
+		}
+	}
+	labels, err := getBZLabels(bc, parentBug)
+	if err != nil {
+		return comment(formatBZError("getting `Block` bugs", bc.Endpoint(), parentBZID, err))
+	}
+	newIssue.Fields.Labels = labels
+	newIssue, err = jc.CreateIssue(newIssue)
+	if err != nil {
+		log.WithError(err).Error("failed to create jira issue for bz backport")
+		return comment(formatError("creating backport issue", jc.JiraURL(), e.key, err))
+	}
+	oldLink = fmt.Sprintf(bzLink, parentBZID, bc.Endpoint(), parentBZID)
+	// Replace old bugID in title with new cloneID
+	newTitle := strings.ReplaceAll(e.title, fmt.Sprintf("Bug %d", parentBZID), newIssue.Key)
+	cloneLink := fmt.Sprintf(bugLink, newIssue.Key, jc.JiraURL(), newIssue.Key)
+	response = fmt.Sprintf("%s%s has been cloned as %s. Retitling PR to link against new bug.\n/retitle %s", response, oldLink, cloneLink, newTitle)
+	return comment(response)
+}
+
+func handleCherrypick(e event, gc githubClient, jc jiraclient.Client, bc bugzilla.Client, options JiraBranchOptions, log *logrus.Entry) error {
 	comment := e.comment(gc)
 	// get the info for the PR being cherrypicked from
 	pr, err := gc.GetPullRequest(e.org, e.repo, e.cherrypickFromPRNum)
@@ -1382,15 +1593,21 @@ func handleCherrypick(e event, gc githubClient, jc jiraclient.Client, options Ji
 		return comment(fmt.Sprintf("Error creating a cherry-pick bug in Jira: failed to check the state of cherrypicked pull request at https://github.com/%s/%s/pull/%d: %v.\nPlease contact an administrator to resolve this issue, then request a bug refresh with <code>/jira refresh</code>.", e.org, e.repo, e.cherrypickFromPRNum, err))
 	}
 	// Attempt to identify bug from PR title
-	bugKey, bugMissing, err := bugKeyFromTitle(pr.Title)
-	if err != nil {
-		// should be impossible based on the regex
-		log.WithError(err).Debugf("Failed to get bug ID from PR title \"%s\"", pr.Title)
-		return comment(fmt.Sprintf("Error creating a cherry-pick bug in Jira: could not get bug ID from PR title \"%s\": %v", pr.Title, err))
-	} else if bugMissing {
-		log.Debugf("Parent PR %d doesn't have associated bug; not creating cherrypicked bug", pr.Number)
-		// if there is no jira bug, we should simply ignore this PR
-		return nil
+	bugKey, bugMissing := bugKeyFromTitle(pr.Title)
+	if bugMissing {
+		bzID, missing, err := bzIDFromTitle(pr.Title)
+		if err != nil {
+			log.WithError(err).Warn("Unexpected error identifying bugzilla bug from title")
+			return comment(fmt.Sprintf("Error creating a cherry-pick bug in Jira: failed to parse bugzilla ID from title of https://github.com/%s/%s/pull/%d: %v.\nPlease contact an administrator to resolve this issue, then request a bug refresh with <code>/jira refresh</code>.", e.org, e.repo, e.cherrypickFromPRNum, err))
+		}
+		if missing {
+			log.Debugf("Parent PR %d doesn't have associated bug; not creating cherrypicked bug", pr.Number)
+			// if there is no jira bug, we should simply ignore this PR
+			return nil
+		} else {
+			log.Infof("Handling BZ Cherrypick for bug %d", bzID)
+			return handleBZCherrypick(e, gc, jc, bc, bzID, pr, options, log)
+		}
 	}
 	// Since getBug generates a comment itself, we have to add a prefix explaining that this was a cherrypick attempt to the comment
 	commentWithPrefix := func(body string) error {
@@ -1413,18 +1630,18 @@ func handleCherrypick(e event, gc githubClient, jc jiraclient.Client, options Ji
 	if options.TargetVersion == nil {
 		return comment(fmt.Sprintf("Could not make automatic cherrypick of %s for this PR as the target version is not set for this branch in the jira plugin config. Running refresh:\n/jira refresh", oldLink))
 	}
-	targetRelease := *options.TargetVersion
+	targetVersion := *options.TargetVersion
 	for _, baseClone := range clones {
 		// get full issue struct
 		clone, err := jc.GetIssue(baseClone.Key)
 		if err != nil {
 			return fmt.Errorf("failed to get %s, which is a clone of %s: %w", baseClone.Key, bug.Key, err)
 		}
-		targetVersion, err := helpers.GetIssueTargetVersion(clone)
+		cloneVersion, err := helpers.GetIssueTargetVersion(clone)
 		if err != nil {
 			return comment(formatError(fmt.Sprintf("getting the target version for clone %s", clone.Key), jc.JiraURL(), bug.Key, err))
 		}
-		if len(targetVersion) == 1 && targetVersion[0].Name == targetRelease {
+		if len(cloneVersion) == 1 && cloneVersion[0].Name == targetVersion {
 			newTitle := strings.Replace(e.title, bugKey, clone.Key, 1)
 			return comment(fmt.Sprintf("Detected clone of %s with correct target version. Retitling PR to link to clone:\n/retitle %s", oldLink, newTitle))
 		}
@@ -1440,7 +1657,7 @@ func handleCherrypick(e event, gc githubClient, jc jiraclient.Client, options Ji
 		Key: clone.Key,
 		Fields: &jira.IssueFields{
 			Unknowns: tcontainer.MarshalMap{
-				helpers.TargetVersionField: []*jira.Version{{Name: targetRelease}},
+				helpers.TargetVersionField: []*jira.Version{{Name: targetVersion}},
 			},
 		},
 	}
@@ -1469,12 +1686,25 @@ func handleCherrypick(e event, gc githubClient, jc jiraclient.Client, options Ji
 	return comment(response)
 }
 
-func bugKeyFromTitle(title string) (string, bool, error) {
+func bugKeyFromTitle(title string) (string, bool) {
 	mat := titleMatch.FindStringSubmatch(title)
 	if mat == nil {
-		return "", true, nil
+		return "", true
 	}
-	return strings.TrimSuffix(mat[0], ":"), false, nil
+	return strings.TrimSuffix(mat[0], ":"), false
+}
+
+func bzIDFromTitle(title string) (int, bool, error) {
+	mat := bzTitleMatch.FindStringSubmatch(title)
+	if mat == nil {
+		return 0, true, nil
+	}
+	bugID, err := strconv.Atoi(mat[1])
+	if err != nil {
+		// should be impossible based on the regex
+		return 0, false, fmt.Errorf("Failed to parse bug ID (%s) as int", mat[1])
+	}
+	return bugID, false, nil
 }
 
 func getBug(jc jiraclient.Client, bugKey string, log *logrus.Entry, comment func(string) error) (*jira.Issue, error) {
@@ -1492,6 +1722,21 @@ Once a valid bug is referenced in the title of this pull request, request a bug 
 	return bug, nil
 }
 
+func getBZBug(bc bugzilla.Client, bugId int, log *logrus.Entry, comment func(string) error) (*bugzilla.Bug, error) {
+	bug, err := bc.GetBug(bugId)
+	if err != nil && !bugzilla.IsNotFound(err) {
+		log.WithError(err).Warn("Unexpected error searching for Bugzilla bug.")
+		return nil, comment(fmt.Sprintf("Error encountered trying to get bugzilla bug ID %d: %v", bugId, err))
+	}
+	if bugzilla.IsNotFound(err) || bug == nil {
+		log.Debug("No bug found.")
+		return nil, comment(fmt.Sprintf(`No Bugzilla bug with ID %d exists in the tracker at %s.
+Once a valid bug is referenced in the title of this pull request, request a bug refresh with <code>/bugzilla refresh</code>.`,
+			bugId, bc.Endpoint()))
+	}
+	return bug, nil
+}
+
 func formatError(action, endpoint, bugKey string, err error) string {
 	knownErrors := map[string]string{
 		// TODO: Most of this code is copied from the bugzilla client. If Jira rate limits us the same way, this could come in handy. We will keep this for now in case it is needed
@@ -1501,7 +1746,6 @@ func formatError(action, endpoint, bugKey string, err error) string {
 	for key, value := range knownErrors {
 		if strings.Contains(err.Error(), key) {
 			applicable = append(applicable, value)
-
 		}
 	}
 	digest := "No known errors were detected, please see the full error message for details."
@@ -1523,6 +1767,37 @@ func formatError(action, endpoint, bugKey string, err error) string {
 
 Please contact an administrator to resolve this issue, then request a bug refresh with <code>/jira refresh</code>.`,
 		action, bugKey, endpoint, digest, err)
+}
+
+func formatBZError(action, endpoint string, bugID int, err error) string {
+	knownErrors := map[string]string{
+		"There was an error reported for a GitHub REST call": "The Bugzilla server failed to load data from GitHub when creating the bug. This is usually caused by rate-limiting, please try again later.",
+	}
+	var applicable []string
+	for key, value := range knownErrors {
+		if strings.Contains(err.Error(), key) {
+			applicable = append(applicable, value)
+		}
+	}
+	digest := "No known errors were detected, please see the full error message for details."
+	if len(applicable) > 0 {
+		digest = "We were able to detect the following conditions from the error:\n\n"
+		for _, item := range applicable {
+			digest = fmt.Sprintf("%s- %s\n", digest, item)
+		}
+	}
+	return fmt.Sprintf(`An error was encountered %s for bug %d on the Bugzilla server at %s. %s
+
+<details><summary>Full error message.</summary>
+
+<code>
+%v
+</code>
+
+</details>
+
+Please contact an administrator to resolve this issue, then request a bug refresh with <code>/jira refresh</code>.`,
+		action, bugID, endpoint, digest, err)
 }
 
 var PrivateVisibility = jira.CommentVisibility{Type: "group", Value: "Red Hat Employee"}
@@ -1606,4 +1881,153 @@ func isBugAllowed(issue *jira.Issue, allowedSecurityLevel []string) (bool, error
 		}
 	}
 	return found, nil
+}
+
+func getBZLabels(bc bugzilla.Client, bug *bugzilla.Bug) ([]string, error) {
+	labels := bug.Keywords
+	if len(bug.Whiteboard) != 0 {
+		labels = append(labels, bug.Whiteboard)
+	}
+	for _, id := range bug.Blocks {
+		blockerBug, err := bc.GetBug(id)
+		if err != nil {
+			return labels, err
+		}
+		if len(blockerBug.Alias) != 0 && strings.HasPrefix(blockerBug.Alias[0], "CVE") {
+			labels = append(labels, blockerBug.Alias[0])
+			labels = append(labels, fmt.Sprintf("flaw:bz#%d", id))
+			break
+		}
+	}
+	return labels, nil
+}
+
+var bzToJiraComponentMapping = map[string]string{
+	"apiserver-auth": "apiserver-auth",
+	"Bare Metal Hardware Provisioning/OS Image Provider":          "Bare Metal Hardware Provisioning / OS Image Provider",
+	"Bare Metal Hardware Provisioning/baremetal-operator":         "Bare Metal Hardware Provisioning / baremetal-operator",
+	"Bare Metal Hardware Provisioning/cluster-api-provider":       "Bare Metal Hardware Provisioning / cluster-api-provider",
+	"Bare Metal Hardware Provisioning/cluster-baremetal-operator": "Bare Metal Hardware Provisioning / cluster-baremetal-operator",
+	"Bare Metal Hardware Provisioning/ironic":                     "Bare Metal Hardware Provisioning / ironic",
+	"Build":                                           "Build",
+	"Cloud Compute/Cloud Controller Manager":          "Cloud Compute / Cloud Controller Manager",
+	"Cloud Compute/Cluster Autoscaler":                "Cloud Compute / Cluster Autoscaler",
+	"Cloud Compute/KubeVirt Provider":                 "Cloud Compute / KubeVirt Provider",
+	"Cloud Compute/MachineHealthCheck":                "Cloud Compute / MachineHealthCheck",
+	"Cloud Compute/BareMetal Provider":                "Cloud Compute / BareMetal Provider",
+	"Cloud Compute/OpenStack Provider":                "Cloud Compute / OpenStack Provider",
+	"Cloud Compute/oVirt Providers":                   "Cloud Compute / oVirt Provider",
+	"Cloud Compute/Other Providers":                   "Cloud Compute / Other Provider",
+	"Cloud Credential Operator":                       "Cloud Credential Operator",
+	"Cloud Native Events/Cloud Event Proxy":           "Cloud Native Events / Cloud Event Proxy",
+	"Cloud Native Events/Cloud Native Events":         "Cloud Native Events / Cloud Native Events",
+	"Cloud Native Events/Hardware Event Proxy":        "Cloud Native Events / Hardware Event Proxy",
+	"Cluster Loader":                                  "Cluster Loader",
+	"Cluster Version Operator":                        "Cluster Version Operator",
+	"CNF Platform Validation":                         "CNF Platform Validation",
+	"Compliance Operator":                             "Compliance Operator",
+	"config-operator":                                 "config-operator",
+	"Console Kubevirt Plugin":                         "Console Kubevirt Plugin",
+	"Console Metal3 Plugin":                           "Console Metal3 Plugin",
+	"Console Storage Plugin":                          "Console Metal3 Plugin",
+	"Containers":                                      "Containers",
+	"crc":                                             "crc",
+	"Dev Console":                                     "Dev Console",
+	"Documentation":                                   "Documentation",
+	"Documentation-l10n":                              "Documentation-l10n",
+	"Etcd":                                            "Etcd",
+	"File Integrity Operator":                         "File Integrity Operator",
+	"Hive":                                            "Hive",
+	"HyperShift":                                      "HyperShift",
+	"ibm-roks-toolkit":                                "ibm-roks-toolkit",
+	"Image Registry":                                  "Image Registry",
+	"Insights Operator":                               "Insights Operator",
+	"Installer/OpenShift on KubeVirt":                 "Installer / OpenShift on KubeVirt",
+	"Installer/Single Node OpenShift":                 "Installer / Single Node OpenShift",
+	"Installer/OpenShift on Bare Metal IPI":           "Installer / OpenShift on Bare Metal IPI",
+	"Installer/OpenShift on OpenStack":                "Installer / OpenShift on OpenStack",
+	"Installer/OpenShift on RHV":                      "Installer / OpenShift on RHV",
+	"Installer/openshift-ansible":                     "Installer / openshift-ansible",
+	"Installer/openshift-installer":                   "Installer / openshift-installer",
+	"ISV Operators":                                   "ISV Operators",
+	"Jenkins":                                         "Jenkins",
+	"kube-apiserver":                                  "kube-apiserver",
+	"kube-controller-manager":                         "kube-controller-manager",
+	"kube-scheduler":                                  "kube-scheduler",
+	"kube-storage-version-migrator":                   "kube-storage-version-migrator",
+	"Logging":                                         "Logging",
+	"Machine Config Operator/Machine Config Operator": "Machine Config Operator",
+	"Machine Config Operator/platform-baremetal":      "Machine Config Operator / platform-baremetal",
+	"Machine Config Operator/platform-none":           "Machine Config Operator / platform-none",
+	"Machine Config Operator/platform-openstack":      "Machine Config Operator / platform-openstack",
+	"Machine Config Operator/platform-ovirt-rhv":      "Machine Config Operator / platform-ovirt-rhv",
+	"Machine Config Operator/platform-vsphere":        "Machine Config Operator / platform-vsphere",
+	"Management Console":                              "Management Console",
+	"Metering Operator":                               "Metering Operator",
+	"Monitoring":                                      "Monitoring",
+	"Multi-Arch":                                      "Multi-Arch",
+	"Networking/Metal LB":                             "Networking / Metal LB",
+	"Networking/runtime-cfg":                          "Networking / runtime-cfg",
+	"Networking/SR-IOV":                               "Networking / SR-IOV",
+	"Networking/kubernetes-nmstate":                   "Networking / kubernetes-nmstate",
+	"Networking/kubernetes-nmstate-operator":          "Networking / kubernetes-nmstate-operator",
+	"Networking/kuryr":                                "Networking / kuryr",
+	"Networking/mDNS":                                 "Networking / mDNS",
+	"Networking/multus":                               "Networking / multus",
+	"Networking/openshift-sdn":                        "Networking / openshift-sdn",
+	"Networking/ovn-kubernetes":                       "Networking / ovn-kubernetes",
+	"Networking/ptp":                                  "Networking / ptp",
+	"Node/Autoscaler (HPA, VPA)":                      "Node / Autoscaler (HPA, VPA)",
+	"Node/CPU manager":                                "Node / CPU manager",
+	"Node/CRI-O":                                      "Node / CRI-O",
+	"Node/Kubelet":                                    "Node / Kubelet",
+	"Node/Memory manager":                             "Node / Memory manager",
+	"Node/Numa aware Scheduling":                      "Node / Numa aware Scheduling",
+	"Node/Pod resource API":                           "Node / Pod resource API",
+	"Node/Topology manager":                           "Node / Topology manager",
+	"Node Feature Discovery Operator":                 "Node Feature Discovery Operator",
+	"Node Maintenance Operator":                       "Node Maintenance Operator",
+	"Node Tuning Operator":                            "Node Tuning Operator",
+	"oauth-apiserver":                                 "oauth-apiserver",
+	"oauth-proxy":                                     "oauth-proxy",
+	"oc":                                              "oc",
+	"oc-compliance":                                   "oc-compliance",
+	"OLM/OLM":                                         "OLM",
+	"OLM/OperatorHub":                                 "OLM / OperatorHub",
+	"OpenShift Update Service/operand":                "OpenShift Update Service / operand",
+	"OpenShift Update Service/operator":               "OpenShift Update Service / operator",
+	"openshift-apiserver":                             "openshift-apiserver",
+	"openshift-controller-manager/apps":               "openshift-controller-manager / apps",
+	"openshift-controller-manager/build":              "openshift-controller-manager / build",
+	"openshift-controller-manager/controller-manager": "openshift-controller-manager / controller-manager",
+	"Operator SDK":                                    "Operator SDK",
+	"Performance Addon Operator":                      "Performance Addon Operator",
+	"Poison Pill Operator":                            "Poison Pill Operator",
+	"Reference Architecture":                          "Reference Architecture",
+	"Registry Console":                                "Registry Console",
+	"Release":                                         "Release",
+	"RHCOS":                                           "RHCOS",
+	"sandboxed-containers":                            "sandboxed-containers",
+	"Security":                                        "Security",
+	"Security Profiles Operator":                      "Security Profiles Operator",
+	"Service Catalog":                                 "Service Catalog",
+	"service-ca":                                      "service-ca",
+	"Storage/Shared Resource CSI Driver":              "Storage / Shared Resource CSI Driver",
+	"Storage/Kubernetes":                              "Storage / Kubernetes",
+	"Storage/Kubernetes External Components":          "Storage / Kubernetes External Components",
+	"Storage/Local Storage Operator":                  "Storage / Local Storage Operator",
+	"Storage/OpenStack CSI Drivers":                   "Storage / OpenStack CSI Drivers",
+	"Storage/Operators":                               "Storage / Operators",
+	"Storage/Storage":                                 "Storage",
+	"Storage/oVirt CSI Driver":                        "Storage / oVirt CSI Driver",
+	"Telco Edge/HW Event Operator":                    "Telco Edge / HW Event Operator",
+	"Telco Edge/RAN":                                  "Telco Edge / RAN",
+	"Telco Edge/TALO":                                 "Telco Edge / TALO",
+	"Telco Edge/ZTP":                                  "Telco Edge / ZTP",
+	"Telemeter":                                       "Telemeter",
+	"Templates":                                       "Templates",
+	"Test Framework":                                  "Test Framework",
+	"Test Infrastructure":                             "Test Infrastructure",
+	"Unknown":                                         "Unknown",
+	"Windows Containers":                              "Windows Containers",
 }

@@ -156,6 +156,7 @@ type CommitClient interface {
 	GetRef(org, repo, ref string) (string, error)
 	DeleteRef(org, repo, ref string) error
 	ListFileCommits(org, repo, path string) ([]RepositoryCommit, error)
+	CreateCheckRun(org, repo string, checkRun CheckRun) error
 }
 
 // RepositoryClient interface for repository related API actions
@@ -268,6 +269,9 @@ type Client interface {
 	UserClient
 	HookClient
 	ListAppInstallations() ([]AppInstallation, error)
+	IsAppInstalled(org, repo string) (bool, error)
+	UsesAppAuth() bool
+	ListAppInstallationsForOrg(org string) ([]AppInstallation, error)
 	GetApp() (*App, error)
 	GetAppWithContext(ctx context.Context) (*App, error)
 	GetFailedActionRunsByHeadBranch(org, repo, branchName, headSHA string) ([]WorkflowRun, error)
@@ -673,9 +677,10 @@ type UserGenerator func() (string, error)
 // added logging fields.
 // 'getToken' is a generator for the GitHub access token to use.
 // 'bases' is a variadic slice of endpoints to use in order of preference.
-//   An endpoint is used when all preceding endpoints have returned a conn err.
-//   This should be used when using the ghproxy GitHub proxy cache to allow
-//   this client to bypass the cache if it is temporarily unavailable.
+//
+//	An endpoint is used when all preceding endpoints have returned a conn err.
+//	This should be used when using the ghproxy GitHub proxy cache to allow
+//	this client to bypass the cache if it is temporarily unavailable.
 func NewClientWithFields(fields logrus.Fields, getToken func() []byte, censor func([]byte) []byte, graphqlEndpoint string, bases ...string) (Client, error) {
 	_, _, client, err := NewClientFromOptions(fields, ClientOptions{
 		Censor:          censor,
@@ -844,9 +849,10 @@ func NewClient(getToken func() []byte, censor func([]byte) []byte, graphqlEndpoi
 // use up API tokens. Additional fields are added to the logger.
 // 'getToken' is a generator the GitHub access token to use.
 // 'bases' is a variadic slice of endpoints to use in order of preference.
-//   An endpoint is used when all preceding endpoints have returned a conn err.
-//   This should be used when using the ghproxy GitHub proxy cache to allow
-//   this client to bypass the cache if it is temporarily unavailable.
+//
+//	An endpoint is used when all preceding endpoints have returned a conn err.
+//	This should be used when using the ghproxy GitHub proxy cache to allow
+//	this client to bypass the cache if it is temporarily unavailable.
 func NewDryRunClientWithFields(fields logrus.Fields, getToken func() []byte, censor func([]byte) []byte, graphqlEndpoint string, bases ...string) (Client, error) {
 	_, _, client, err := NewClientFromOptions(fields, ClientOptions{
 		Censor:          censor,
@@ -877,9 +883,10 @@ func NewAppsAuthDryRunClientWithFields(fields logrus.Fields, censor func([]byte)
 // use up API tokens.
 // 'getToken' is a generator the GitHub access token to use.
 // 'bases' is a variadic slice of endpoints to use in order of preference.
-//   An endpoint is used when all preceding endpoints have returned a conn err.
-//   This should be used when using the ghproxy GitHub proxy cache to allow
-//   this client to bypass the cache if it is temporarily unavailable.
+//
+//	An endpoint is used when all preceding endpoints have returned a conn err.
+//	This should be used when using the ghproxy GitHub proxy cache to allow
+//	this client to bypass the cache if it is temporarily unavailable.
 func NewDryRunClient(getToken func() []byte, censor func([]byte) []byte, graphqlEndpoint string, bases ...string) (Client, error) {
 	return NewDryRunClientWithFields(logrus.Fields{}, getToken, censor, graphqlEndpoint, bases...)
 }
@@ -3099,16 +3106,17 @@ func (c *client) CreateReview(org, repo string, number int, r DraftReview) error
 }
 
 // prepareReviewersBody separates reviewers from team_reviewers and prepares a map
-// {
-//   "reviewers": [
-//     "octocat",
-//     "hubot",
-//     "other_user"
-//   ],
-//   "team_reviewers": [
-//     "justice-league"
-//   ]
-// }
+//
+//	{
+//	  "reviewers": [
+//	    "octocat",
+//	    "hubot",
+//	    "other_user"
+//	  ],
+//	  "team_reviewers": [
+//	    "justice-league"
+//	  ]
+//	}
 //
 // https://developer.github.com/v3/pulls/review_requests/#create-a-review-request
 func prepareReviewersBody(logins []string, org string) (map[string][]string, error) {
@@ -4930,23 +4938,52 @@ func (c *client) GetTeamBySlug(slug string, org string) (*Team, error) {
 
 // ListCheckRuns lists all checkruns for the given ref
 //
-// See https://docs.github.com/en/free-pro-team@latest/rest/reference/checks#list-check-runs-for-a-git-reference
+// See https://docs.github.com/en/rest/checks/runs#list-check-runs-for-a-git-reference
 func (c *client) ListCheckRuns(org, repo, ref string) (*CheckRunList, error) {
 	durationLogger := c.log("ListCheckRuns", org, repo, ref)
 	defer durationLogger()
 
 	var checkRunList CheckRunList
-	_, err := c.request(&request{
-		accept:    "application/vnd.github.antiope-preview+json",
-		method:    http.MethodGet,
-		path:      fmt.Sprintf("/repos/%s/%s/commits/%s/check-runs", org, repo, ref),
-		org:       org,
-		exitCodes: []int{200},
-	}, &checkRunList)
-	if err != nil {
+	if err := c.readPaginatedResults(
+		fmt.Sprintf("/repos/%s/%s/commits/%s/check-runs", org, repo, ref),
+		"",
+		org,
+		func() interface{} {
+			return &CheckRunList{}
+		},
+		func(obj interface{}) {
+			cr := *(obj.(*CheckRunList))
+			cr.CheckRuns = append(checkRunList.CheckRuns, cr.CheckRuns...)
+			checkRunList = cr
+		},
+	); err != nil {
 		return nil, err
 	}
 	return &checkRunList, nil
+}
+
+// CreateCheckRun Creates a new check run for a specific commit in a repository.
+//
+// See https://docs.github.com/en/rest/checks/runs#create-a-check-run
+func (c *client) CreateCheckRun(org, repo string, checkRun CheckRun) error {
+	durationLogger := c.log("CreateCheckRun", org, repo, checkRun)
+	defer durationLogger()
+	_, err := c.request(&request{
+		method:      http.MethodPost,
+		path:        fmt.Sprintf("/repos/%s/%s/check-runs", org, repo),
+		org:         org,
+		requestBody: &checkRun,
+		exitCodes:   []int{201},
+	}, nil)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// Simple function to check if GitHub App Authentication is being used
+func (c *client) UsesAppAuth() bool {
+	return c.delegate.usesAppsAuth
 }
 
 // ListAppInstallations lists the installations for the current app. Will not work with
@@ -4967,6 +5004,59 @@ func (c *client) ListAppInstallations() ([]AppInstallation, error) {
 		},
 		func(obj interface{}) {
 			ais = append(ais, *(obj.(*[]AppInstallation))...)
+		},
+	); err != nil {
+		return nil, err
+	}
+	return ais, nil
+}
+
+// IsAppInstalled returns true if there is an app installation for the provided org and repo
+// Will not work with a Personal Access Token.
+//
+// See https://docs.github.com/en/rest/apps/apps#get-a-repository-installation-for-the-authenticated-app
+func (c *client) IsAppInstalled(org, repo string) (bool, error) {
+	durationLogger := c.log("IsAppInstalled", org, repo)
+	defer durationLogger()
+
+	if c.dry {
+		return false, fmt.Errorf("not getting AppInstallation in dry-run mode")
+	}
+	if !c.usesAppsAuth {
+		return false, fmt.Errorf("IsAppInstalled was called when not using appsAuth")
+	}
+
+	code, err := c.request(&request{
+		method:    http.MethodGet,
+		path:      fmt.Sprintf("/repos/%s/%s/installation", org, repo),
+		org:       org,
+		exitCodes: []int{200, 404},
+	}, nil)
+	if err != nil {
+		return false, err
+	}
+
+	return code == 200, nil
+}
+
+// ListAppInstallationsForOrg lists the installations for an organisation.
+// The requestor must be  an organization owner with admin:read scope
+//
+// See https://docs.github.com/en/rest/orgs/orgs#list-app-installations-for-an-organization
+func (c *client) ListAppInstallationsForOrg(org string) ([]AppInstallation, error) {
+	durationLogger := c.log("AppInstallationForOrg")
+	defer durationLogger()
+
+	var ais []AppInstallation
+	if err := c.readPaginatedResults(
+		fmt.Sprintf("/orgs/%s/installations", org),
+		acceptNone,
+		org,
+		func() interface{} {
+			return &AppInstallationList{}
+		},
+		func(obj interface{}) {
+			ais = append(ais, obj.(*AppInstallationList).Installations...)
 		},
 	); err != nil {
 		return nil, err
