@@ -1483,7 +1483,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			cherryPick:          true,
 			cherryPickFromPRNum: 1,
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
-			expectedComment: `org/repo#2:@user: [Bugzilla bug 1](www.bugzilla/show_bug.cgi?id=1) has been cloned as [Jira Issue -1](https://my-jira.com/browse/-1). Retitling PR to link against new bug.
+			expectedComment: `org/repo#2:@user: [Bugzilla Bug 1](www.bugzilla/show_bug.cgi?id=1) has been cloned as [Jira Issue -1](https://my-jira.com/browse/-1). Retitling PR to link against new bug.
 /retitle [v1] -1: fixed it!
 
 <details>
@@ -1499,7 +1499,7 @@ Instructions for interacting with me using PR comments are available [here](http
 </details>`,
 			expectedIssue: &jira.Issue{ID: "1", Key: "-1", Fields: &jira.IssueFields{
 				Summary:     "This is a title",
-				Description: "This bug is a backport clone of [Bugzilla bug 1](www.bugzilla/show_bug.cgi?id=1). The following is the description of the original bug:\n---\nThis is a description",
+				Description: "This bug is a backport clone of [Bugzilla Bug 1](www.bugzilla/show_bug.cgi?id=1). The following is the description of the original bug:\n---\nThis is a description",
 				Project: jira.Project{
 					Key: "OCPBUGS",
 				},
@@ -1547,7 +1547,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			cherryPick:          true,
 			cherryPickFromPRNum: 1,
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
-			expectedComment: `org/repo#2:@user: [Bugzilla bug 1](www.bugzilla/show_bug.cgi?id=1) has been cloned as [Jira Issue -1](https://my-jira.com/browse/-1). Retitling PR to link against new bug.
+			expectedComment: `org/repo#2:@user: [Bugzilla Bug 1](www.bugzilla/show_bug.cgi?id=1) has been cloned as [Jira Issue -1](https://my-jira.com/browse/-1). Retitling PR to link against new bug.
 /retitle [v1] -1: fixed it!
 
 <details>
@@ -1563,7 +1563,7 @@ Instructions for interacting with me using PR comments are available [here](http
 </details>`,
 			expectedIssue: &jira.Issue{ID: "1", Key: "-1", Fields: &jira.IssueFields{
 				Summary:     "This is a title",
-				Description: "This bug is a backport clone of [Bugzilla bug 1](www.bugzilla/show_bug.cgi?id=1). The following is the description of the original bug:\n---\nThis is a description",
+				Description: "This bug is a backport clone of [Bugzilla Bug 1](www.bugzilla/show_bug.cgi?id=1). The following is the description of the original bug:\n---\nThis is a description",
 				Project: jira.Project{
 					Key: "OCPBUGS",
 				},
@@ -1609,8 +1609,8 @@ Instructions for interacting with me using PR comments are available [here](http
 
 * bug is open, matching expected state (open)
 * bug target version (v1) matches configured target version for branch (v1)
-* dependent bug [Bugzilla bug %!d(string=1)](www.bugzilla/show_bug.cgi?id=%!d(string=1)) is in the state VERIFIED, which is one of the valid states (VERIFIED)
-* dependent [Bugzilla bug %!d(string=1)](www.bugzilla/show_bug.cgi?id=%!d(string=1)) targets the "v2" version, which is one of the valid target versions: v2
+* dependent bug [Bugzilla Bug 1](www.bugzilla/show_bug.cgi?id=1) is in the state VERIFIED, which is one of the valid states (VERIFIED)
+* dependent [Bugzilla Bug 1](www.bugzilla/show_bug.cgi?id=1) targets the "v2" version, which is one of the valid target versions: v2
 * bug has dependents</details>
 
 <details>
