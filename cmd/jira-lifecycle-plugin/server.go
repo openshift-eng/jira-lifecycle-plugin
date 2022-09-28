@@ -462,7 +462,7 @@ To reference a bug, add 'OCPBUGS-XXX:' to the title of this pull request and req
 			}
 			if bc != nil {
 				bzDependsOn, _ := helpers.GetIssueBlockedByBugzillaBug(bug)
-				if bzDependsOn != nil {
+				if bzDependsOn != nil && len(*bzDependsOn) > 0 {
 					bzIDInt, err := bzURLToID(*bzDependsOn)
 					if err != nil {
 						return comment(formatError(fmt.Sprintf("converting bugzilla URL %s to an ID", *bzDependsOn), bc.Endpoint(), e.key, err))
