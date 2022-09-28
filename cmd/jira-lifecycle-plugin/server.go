@@ -31,7 +31,8 @@ import (
 const (
 	PluginName            = "jira-lifecycle"
 	bugLink               = `[Jira Issue %s](%s/browse/%s)`
-	bzLink                = `[Bugzilla bug %d](%s/show_bug.cgi?id=%d)`
+	bzLink                = `[Bugzilla Bug %d](%s/show_bug.cgi?id=%d)`
+	bzLinkStr             = `[Bugzilla Bug %s](%s/show_bug.cgi?id=%s)`
 	criticalSeverity      = "Critical"
 	importantSeverity     = "Important"
 	moderateSeverity      = "Moderate"
@@ -1241,7 +1242,7 @@ func validateBug(bug *jira.Issue, dependents []dependent, options JiraBranchOpti
 			link := ""
 			endpoint := ""
 			if bug.isBZ {
-				link = bzLink
+				link = bzLinkStr
 				endpoint = bzEndpoint
 			} else {
 				link = bugLink
@@ -1266,7 +1267,7 @@ func validateBug(bug *jira.Issue, dependents []dependent, options JiraBranchOpti
 			link := ""
 			endpoint := ""
 			if bug.isBZ {
-				link = bzLink
+				link = bzLinkStr
 				endpoint = bzEndpoint
 			} else {
 				link = bugLink
