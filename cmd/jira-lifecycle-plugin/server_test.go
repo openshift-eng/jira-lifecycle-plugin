@@ -1163,7 +1163,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
 </details>`,
 		}, {
-			name: "failure to update bug for results in error",
+			name: "failure to update bug retitles the PR and prints a warning in the comment",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "CLOSED"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
@@ -1183,8 +1183,10 @@ Instructions for interacting with me using PR comments are available [here](http
 			cherryPick:          true,
 			cherryPickFromPRNum: 1,
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
-			expectedComment: `org/repo#1:@user: An error was encountered updating cherry-pick bug in Jira: Created cherrypick [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124), but encountered error updating target version for bug OCPBUGS-124 on the Jira server at https://my-jira.com. No known errors were detected, please see the full error message for details.
+			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). Retitling PR to link against new bug.
+/retitle [v1] OCPBUGS-124: fixed it!
 
+WARNING: Failed to update the target version for the clone. Please update the target version manually. Full error below:
 <details><summary>Full error message.</summary>
 
 <code>
@@ -1192,8 +1194,6 @@ injected error updating bug OCPBUGS-124
 </code>
 
 </details>
-
-Please contact an administrator to resolve this issue, then request a bug refresh with <code>/jira refresh</code>.
 
 <details>
 
