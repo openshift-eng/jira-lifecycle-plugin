@@ -1657,20 +1657,6 @@ func handleCherrypick(e event, gc githubClient, jc jiraclient.Client, bc bugzill
 		return comment(formatError("cloning bug for cherrypick", jc.JiraURL(), bug.Key, err))
 	}
 	cloneLink := fmt.Sprintf(bugLink, clone.Key, jc.JiraURL(), clone.Key)
-	// Update the version of the bug to the target release
-	update := jira.Issue{
-		Key: clone.Key,
-		Fields: &jira.IssueFields{
-			Unknowns: tcontainer.MarshalMap{
-				helpers.TargetVersionField: []*jira.Version{{Name: targetVersion}},
-			},
-		},
-	}
-	_, err = jc.UpdateIssue(&update)
-	if err != nil {
-		log.WithError(err).Debugf("Unable to update target version and dependencies for bug %s", clone.Key)
-		return comment(formatError(fmt.Sprintf("updating cherry-pick bug in Jira: Created cherrypick %s, but encountered error updating target version", cloneLink), jc.JiraURL(), clone.Key, err))
-	}
 	// add blocking issue link between parent and clone
 	blockLink := jira.IssueLink{
 		OutwardIssue: &jira.Issue{ID: clone.ID},
@@ -1688,6 +1674,28 @@ func handleCherrypick(e event, gc githubClient, jc jiraclient.Client, bc bugzill
 	// Replace old bugID in title with new cloneID
 	newTitle := strings.ReplaceAll(e.title, bugKey, clone.Key)
 	response := fmt.Sprintf("%s has been cloned as %s. Retitling PR to link against new bug.\n/retitle %s", oldLink, cloneLink, newTitle)
+	// Update the version of the bug to the target release
+	update := jira.Issue{
+		Key: clone.Key,
+		Fields: &jira.IssueFields{
+			Unknowns: tcontainer.MarshalMap{
+				helpers.TargetVersionField: []*jira.Version{{Name: targetVersion}},
+			},
+		},
+	}
+	_, err = jc.UpdateIssue(&update)
+	if err != nil {
+		response += fmt.Sprintf(`
+
+WARNING: Failed to update the target version for the clone. Please update the target version manually. Full error below:
+<details><summary>Full error message.</summary>
+
+<code>
+%v
+</code>
+
+</details>`, err)
+	}
 	return comment(response)
 }
 
