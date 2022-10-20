@@ -631,8 +631,18 @@ Instructions for interacting with me using PR comments are available [here](http
 			}, {
 				ID: 2,
 				Object: &jira.RemoteLinkObject{
-					URL:   "https://github.com/org/repo/pull/22",
+					URL:   "https://github.com/org/repo/pull/22/commits/1234567890",
 					Title: "org/repo#22: OCPBUGS-123: fixed it!",
+					Icon: &jira.RemoteLinkIcon{
+						Url16x16: "https://github.com/favicon.ico",
+						Title:    "GitHub",
+					},
+				},
+			}, {
+				ID: 2,
+				Object: &jira.RemoteLinkObject{
+					URL:   "https://github.com/org/repo/pull/23/files",
+					Title: "org/repo#23: OCPBUGS-123: fixed it!",
 					Icon: &jira.RemoteLinkIcon{
 						Url16x16: "https://github.com/favicon.ico",
 						Title:    "GitHub",
@@ -640,11 +650,12 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			}},
-			prs:     []github.PullRequest{{Number: base.number, Merged: true}, {Number: 22, Merged: true}},
+			prs:     []github.PullRequest{{Number: base.number, Merged: true}, {Number: 22, Merged: true}, {Number: 23, Merged: true}},
 			options: JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
 			expectedComment: `org/repo#1:@user: All pull requests linked via external trackers have merged:
  * [org/repo#1](https://github.com/org/repo/pull/1)
  * [org/repo#22](https://github.com/org/repo/pull/22)
+ * [org/repo#23](https://github.com/org/repo/pull/23)
 
 [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been moved to the MODIFIED state.
 
