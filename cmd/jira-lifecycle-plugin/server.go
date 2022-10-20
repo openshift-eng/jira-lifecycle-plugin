@@ -1373,7 +1373,7 @@ func handleMerge(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 			// this is not a github link
 			continue
 		}
-		if len(parts) != 4 && !(len(parts) == 5 && (parts[4] == "" || parts[4] == "files")) && !(len(parts) == 6 && (parts[4] == "files" && parts[5] == "")) {
+		if len(parts) != 4 && !(len(parts) == 5 && (parts[4] == "" || parts[4] == "files")) && !(len(parts) == 6 && ((parts[4] == "files" && parts[5] == "") || parts[4] == "commits")) {
 			log.WithError(err).Warn("Unexpected error splitting github URL for Jira external link.")
 			return comment(formatError(fmt.Sprintf("invalid pull identifier with %d parts: %q", len(parts), identifier), jc.JiraURL(), e.key, err))
 		}
