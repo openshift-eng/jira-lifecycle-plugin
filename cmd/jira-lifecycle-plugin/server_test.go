@@ -175,6 +175,7 @@ func TestHandle(t *testing.T) {
 		merged                     bool
 		closed                     bool
 		opened                     bool
+		refresh                    bool
 		cherryPick                 bool
 		cherryPickFromPRNum        int
 		body                       string
@@ -191,7 +192,6 @@ func TestHandle(t *testing.T) {
 		expectedIssue              *jira.Issue
 		expectedNewRemoteLinks     []jira.RemoteLink
 		expectedRemovedRemoteLinks []jira.RemoteLink
-		isComment                  bool
 		existingIssueLinks         []*jira.IssueLink
 		// most of the tests can be handled by a single event struct with small modifications; for tests with more extensive differences, allow override
 		overrideEvent          *event
@@ -201,6 +201,43 @@ func TestHandle(t *testing.T) {
 		bugComments            map[int][]bugzilla.Comment
 		bugSubComponents       map[int]map[string][]string
 	}{
+		{
+			name:    "Unrelated event gets no action",
+			body:    "this is a PR",
+			title:   "this is a PR",
+			missing: true,
+			overrideEvent: &event{
+				org: "org", repo: "repo", baseRef: "branch",
+				number:  1,
+				missing: true,
+				key:     "",
+				htmlUrl: "https://github.com/org/repo/pull/1", login: "user",
+			},
+		},
+		{
+			name:  "title without key gets comment saying so on /jira refresh",
+			body:  "/jira refresh",
+			title: "this is a PR",
+			overrideEvent: &event{
+				org: "org", repo: "repo", baseRef: "branch",
+				number:  1,
+				missing: true, refresh: true,
+				body: "/jira refresh", title: "this is a PR",
+				htmlUrl: "https://github.com/org/repo/pull/1", login: "user",
+			},
+			expectedComment: `org/repo#1:@user: No Jira issue with key  exists in the tracker at https://my-jira.com.
+Once a valid bug is referenced in the title of this pull request, request a bug refresh with <code>/jira refresh</code>.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>/jira refresh
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`,
+		},
 		{
 			name: "no bug found leaves a comment",
 			expectedComment: `org/repo#1:@user: No Jira issue with key OCPBUGS-123 exists in the tracker at https://my-jira.com.
@@ -1317,8 +1354,8 @@ Instructions for interacting with me using PR comments are available [here](http
 			name:           "Bug with security level on repo with no allowed security levels results in comment on /jira refresh",
 			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{"security": jiraclient.SecurityLevel{Name: "security"}}}}},
 			prs:            []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}},
+			refresh:        true,
 			body:           "/jira refresh",
-			isComment:      true,
 			expectedLabels: []string{labels.ValidBug, labels.BugzillaValidBug},
 			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
 
@@ -1334,12 +1371,12 @@ In response to [this](https://github.com/org/repo/pull/1):
 Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
 </details>`,
 		}, {
-			name:      "Bug with non-allowed security level results in comment on /jira refresh",
-			issues:    []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{"security": jiraclient.SecurityLevel{Name: "security"}}}}},
-			prs:       []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}},
-			body:      "/jira refresh",
-			isComment: true,
-			options:   JiraBranchOptions{AllowedSecurityLevels: []string{"internal"}},
+			name:    "Bug with non-allowed security level results in comment on /jira refresh",
+			issues:  []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{"security": jiraclient.SecurityLevel{Name: "security"}}}}},
+			prs:     []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}},
+			refresh: true,
+			body:    "/jira refresh",
+			options: JiraBranchOptions{AllowedSecurityLevels: []string{"internal"}},
 			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) is in a security level that is not in the allowed security levels for this repo.
 Allowed security levels for this repo are:
 - internal
@@ -1354,13 +1391,11 @@ In response to [this](https://github.com/org/repo/pull/1):
 Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
 </details>`,
 		}, {
-			name:      "Bug with non-allowed security level results in comment on PR creation",
-			issues:    []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{"security": jiraclient.SecurityLevel{Name: "security"}}}}},
-			prs:       []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}},
-			body:      "/jira refresh",
-			isComment: true,
-			opened:    true,
-			options:   JiraBranchOptions{AllowedSecurityLevels: []string{"internal"}},
+			name:    "Bug with non-allowed security level results in comment on PR creation",
+			issues:  []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{"security": jiraclient.SecurityLevel{Name: "security"}}}}},
+			prs:     []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}},
+			opened:  true,
+			options: JiraBranchOptions{AllowedSecurityLevels: []string{"internal"}},
 			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) is in a security level that is not in the allowed security levels for this repo.
 Allowed security levels for this repo are:
 - internal
@@ -1369,7 +1404,7 @@ Allowed security levels for this repo are:
 
 In response to [this](https://github.com/org/repo/pull/1):
 
->/jira refresh
+>This PR fixes OCPBUGS-123
 
 
 Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
@@ -1598,9 +1633,8 @@ Instructions for interacting with me using PR comments are available [here](http
 					helpers.TargetVersionField:   v1,
 				}}},
 			},
-			body:      "/jira refresh",
-			isComment: true,
-			opened:    true,
+			refresh: true,
+			body:    "/jira refresh",
 			bugs: []bugzilla.Bug{{
 				ID:            1,
 				TargetRelease: []string{v2Str},
@@ -1665,6 +1699,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			} else {
 				testEvent = *base // copy so parallel tests don't collide
 			}
+			testEvent.refresh = tc.refresh
 			testEvent.missing = tc.missing
 			testEvent.merged = tc.merged
 			testEvent.closed = tc.closed || tc.merged
@@ -2416,7 +2451,7 @@ func TestDigestComment(t *testing.T) {
 			},
 			title: "cole, please review this typo fix",
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, missing: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", cc: false,
+				org: "org", repo: "repo", baseRef: "branch", number: 1, missing: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
 			},
 		},
 		{
@@ -2473,7 +2508,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, key: "OCPBUGS-123", body: "/jira refresh", htmlUrl: "www.com", login: "user", cc: false,
+				org: "org", repo: "repo", baseRef: "branch", number: 1, key: "OCPBUGS-123", body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
 			},
 		},
 		{
@@ -2501,7 +2536,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			title:  "OCPBUGS-123: oopsie doopsie",
 			merged: true,
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, key: "OCPBUGS-123", merged: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", cc: false,
+				org: "org", repo: "repo", baseRef: "branch", number: 1, key: "OCPBUGS-123", merged: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
 			},
 		},
 		{
