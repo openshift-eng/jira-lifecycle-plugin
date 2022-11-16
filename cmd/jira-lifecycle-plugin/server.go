@@ -351,10 +351,6 @@ func bzURLToID(url string) (int, error) {
 }
 
 func handle(jc jiraclient.Client, ghc githubClient, bc bugzilla.Client, options JiraBranchOptions, log *logrus.Entry, e event, allRepos sets.String) error {
-	if (e.key == "" || !strings.HasPrefix(e.key, "OCPBUGS-")) && !e.cherrypick {
-		return nil
-	}
-
 	comment := e.comment(ghc)
 	// check if bug is part of a restricted security level; if e.key is not set, this is a bz cherrypick, so we can ignore as the bz cherrypick function checks allowed groups for us
 	if !e.missing && (e.key != "") {
@@ -368,7 +364,7 @@ func handle(jc jiraclient.Client, ghc githubClient, bc bugzilla.Client, options 
 		}
 		if !bugAllowed {
 			// ignore bugs that are in non-allowed security levels for this repo
-			if e.opened || refreshCommandMatch.MatchString(e.body) {
+			if e.opened || e.refresh {
 				response := fmt.Sprintf(bugLink+" is in a security level that is not in the allowed security levels for this repo.", e.key, jc.JiraURL(), e.key)
 				if len(options.AllowedSecurityLevels) > 0 {
 					response += "\nAllowed security levels for this repo are:"
@@ -402,8 +398,6 @@ func handle(jc jiraclient.Client, ghc githubClient, bc bugzilla.Client, options 
 		log.WithField("bugMissing", true)
 		log.Debug("No bug referenced.")
 		needsValidLabel, needsInvalidLabel = false, false
-		response = `No Jira bug is referenced in the title of this pull request.
-To reference a bug, add 'OCPBUGS-XXX:' to the title of this pull request and request another bug refresh with <code>/jira refresh</code>.`
 	} else {
 		log = log.WithField("bugKey", e.key)
 
@@ -637,6 +631,12 @@ Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jir
 		}
 	}
 
+	// on missing bug, comment only on explicit commands and on label removal.
+	if e.missing && (e.refresh || e.cc || hasInvalidLabel || hasValidBZLabel || hasValidJiraLabel) {
+		response = `No Jira bug is referenced in the title of this pull request.
+To reference a bug, add 'OCPBUGS-XXX:' to the title of this pull request and request another bug refresh with <code>/jira refresh</code>.`
+	}
+
 	if severityLabelToRemove != "" && severityLabel != severityLabelToRemove {
 		if err := ghc.RemoveLabel(e.org, e.repo, e.number, severityLabelToRemove); err != nil {
 			log.WithError(err).Error("Failed to remove severity bug label.")
@@ -714,7 +714,10 @@ Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jir
 		}
 	}
 
-	return comment(response)
+	if response != "" {
+		return comment(response)
+	}
+	return nil
 }
 
 // getSimplifiedSeverity retrieves the severity of the issue and trims the image tags that precede
@@ -1004,10 +1007,10 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 		return nil, nil
 	}
 	// Make sure they are requesting a valid command
-	var cc bool
+	var refresh, cc bool
 	switch {
 	case refreshCommandMatch.MatchString(ice.Comment.Body):
-		// continue without updating bool values
+		refresh = true
 	case qaReviewCommandMatch.MatchString(ice.Comment.Body):
 		cc = true
 	default:
@@ -1031,7 +1034,7 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 		return nil, err
 	}
 
-	e := &event{org: org, repo: repo, baseRef: pr.Base.Ref, number: number, merged: pr.Merged, state: pr.State, body: ice.Comment.Body, title: ice.Issue.Title, htmlUrl: ice.Comment.HTMLURL, login: ice.Comment.User.Login, cc: cc}
+	e := &event{org: org, repo: repo, baseRef: pr.Base.Ref, number: number, merged: pr.Merged, state: pr.State, body: ice.Comment.Body, title: ice.Issue.Title, htmlUrl: ice.Comment.HTMLURL, login: ice.Comment.User.Login, refresh: refresh, cc: cc}
 
 	e.key, e.missing = bugKeyFromTitle(pr.Title)
 
@@ -1045,7 +1048,7 @@ type event struct {
 	missing, merged, closed, opened bool
 	state                           string
 	body, title, htmlUrl, login     string
-	cc                              bool
+	refresh, cc                     bool
 	cherrypick                      bool
 	cherrypickFromPRNum             int
 }
