@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"sort"
@@ -41,11 +42,12 @@ const (
 )
 
 var (
-	titleMatch           = regexp.MustCompile(`(?i)OCPBUGS-([0-9]+):`)
-	bzTitleMatch         = regexp.MustCompile(`(?i)Bug\s+([0-9]+):`)
-	refreshCommandMatch  = regexp.MustCompile(`(?mi)^/jira refresh\s*$`)
-	qaReviewCommandMatch = regexp.MustCompile(`(?mi)^/jira cc-qa\s*$`)
-	cherrypickPRMatch    = regexp.MustCompile(`This is an automated cherry-pick of #([0-9]+)`)
+	titleMatch             = regexp.MustCompile(`(?i)OCPBUGS-([0-9]+):`)
+	bzTitleMatch           = regexp.MustCompile(`(?i)Bug\s+([0-9]+):`)
+	refreshCommandMatch    = regexp.MustCompile(`(?mi)^/jira refresh\s*$`)
+	qaReviewCommandMatch   = regexp.MustCompile(`(?mi)^/jira cc-qa\s*$`)
+	cherrypickCommandMatch = regexp.MustCompile(`(?mi)^/jira cherrypick OCPBUGS-([0-9]+)\s*$`)
+	cherrypickPRMatch      = regexp.MustCompile(`This is an automated cherry-pick of #([0-9]+)`)
 )
 
 type dependent struct {
@@ -295,6 +297,13 @@ func (s *server) helpProvider(enabledRepos []config.OrgRepo) (*pluginhelp.Plugin
 		Featured:    false,
 		WhoCanUse:   "Anyone",
 		Examples:    []string{"/jira cc-qa"},
+	})
+	pluginHelp.AddCommand(pluginhelp.Command{
+		Usage:       "/jira cherrypick jiraBugKey",
+		Description: "Cherrypick a jira bug and link it to the current PR",
+		Featured:    false,
+		WhoCanUse:   "Anyone",
+		Examples:    []string{"/jira cherrypick OCPBUGS-1234"},
 	})
 	return pluginHelp, nil
 }
@@ -1007,12 +1016,14 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 		return nil, nil
 	}
 	// Make sure they are requesting a valid command
-	var refresh, cc bool
+	var refresh, cc, cherrypick bool
 	switch {
 	case refreshCommandMatch.MatchString(ice.Comment.Body):
 		refresh = true
 	case qaReviewCommandMatch.MatchString(ice.Comment.Body):
 		cc = true
+	case cherrypickCommandMatch.MatchString(ice.Comment.Body):
+		cherrypick = true
 	default:
 		return nil, nil
 	}
@@ -1038,6 +1049,17 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 
 	e.key, e.missing = bugKeyFromTitle(pr.Title)
 
+	if cherrypick {
+		mat := cherrypickCommandMatch.FindStringSubmatch(ice.Comment.Body)
+		if len(mat) == 0 {
+			// this shouldn't be possible due to earlier cherrypick check
+			return nil, errors.New("failed to get cherrypick string match")
+		}
+		e.key = strings.TrimPrefix(mat[0], "/jira cherrypick ")
+		e.cherrypick = true
+		e.cherrypickCmd = true
+	}
+
 	return e, nil
 }
 
@@ -1048,7 +1070,7 @@ type event struct {
 	missing, merged, closed, opened bool
 	state                           string
 	body, title, htmlUrl, login     string
-	refresh, cc                     bool
+	refresh, cc, cherrypickCmd      bool
 	cherrypick                      bool
 	cherrypickFromPRNum             int
 }
@@ -1594,27 +1616,33 @@ func handleBZCherrypick(e event, gc githubClient, jc jiraclient.Client, bc bugzi
 
 func handleCherrypick(e event, gc githubClient, jc jiraclient.Client, bc bugzilla.Client, options JiraBranchOptions, log *logrus.Entry) error {
 	comment := e.comment(gc)
-	// get the info for the PR being cherrypicked from
-	pr, err := gc.GetPullRequest(e.org, e.repo, e.cherrypickFromPRNum)
-	if err != nil {
-		log.WithError(err).Warn("Unexpected error getting title of pull request being cherrypicked from.")
-		return comment(fmt.Sprintf("Error creating a cherry-pick bug in Jira: failed to check the state of cherrypicked pull request at https://github.com/%s/%s/pull/%d: %v.\nPlease contact an administrator to resolve this issue, then request a bug refresh with <code>/jira refresh</code>.", e.org, e.repo, e.cherrypickFromPRNum, err))
-	}
-	// Attempt to identify bug from PR title
-	bugKey, bugMissing := bugKeyFromTitle(pr.Title)
-	if bugMissing {
-		bzID, missing, err := bzIDFromTitle(pr.Title)
+	var bugKey string
+	if e.cherrypickCmd {
+		bugKey = e.key
+	} else {
+		// get the info for the PR being cherrypicked from
+		pr, err := gc.GetPullRequest(e.org, e.repo, e.cherrypickFromPRNum)
 		if err != nil {
-			log.WithError(err).Warn("Unexpected error identifying bugzilla bug from title")
-			return comment(fmt.Sprintf("Error creating a cherry-pick bug in Jira: failed to parse bugzilla ID from title of https://github.com/%s/%s/pull/%d: %v.\nPlease contact an administrator to resolve this issue, then request a bug refresh with <code>/jira refresh</code>.", e.org, e.repo, e.cherrypickFromPRNum, err))
+			log.WithError(err).Warn("Unexpected error getting title of pull request being cherrypicked from.")
+			return comment(fmt.Sprintf("Error creating a cherry-pick bug in Jira: failed to check the state of cherrypicked pull request at https://github.com/%s/%s/pull/%d: %v.\nPlease contact an administrator to resolve this issue, then request a bug refresh with <code>/jira refresh</code>.", e.org, e.repo, e.cherrypickFromPRNum, err))
 		}
-		if missing {
-			log.Debugf("Parent PR %d doesn't have associated bug; not creating cherrypicked bug", pr.Number)
-			// if there is no jira bug, we should simply ignore this PR
-			return nil
-		} else {
-			log.Infof("Handling BZ Cherrypick for bug %d", bzID)
-			return handleBZCherrypick(e, gc, jc, bc, bzID, pr, options, log)
+		// Attempt to identify bug from PR title
+		var bugMissing bool
+		bugKey, bugMissing = bugKeyFromTitle(pr.Title)
+		if bugMissing {
+			bzID, missing, err := bzIDFromTitle(pr.Title)
+			if err != nil {
+				log.WithError(err).Warn("Unexpected error identifying bugzilla bug from title")
+				return comment(fmt.Sprintf("Error creating a cherry-pick bug in Jira: failed to parse bugzilla ID from title of https://github.com/%s/%s/pull/%d: %v.\nPlease contact an administrator to resolve this issue, then request a bug refresh with <code>/jira refresh</code>.", e.org, e.repo, e.cherrypickFromPRNum, err))
+			}
+			if missing {
+				log.Debugf("Parent PR %d doesn't have associated bug; not creating cherrypicked bug", pr.Number)
+				// if there is no jira bug, we should simply ignore this PR
+				return nil
+			} else {
+				log.Infof("Handling BZ Cherrypick for bug %d", bzID)
+				return handleBZCherrypick(e, gc, jc, bc, bzID, pr, options, log)
+			}
 		}
 	}
 	// Since getBug generates a comment itself, we have to add a prefix explaining that this was a cherrypick attempt to the comment
@@ -1675,7 +1703,12 @@ func handleCherrypick(e event, gc githubClient, jc jiraclient.Client, bc bugzill
 		return comment(formatError(fmt.Sprintf("updating cherry-pick bug in Jira: Created cherrypick %s, but encountered error creating `Blocks` type link with original bug", cloneLink), jc.JiraURL(), clone.Key, err))
 	}
 	// Replace old bugID in title with new cloneID
-	newTitle := strings.ReplaceAll(e.title, bugKey, clone.Key)
+	var newTitle string
+	if e.cherrypickCmd {
+		newTitle = fmt.Sprintf("%s: %s", clone.Key, e.title)
+	} else {
+		newTitle = strings.ReplaceAll(e.title, bugKey, clone.Key)
+	}
 	response := fmt.Sprintf("%s has been cloned as %s. Retitling PR to link against new bug.\n/retitle %s", oldLink, cloneLink, newTitle)
 	// Update the version of the bug to the target release
 	update := jira.Issue{
