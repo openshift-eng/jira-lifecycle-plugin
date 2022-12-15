@@ -176,7 +176,7 @@ func TestHandle(t *testing.T) {
 		closed                     bool
 		opened                     bool
 		refresh                    bool
-		cherryPick                 bool
+		cherrypick                 bool
 		cherryPickFromPRNum        int
 		body                       string
 		title                      string
@@ -1110,7 +1110,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			}}},
 			prs:                 []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}, {Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] " + base.title}},
 			title:               "[v1] " + base.title,
-			cherryPick:          true,
+			cherrypick:          true,
 			cherryPickFromPRNum: 1,
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
 			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). Retitling PR to link against new bug.
@@ -1121,6 +1121,56 @@ Instructions for interacting with me using PR comments are available [here](http
 In response to [this](https://github.com/org/repo/pull/1):
 
 >This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`,
+			expectedIssue: &jira.Issue{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
+				Status:      &jira.Status{Name: "CLOSED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				IssueLinks: []*jira.IssueLink{&cloneLinkTo123JustID, &blocksLinkTo123JustID},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
+					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
+				},
+			}},
+		},
+		{
+			name: "Cherrypick comment results in cloned bug creation",
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Status: &jira.Status{Name: "CLOSED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      severityCritical,
+					helpers.TargetVersionField: &v2,
+				},
+			}}},
+			prs: []github.PullRequest{{Number: 2, Body: "This is a manually created cherrypick of #1.\n\n/assign user", Title: "[v1] " + base.title}},
+			overrideEvent: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 2, key: "OCPBUGS-123", body: "/jira cherrypick OCPBUGS-123", title: "fixed it!", htmlUrl: "https://github.com/org/repo/pull/1", login: "user", cherrypick: true, cherrypickCmd: true, missing: true,
+			},
+			cherrypick: true,
+			missing:    true,
+			options:    JiraBranchOptions{TargetVersion: &v1Str},
+			expectedComment: `org/repo#2:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). Retitling PR to link against new bug.
+/retitle OCPBUGS-124: fixed it!
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>/jira cherrypick OCPBUGS-123
 
 
 Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
@@ -1155,7 +1205,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			}}},
 			prs:                 []github.PullRequest{{Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] " + base.title}},
 			title:               "[v1] " + base.title,
-			cherryPick:          true,
+			cherrypick:          true,
 			cherryPickFromPRNum: 1,
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
 			expectedComment: `org/repo#1:@user: Error creating a cherry-pick bug in Jira: failed to check the state of cherrypicked pull request at https://github.com/org/repo/pull/1: pull request number 1 does not exist.
@@ -1186,7 +1236,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issueGetErrors:      map[string]error{"OCPBUGS-123": errors.New("injected error getting bug")},
 			prs:                 []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}, {Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] " + base.title}},
 			title:               "[v1] " + base.title,
-			cherryPick:          true,
+			cherrypick:          true,
 			cherryPickFromPRNum: 1,
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
 			expectedComment: `org/repo#1:@user: An error was encountered searching for bug OCPBUGS-123 on the Jira server at https://my-jira.com. No known errors were detected, please see the full error message for details.
@@ -1228,7 +1278,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issueUpdateErrors:   map[string]error{"OCPBUGS-124": errors.New("injected error updating bug OCPBUGS-124")},
 			prs:                 []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}, {Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] " + base.title}},
 			title:               "[v1] " + base.title,
-			cherryPick:          true,
+			cherrypick:          true,
 			cherryPickFromPRNum: 1,
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
 			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). Retitling PR to link against new bug.
@@ -1275,7 +1325,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			prs:                 []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}, {Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] " + base.title}},
 			title:               "[v1] " + base.title,
-			cherryPick:          true,
+			cherrypick:          true,
 			cherryPickFromPRNum: 1,
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
 			expectedComment: `org/repo#1:@user: Detected clone of [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) with correct target version. Retitling PR to link to clone:
@@ -1314,7 +1364,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			prs:                 []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}, {Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] " + base.title}},
 			title:               "[v1] " + base.title,
-			cherryPick:          true,
+			cherrypick:          true,
 			cherryPickFromPRNum: 1,
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
 			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-125](https://my-jira.com/browse/OCPBUGS-125). Retitling PR to link against new bug.
@@ -1526,7 +1576,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			prs:                 []github.PullRequest{{Number: base.number, Body: base.body, Title: "Bug 1: fixed it!"}, {Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] " + "Bug 1: fixed it!"}},
 			title:               "[v1] Bug 1: fixed it!",
-			cherryPick:          true,
+			cherrypick:          true,
 			cherryPickFromPRNum: 1,
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
 			expectedComment: `org/repo#2:@user: [Bugzilla Bug 1](www.bugzilla/show_bug.cgi?id=1) has been cloned as [Jira Issue -1](https://my-jira.com/browse/-1). Retitling PR to link against new bug.
@@ -1590,7 +1640,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			prs:                 []github.PullRequest{{Number: base.number, Body: base.body, Title: "Bug 1: fixed it!"}, {Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] " + "Bug 1: fixed it!"}},
 			title:               "[v1] Bug 1: fixed it!",
-			cherryPick:          true,
+			cherrypick:          true,
 			cherryPickFromPRNum: 1,
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
 			expectedComment: `org/repo#2:@user: [Bugzilla Bug 1](www.bugzilla/show_bug.cgi?id=1) has been cloned as [Jira Issue -1](https://my-jira.com/browse/-1). Retitling PR to link against new bug.
@@ -1704,7 +1754,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			testEvent.merged = tc.merged
 			testEvent.closed = tc.closed || tc.merged
 			testEvent.opened = tc.opened
-			testEvent.cherrypick = tc.cherryPick
+			testEvent.cherrypick = tc.cherrypick
 			testEvent.cherrypickFromPRNum = tc.cherryPickFromPRNum
 			if tc.body != "" {
 				testEvent.body = tc.body
@@ -2023,6 +2073,12 @@ orgs:
 				Featured:    false,
 				WhoCanUse:   "Anyone",
 				Examples:    []string{"/jira cc-qa"},
+			}, {
+				Usage:       "/jira cherrypick jiraBugKey",
+				Description: "Cherrypick a jira bug and link it to the current PR",
+				Featured:    false,
+				WhoCanUse:   "Anyone",
+				Examples:    []string{"/jira cherrypick OCPBUGS-1234"},
 			},
 		},
 	}
@@ -2564,6 +2620,33 @@ Instructions for interacting with me using PR comments are available [here](http
 			title: "OCPBUGS-123: oopsie doopsie",
 			expected: &event{
 				org: "org", repo: "repo", baseRef: "branch", number: 1, key: "OCPBUGS-123", body: "/jira cc-qa", htmlUrl: "www.com", login: "user", cc: true,
+			},
+		},
+		{
+			name: "cherrypick comment event has cherrypick bools set to true and correct bug key set",
+			e: github.IssueCommentEvent{
+				Action: github.IssueCommentActionCreated,
+				Issue: github.Issue{
+					Number:      1,
+					PullRequest: &struct{}{},
+				},
+				Comment: github.IssueComment{
+					Body: "/jira cherrypick OCPBUGS-1234",
+					User: github.User{
+						Login: "user",
+					},
+					HTMLURL: "www.com",
+				},
+				Repo: github.Repo{
+					Owner: github.User{
+						Login: "org",
+					},
+					Name: "repo",
+				},
+			},
+			title: "oopsie doopsie",
+			expected: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 1, key: "OCPBUGS-1234", body: "/jira cherrypick OCPBUGS-1234", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: true, cherrypick: true,
 			},
 		},
 	}
