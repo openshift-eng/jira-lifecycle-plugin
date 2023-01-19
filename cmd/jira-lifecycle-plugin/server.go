@@ -422,7 +422,6 @@ func handle(jc jiraclient.Client, ghc githubClient, bc bugzilla.Client, options 
 			} else {
 				response = fmt.Sprintf(`This pull request references `+issueLink+`, which is a valid jira issue.`, e.key, jc.JiraURL(), e.key)
 			}
-
 		}
 	}
 	if e.isBug && issue != nil {
@@ -611,16 +610,16 @@ Note that the mirrored bug in OCPBUGSM should not be involved in this process at
 %s
 Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jira bug are made, or edit the title of this pull request to link to a different bug.`, e.key, jc.JiraURL(), e.key, formattedReasons)
 		}
+	}
 
-		if options.AddExternalLink != nil && *options.AddExternalLink {
-			changed, err := upsertGitHubLinkToIssue(log, issue.ID, jc, e)
-			if err != nil {
-				log.WithError(err).Warn("Unexpected error adding external tracker bug to Jira bug.")
-				return comment(formatError("adding this pull request to the external tracker bugs", jc.JiraURL(), e.key, err))
-			}
-			if changed {
-				response += "\n\nThe bug has been updated to refer to the pull request using the external bug tracker."
-			}
+	if options.AddExternalLink != nil && *options.AddExternalLink && issue != nil {
+		changed, err := upsertGitHubLinkToIssue(log, issue.ID, jc, e)
+		if err != nil {
+			log.WithError(err).Warn("Unexpected error adding external tracker bug to Jira issue.")
+			return comment(formatError("adding this pull request to the external tracker issue", jc.JiraURL(), e.key, err))
+		}
+		if changed {
+			response += "\n\nThe issue has been updated to refer to the pull request using the external issue tracker."
 		}
 	}
 

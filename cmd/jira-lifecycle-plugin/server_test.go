@@ -514,7 +514,7 @@ Instructions for interacting with me using PR comments are available [here](http
 
 <details><summary>No validations were run on this bug</summary></details>
 
-The bug has been updated to refer to the pull request using the external bug tracker.
+The issue has been updated to refer to the pull request using the external issue tracker.
 
 <details>
 
