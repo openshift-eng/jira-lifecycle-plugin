@@ -31,7 +31,7 @@ import (
 
 const (
 	PluginName            = "jira-lifecycle"
-	bugLink               = `[Jira Issue %s](%s/browse/%s)`
+	issueLink             = `[Jira Issue %s](%s/browse/%s)`
 	bzLink                = `[Bugzilla Bug %d](%s/show_bug.cgi?id=%d)`
 	bzLinkStr             = `[Bugzilla Bug %s](%s/show_bug.cgi?id=%s)`
 	criticalSeverity      = "Critical"
@@ -42,7 +42,8 @@ const (
 )
 
 var (
-	titleMatch             = regexp.MustCompile(`(?i)OCPBUGS-([0-9]+):`)
+	titleMatchJiraIssue    = regexp.MustCompile(`(?i)[A-Z]+-([0-9]+):|NO-JIRA:|NO-ISSUE:`)
+	titleMatchJiraBug      = regexp.MustCompile(`(?i)OCPBUGS-([0-9]+):`)
 	bzTitleMatch           = regexp.MustCompile(`(?i)Bug\s+([0-9]+):`)
 	refreshCommandMatch    = regexp.MustCompile(`(?mi)^/jira refresh\s*$`)
 	qaReviewCommandMatch   = regexp.MustCompile(`(?mi)^/jira cc-qa\s*$`)
@@ -362,19 +363,19 @@ func bzURLToID(url string) (int, error) {
 func handle(jc jiraclient.Client, ghc githubClient, bc bugzilla.Client, options JiraBranchOptions, log *logrus.Entry, e event, allRepos sets.String) error {
 	comment := e.comment(ghc)
 	// check if bug is part of a restricted security level; if e.key is not set, this is a bz cherrypick, so we can ignore as the bz cherrypick function checks allowed groups for us
-	if !e.missing && (e.key != "") {
-		bug, err := getBug(jc, e.key, log, comment)
-		if err != nil || bug == nil {
+	if e.isBug && !e.missing && e.key != "" {
+		issue, err := getJira(jc, e.key, log, comment)
+		if err != nil || issue == nil {
 			return err
 		}
-		bugAllowed, err := isBugAllowed(bug, options.AllowedSecurityLevels)
+		bugAllowed, err := isBugAllowed(issue, options.AllowedSecurityLevels)
 		if err != nil {
 			return err
 		}
 		if !bugAllowed {
 			// ignore bugs that are in non-allowed security levels for this repo
 			if e.opened || e.refresh {
-				response := fmt.Sprintf(bugLink+" is in a security level that is not in the allowed security levels for this repo.", e.key, jc.JiraURL(), e.key)
+				response := fmt.Sprintf(issueLink+" is in a security level that is not in the allowed security levels for this repo.", e.key, jc.JiraURL(), e.key)
 				if len(options.AllowedSecurityLevels) > 0 {
 					response += "\nAllowed security levels for this repo are:"
 					for _, group := range options.AllowedSecurityLevels {
@@ -401,21 +402,33 @@ func handle(jc jiraclient.Client, ghc githubClient, bc bugzilla.Client, options 
 		return handleClose(e, ghc, jc, options, log)
 	}
 
-	var needsValidLabel, needsInvalidLabel bool
+	var needsJiraValidRefLabel, needsJiraValidBugLabel, needsJiraInvalidBugLabel bool
 	var response, severityLabel string
-	if e.missing {
-		log.WithField("bugMissing", true)
-		log.Debug("No bug referenced.")
-		needsValidLabel, needsInvalidLabel = false, false
-	} else {
-		log = log.WithField("bugKey", e.key)
 
-		bug, err := getBug(jc, e.key, log, comment)
-		if err != nil || bug == nil {
+	var issue *jira.Issue
+	var err error
+	if !e.missing && e.key != "NO-JIRA" {
+		issue, err = getJira(jc, e.key, log, comment)
+		if err != nil {
 			return err
 		}
+	}
 
-		severity, err := getSimplifiedSeverity(bug)
+	if issue != nil || e.key == "NO-JIRA" {
+		needsJiraValidRefLabel = true
+		if !e.isBug {
+			if e.key == "NO-JIRA" {
+				response = "This pull request explicitly references no jira issue."
+			} else {
+				response = fmt.Sprintf(`This pull request references `+issueLink+`, which is a valid jira issue.`, e.key, jc.JiraURL(), e.key)
+			}
+
+		}
+	}
+	if e.isBug && issue != nil {
+		log = log.WithField("refKey", e.key)
+
+		severity, err := getSimplifiedSeverity(issue)
 		if err != nil {
 			return err
 		}
@@ -424,7 +437,7 @@ func handle(jc jiraclient.Client, ghc githubClient, bc bugzilla.Client, options 
 
 		var dependents []dependent
 		if options.DependentBugStates != nil || options.DependentBugTargetVersions != nil {
-			for _, link := range bug.Fields.IssueLinks {
+			for _, link := range issue.Fields.IssueLinks {
 				// identify if bug depends on this link; multiple different types of links may be blocker types; more can be added as they are identified
 				dependsOn := false
 				dependsOn = dependsOn || (link.InwardIssue != nil && link.Type.Name == "Blocks" && link.Type.Inward == "is blocked by")
@@ -465,7 +478,7 @@ func handle(jc jiraclient.Client, ghc githubClient, bc bugzilla.Client, options 
 				dependents = append(dependents, newDependent)
 			}
 			if bc != nil {
-				bzDependsOn, _ := helpers.GetIssueBlockedByBugzillaBug(bug)
+				bzDependsOn, _ := helpers.GetIssueBlockedByBugzillaBug(issue)
 				if bzDependsOn != nil && len(*bzDependsOn) > 0 {
 					bzIDInt, err := bzURLToID(*bzDependsOn)
 					if err != nil {
@@ -498,7 +511,7 @@ func handle(jc jiraclient.Client, ghc githubClient, bc bugzilla.Client, options 
 					if err != nil {
 						return comment(formatError("identifying labels from dependent bugzilla bug", bc.Endpoint(), e.key, err))
 					}
-					existingLabels := sets.NewString(bug.Fields.Labels...)
+					existingLabels := sets.NewString(issue.Fields.Labels...)
 					allLabels := sets.NewString()
 					changed := false
 					for _, label := range labels {
@@ -508,7 +521,7 @@ func handle(jc jiraclient.Client, ghc githubClient, bc bugzilla.Client, options 
 						}
 					}
 					if changed {
-						updateIssue := jira.Issue{Key: bug.Key, Fields: &jira.IssueFields{Labels: allLabels.List()}}
+						updateIssue := jira.Issue{Key: issue.Key, Fields: &jira.IssueFields{Labels: allLabels.List()}}
 						if _, err := jc.UpdateIssue(&updateIssue); err != nil {
 							log.WithError(err).Warn("Unexpected error updating jira issue.")
 							return comment(formatError(fmt.Sprintf("updating list of labels to: %+v", allLabels.List()), jc.JiraURL(), e.key, err))
@@ -517,20 +530,20 @@ func handle(jc jiraclient.Client, ghc githubClient, bc bugzilla.Client, options 
 				}
 			}
 		}
-		valid, invalidDependentProject, validationsRun, why := validateBug(bug, dependents, options, jc.JiraURL(), bugzillaURL)
-		needsValidLabel, needsInvalidLabel = valid, !valid
+		valid, invalidDependentProject, validationsRun, why := validateBug(issue, dependents, options, jc.JiraURL(), bugzillaURL)
+		needsJiraValidBugLabel, needsJiraInvalidBugLabel = valid, !valid
 		if valid {
 			log.Debug("Valid bug found.")
-			response = fmt.Sprintf(`This pull request references `+bugLink+`, which is valid.`, e.key, jc.JiraURL(), e.key)
+			response = fmt.Sprintf(`This pull request references `+issueLink+`, which is valid.`, e.key, jc.JiraURL(), e.key)
 			// if configured, move the bug to the new state
 			if options.StateAfterValidation != nil {
-				if options.StateAfterValidation.Status != "" && (bug.Fields.Status == nil || !strings.EqualFold(options.StateAfterValidation.Status, bug.Fields.Status.Name)) {
-					if err := jc.UpdateStatus(bug.ID, options.StateAfterValidation.Status); err != nil {
+				if options.StateAfterValidation.Status != "" && (issue.Fields.Status == nil || !strings.EqualFold(options.StateAfterValidation.Status, issue.Fields.Status.Name)) {
+					if err := jc.UpdateStatus(issue.ID, options.StateAfterValidation.Status); err != nil {
 						log.WithError(err).Warn("Unexpected error updating jira issue.")
 						return comment(formatError(fmt.Sprintf("updating to the %s state", options.StateAfterValidation.Status), jc.JiraURL(), e.key, err))
 					}
-					if options.StateAfterValidation.Resolution != "" && (bug.Fields.Resolution == nil || !strings.EqualFold(options.StateAfterValidation.Resolution, bug.Fields.Resolution.Name)) {
-						updateIssue := jira.Issue{Key: bug.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterValidation.Resolution}}}
+					if options.StateAfterValidation.Resolution != "" && (issue.Fields.Resolution == nil || !strings.EqualFold(options.StateAfterValidation.Resolution, issue.Fields.Resolution.Name)) {
+						updateIssue := jira.Issue{Key: issue.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterValidation.Resolution}}}
 						if _, err := jc.UpdateIssue(&updateIssue); err != nil {
 							log.WithError(err).Warn("Unexpected error updating jira issue.")
 							return comment(formatError(fmt.Sprintf("updating to the %s resolution", options.StateAfterValidation.Resolution), jc.JiraURL(), e.key, err))
@@ -551,17 +564,17 @@ func handle(jc jiraclient.Client, ghc githubClient, bc bugzilla.Client, options 
 			}
 			response += "</details>"
 
-			qaContactDetail, err := helpers.GetIssueQaContact(bug)
+			qaContactDetail, err := helpers.GetIssueQaContact(issue)
 			if err != nil {
 				return comment(formatError("processing qa contact information for the bug", jc.JiraURL(), e.key, err))
 			}
 			if qaContactDetail == nil {
 				if e.cc {
-					response += fmt.Sprintf(bugLink+" does not have a QA contact, skipping assignment", e.key, jc.JiraURL(), e.key)
+					response += fmt.Sprintf(issueLink+" does not have a QA contact, skipping assignment", e.key, jc.JiraURL(), e.key)
 				}
 			} else if qaContactDetail.EmailAddress == "" {
 				if e.cc {
-					response += fmt.Sprintf("QA contact for "+bugLink+" does not have a listed email, skipping assignment", e.key, jc.JiraURL(), e.key)
+					response += fmt.Sprintf("QA contact for "+issueLink+" does not have a listed email, skipping assignment", e.key, jc.JiraURL(), e.key)
 				}
 			} else {
 				query := &emailToLoginQuery{}
@@ -594,13 +607,13 @@ All dependent bugs must be part of the OCPBUGS project. If you are backporting a
 Note that the mirrored bug in OCPBUGSM should not be involved in this process at all.
 `
 			}
-			response = fmt.Sprintf(`This pull request references `+bugLink+`, which is invalid:
+			response = fmt.Sprintf(`This pull request references `+issueLink+`, which is invalid:
 %s
 Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jira bug are made, or edit the title of this pull request to link to a different bug.`, e.key, jc.JiraURL(), e.key, formattedReasons)
 		}
 
 		if options.AddExternalLink != nil && *options.AddExternalLink {
-			changed, err := upsertGitHubLinkToIssue(log, bug.ID, jc, e)
+			changed, err := upsertGitHubLinkToIssue(log, issue.ID, jc, e)
 			if err != nil {
 				log.WithError(err).Warn("Unexpected error adding external tracker bug to Jira bug.")
 				return comment(formatError("adding this pull request to the external tracker bugs", jc.JiraURL(), e.key, err))
@@ -609,7 +622,6 @@ Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jir
 				response += "\n\nThe bug has been updated to refer to the pull request using the external bug tracker."
 			}
 		}
-
 	}
 
 	// ensure label state is correct. Do not propagate errors
@@ -619,18 +631,22 @@ Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jir
 	if err != nil {
 		log.WithError(err).Warn("Could not list labels on PR")
 	}
-	var hasValidBZLabel, hasValidJiraLabel, hasInvalidLabel bool
+	var hasValidBZLabel, hasJiraValidBugLabel, hasJiraValidRefLabel, hasJiraInvalidBugLabel bool
 	var severityLabelToRemove string
 	for _, l := range currentLabels {
-		if l.Name == labels.ValidBug {
-			hasValidJiraLabel = true
+		if l.Name == labels.JiraValidBug {
+			hasJiraValidBugLabel = true
 		}
 		if l.Name == labels.BugzillaValidBug {
 			hasValidBZLabel = true
 		}
-		if l.Name == labels.InvalidBug {
-			hasInvalidLabel = true
+		if l.Name == labels.JiraInvalidBug {
+			hasJiraInvalidBugLabel = true
 		}
+		if l.Name == labels.JiraValidRef {
+			hasJiraValidRefLabel = true
+		}
+
 		if l.Name == labels.SeverityCritical ||
 			l.Name == labels.SeverityImportant ||
 			l.Name == labels.SeverityModerate ||
@@ -640,10 +656,13 @@ Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jir
 		}
 	}
 
-	// on missing bug, comment only on explicit commands and on label removal.
-	if e.missing && (e.refresh || e.cc || hasInvalidLabel || hasValidBZLabel || hasValidJiraLabel) {
-		response = `No Jira bug is referenced in the title of this pull request.
-To reference a bug, add 'OCPBUGS-XXX:' to the title of this pull request and request another bug refresh with <code>/jira refresh</code>.`
+	// on missing issue, comment only on explicit commands and on label removal.
+	if e.missing && (e.refresh || e.cc || hasJiraInvalidBugLabel || hasValidBZLabel || hasJiraValidBugLabel || hasJiraValidRefLabel) {
+		response = `No Jira issue is referenced in the title of this pull request.
+To reference a jira issue, add 'XYZ-NNN:' to the title of this pull request and request another refresh with <code>/jira refresh</code>.`
+	} else if e.key != "NO-JIRA" && issue == nil && (e.refresh || e.cc || hasJiraInvalidBugLabel || hasValidBZLabel || hasJiraValidBugLabel) {
+		// if the user attempted to reference a jira key, but we couldn't find the key in jira, give feedback to the user.
+		response = fmt.Sprintf("The referenced Jira %s could not be located, all automatically applied jira labels will be removed.", e.key)
 	}
 
 	if severityLabelToRemove != "" && severityLabel != severityLabelToRemove {
@@ -657,23 +676,35 @@ To reference a bug, add 'OCPBUGS-XXX:' to the title of this pull request and req
 		}
 	}
 
-	if hasValidJiraLabel && !needsValidLabel {
-		humanLabelled, err := ghc.WasLabelAddedByHuman(e.org, e.repo, e.number, labels.ValidBug)
+	if hasJiraValidRefLabel && !needsJiraValidRefLabel {
+		humanLabelled, err := ghc.WasLabelAddedByHuman(e.org, e.repo, e.number, labels.JiraValidRef)
 		if err != nil {
 			// Return rather than potentially doing the wrong thing. The user can re-trigger us.
-			return fmt.Errorf("failed to check if %s label was added by a human: %w", labels.ValidBug, err)
+			return fmt.Errorf("failed to check if %s label was added by a human: %w", labels.JiraValidRef, err)
+		}
+		if humanLabelled {
+			needsJiraValidRefLabel = true
+			response += fmt.Sprintf("\n\nRetaining the %s label as it was manually added.", labels.JiraValidRef)
+		}
+	}
+
+	if hasJiraValidBugLabel && !needsJiraValidBugLabel {
+		humanLabelled, err := ghc.WasLabelAddedByHuman(e.org, e.repo, e.number, labels.JiraValidBug)
+		if err != nil {
+			// Return rather than potentially doing the wrong thing. The user can re-trigger us.
+			return fmt.Errorf("failed to check if %s label was added by a human: %w", labels.JiraValidBug, err)
 		}
 		if humanLabelled {
 			// This will make us remove the invalid label if it exists but saves us another check if it was
 			// added by a human. It is reasonable to assume that it should be absent if the valid label was
 			// manually added.
-			needsInvalidLabel = false
-			needsValidLabel = true
-			response += fmt.Sprintf("\n\nRetaining the %s label as it was manually added.", labels.ValidBug)
+			needsJiraInvalidBugLabel = false
+			needsJiraValidBugLabel = true
+			response += fmt.Sprintf("\n\nRetaining the %s label as it was manually added.", labels.JiraValidBug)
 		}
 	}
 
-	if hasValidBZLabel && !needsValidLabel {
+	if hasValidBZLabel && !needsJiraValidBugLabel {
 		humanLabelled, err := ghc.WasLabelAddedByHuman(e.org, e.repo, e.number, labels.BugzillaValidBug)
 		if err != nil {
 			// Return rather than potentially doing the wrong thing. The user can re-trigger us.
@@ -683,15 +714,29 @@ To reference a bug, add 'OCPBUGS-XXX:' to the title of this pull request and req
 			// This will make us remove the invalid label if it exists but saves us another check if it was
 			// added by a human. It is reasonable to assume that it should be absent if the valid label was
 			// manually added.
-			needsInvalidLabel = false
-			needsValidLabel = true
+			needsJiraInvalidBugLabel = false
+			needsJiraValidBugLabel = true
 			response += fmt.Sprintf("\n\nRetaining the %s label as it was manually added.", labels.BugzillaValidBug)
 		}
 	}
 
-	if needsValidLabel {
-		if !hasValidJiraLabel {
-			if err := ghc.AddLabel(e.org, e.repo, e.number, labels.ValidBug); err != nil {
+	if needsJiraValidRefLabel {
+		if !hasJiraValidRefLabel {
+			if err := ghc.AddLabel(e.org, e.repo, e.number, labels.JiraValidRef); err != nil {
+				log.WithError(err).Error("Failed to add valid ref label.")
+			}
+		}
+	} else {
+		if hasJiraValidRefLabel {
+			if err := ghc.RemoveLabel(e.org, e.repo, e.number, labels.JiraValidRef); err != nil {
+				log.WithError(err).Error("Failed to remove valid ref label.")
+			}
+		}
+	}
+
+	if needsJiraValidBugLabel {
+		if !hasJiraValidBugLabel {
+			if err := ghc.AddLabel(e.org, e.repo, e.number, labels.JiraValidBug); err != nil {
 				log.WithError(err).Error("Failed to add valid bug label.")
 			}
 		}
@@ -701,8 +746,8 @@ To reference a bug, add 'OCPBUGS-XXX:' to the title of this pull request and req
 			}
 		}
 	} else {
-		if hasValidJiraLabel {
-			if err := ghc.RemoveLabel(e.org, e.repo, e.number, labels.ValidBug); err != nil {
+		if hasJiraValidBugLabel {
+			if err := ghc.RemoveLabel(e.org, e.repo, e.number, labels.JiraValidBug); err != nil {
 				log.WithError(err).Error("Failed to remove valid bug label.")
 			}
 		}
@@ -713,12 +758,12 @@ To reference a bug, add 'OCPBUGS-XXX:' to the title of this pull request and req
 		}
 	}
 
-	if needsInvalidLabel && !hasInvalidLabel {
-		if err := ghc.AddLabel(e.org, e.repo, e.number, labels.InvalidBug); err != nil {
+	if needsJiraInvalidBugLabel && !hasJiraInvalidBugLabel {
+		if err := ghc.AddLabel(e.org, e.repo, e.number, labels.JiraInvalidBug); err != nil {
 			log.WithError(err).Error("Failed to add invalid bug label.")
 		}
-	} else if !needsInvalidLabel && hasInvalidLabel {
-		if err := ghc.RemoveLabel(e.org, e.repo, e.number, labels.InvalidBug); err != nil {
+	} else if !needsJiraInvalidBugLabel && hasJiraInvalidBugLabel {
+		if err := ghc.RemoveLabel(e.org, e.repo, e.number, labels.JiraInvalidBug); err != nil {
 			log.WithError(err).Error("Failed to remove invalid bug label.")
 		}
 	}
@@ -949,7 +994,7 @@ func digestPR(log *logrus.Entry, pre github.PullRequestEvent, validateByDefault 
 	e := &event{org: org, repo: repo, baseRef: baseRef, number: number, merged: pre.PullRequest.Merged, closed: pre.Action == github.PullRequestActionClosed, opened: pre.Action == github.PullRequestActionOpened, state: pre.PullRequest.State, body: body, title: title, htmlUrl: pre.PullRequest.HTMLURL, login: pre.PullRequest.User.Login}
 	// Make sure the PR title is referencing a bug
 	var err error
-	e.key, e.missing = bugKeyFromTitle(title)
+	e.key, e.missing, e.isBug = jiraKeyFromTitle(title)
 	// in the case that the title used to reference a bug and no longer does we
 	// want to handle this to remove labels
 
@@ -991,7 +1036,7 @@ func digestPR(log *logrus.Entry, pre github.PullRequestEvent, validateByDefault 
 		// we're detecting this best-effort so we can handle it anyway
 		return intermediate, nil
 	}
-	prevId, missing := bugKeyFromTitle(changes.Title.From)
+	prevId, missing, _ := jiraKeyFromTitle(changes.Title.From)
 	if missing {
 		// title did not previously reference a bug
 		return intermediate, nil
@@ -999,7 +1044,7 @@ func digestPR(log *logrus.Entry, pre github.PullRequestEvent, validateByDefault 
 
 	// if the referenced bug has not changed in the update, ignore it
 	if prevId == e.key {
-		logrus.Debugf("Referenced OCPBUGS story (%s) has not changed, not handling event.", e.key)
+		logrus.Debugf("Referenced Jira issue (%s) has not changed, not handling event.", e.key)
 		return nil, nil
 	}
 
@@ -1047,7 +1092,7 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 
 	e := &event{org: org, repo: repo, baseRef: pr.Base.Ref, number: number, merged: pr.Merged, state: pr.State, body: ice.Comment.Body, title: ice.Issue.Title, htmlUrl: ice.Comment.HTMLURL, login: ice.Comment.User.Login, refresh: refresh, cc: cc}
 
-	e.key, e.missing = bugKeyFromTitle(pr.Title)
+	e.key, e.missing, e.isBug = jiraKeyFromTitle(pr.Title)
 
 	if cherrypick {
 		mat := cherrypickCommandMatch.FindStringSubmatch(ice.Comment.Body)
@@ -1067,6 +1112,7 @@ type event struct {
 	org, repo, baseRef              string
 	number                          int
 	key                             string
+	isBug                           bool
 	missing, merged, closed, opened bool
 	state                           string
 	body, title, htmlUrl, login     string
@@ -1270,7 +1316,7 @@ func validateBug(bug *jira.Issue, dependents []dependent, options JiraBranchOpti
 				link = bzLinkStr
 				endpoint = bzEndpoint
 			} else {
-				link = bugLink
+				link = issueLink
 				endpoint = jiraEndpoint
 			}
 			if !bug.bugState.matches(*options.DependentBugStates) {
@@ -1295,7 +1341,7 @@ func validateBug(bug *jira.Issue, dependents []dependent, options JiraBranchOpti
 				link = bzLinkStr
 				endpoint = bzEndpoint
 			} else {
-				link = bugLink
+				link = issueLink
 				endpoint = jiraEndpoint
 			}
 			if bug.targetVersion == nil {
@@ -1318,14 +1364,14 @@ func validateBug(bug *jira.Issue, dependents []dependent, options JiraBranchOpti
 		case options.DependentBugStates != nil && options.DependentBugTargetVersions != nil:
 			valid = false
 			expected := strings.Join(prettyStates(*options.DependentBugStates), ", ")
-			errors = append(errors, fmt.Sprintf("expected "+bugLink+" to depend on a bug targeting a version in %s and in one of the following states: %s, but no dependents were found", bug.Key, jiraEndpoint, bug.Key, strings.Join(*options.DependentBugTargetVersions, ", "), expected))
+			errors = append(errors, fmt.Sprintf("expected "+issueLink+" to depend on a bug targeting a version in %s and in one of the following states: %s, but no dependents were found", bug.Key, jiraEndpoint, bug.Key, strings.Join(*options.DependentBugTargetVersions, ", "), expected))
 		case options.DependentBugStates != nil:
 			valid = false
 			expected := strings.Join(prettyStates(*options.DependentBugStates), ", ")
-			errors = append(errors, fmt.Sprintf("expected "+bugLink+" to depend on a bug in one of the following states: %s, but no dependents were found", bug.Key, jiraEndpoint, bug.Key, expected))
+			errors = append(errors, fmt.Sprintf("expected "+issueLink+" to depend on a bug in one of the following states: %s, but no dependents were found", bug.Key, jiraEndpoint, bug.Key, expected))
 		case options.DependentBugTargetVersions != nil:
 			valid = false
-			errors = append(errors, fmt.Sprintf("expected "+bugLink+" to depend on a bug targeting a version in %s, but no dependents were found", bug.Key, jiraEndpoint, bug.Key, strings.Join(*options.DependentBugTargetVersions, ", ")))
+			errors = append(errors, fmt.Sprintf("expected "+issueLink+" to depend on a bug targeting a version in %s, but no dependents were found", bug.Key, jiraEndpoint, bug.Key, strings.Join(*options.DependentBugTargetVersions, ", ")))
 		default:
 		}
 	} else {
@@ -1357,10 +1403,10 @@ func handleMerge(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 	if options.StateAfterMerge == nil {
 		return nil
 	}
-	if e.missing {
+	if e.missing || !e.isBug {
 		return nil
 	}
-	bug, err := getBug(jc, e.key, log, comment)
+	bug, err := getJira(jc, e.key, log, comment)
 	if err != nil || bug == nil {
 		return err
 	}
@@ -1379,7 +1425,7 @@ func handleMerge(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 			allowed = append(allowed, *options.StateAfterValidation)
 		}
 		if !bugMatchesStates(bug, allowed) {
-			return comment(fmt.Sprintf(bugLink+" is in an unrecognized state (%s) and will not be moved to the %s state.", e.key, jc.JiraURL(), e.key, bug.Fields.Status.Name, options.StateAfterMerge))
+			return comment(fmt.Sprintf(issueLink+" is in an unrecognized state (%s) and will not be moved to the %s state.", e.key, jc.JiraURL(), e.key, bug.Fields.Status.Name, options.StateAfterMerge))
 		}
 	}
 
@@ -1474,7 +1520,7 @@ These pull request must merge or be unlinked from the Jira bug in order for it t
 `, strings.Join(statements, "\n"))
 
 	outcomeMessage := func(action string) string {
-		return fmt.Sprintf(bugLink+" has %sbeen moved to the %s state.", e.key, jc.JiraURL(), e.key, action, options.StateAfterMerge)
+		return fmt.Sprintf(issueLink+" has %sbeen moved to the %s state.", e.key, jc.JiraURL(), e.key, action, options.StateAfterMerge)
 	}
 
 	if shouldMigrate {
@@ -1609,7 +1655,7 @@ func handleBZCherrypick(e event, gc githubClient, jc jiraclient.Client, bc bugzi
 	oldLink = fmt.Sprintf(bzLink, parentBZID, bc.Endpoint(), parentBZID)
 	// Replace old bugID in title with new cloneID
 	newTitle := strings.ReplaceAll(e.title, fmt.Sprintf("Bug %d", parentBZID), newIssue.Key)
-	cloneLink := fmt.Sprintf(bugLink, newIssue.Key, jc.JiraURL(), newIssue.Key)
+	cloneLink := fmt.Sprintf(issueLink, newIssue.Key, jc.JiraURL(), newIssue.Key)
 	response = fmt.Sprintf("%s%s has been cloned as %s. Retitling PR to link against new bug.\n/retitle %s", response, oldLink, cloneLink, newTitle)
 	return comment(response)
 }
@@ -1627,9 +1673,9 @@ func handleCherrypick(e event, gc githubClient, jc jiraclient.Client, bc bugzill
 			return comment(fmt.Sprintf("Error creating a cherry-pick bug in Jira: failed to check the state of cherrypicked pull request at https://github.com/%s/%s/pull/%d: %v.\nPlease contact an administrator to resolve this issue, then request a bug refresh with <code>/jira refresh</code>.", e.org, e.repo, e.cherrypickFromPRNum, err))
 		}
 		// Attempt to identify bug from PR title
-		var bugMissing bool
-		bugKey, bugMissing = bugKeyFromTitle(pr.Title)
-		if bugMissing {
+		var isBug bool
+		bugKey, _, isBug = jiraKeyFromTitle(pr.Title)
+		if !isBug {
 			bzID, missing, err := bzIDFromTitle(pr.Title)
 			if err != nil {
 				log.WithError(err).Warn("Unexpected error identifying bugzilla bug from title")
@@ -1645,11 +1691,11 @@ func handleCherrypick(e event, gc githubClient, jc jiraclient.Client, bc bugzill
 			}
 		}
 	}
-	// Since getBug generates a comment itself, we have to add a prefix explaining that this was a cherrypick attempt to the comment
+	// Since getJira generates a comment itself, we have to add a prefix explaining that this was a cherrypick attempt to the comment
 	commentWithPrefix := func(body string) error {
 		return comment(fmt.Sprintf("Failed to create a cherry-pick bug in Jira: %s", body))
 	}
-	bug, err := getBug(jc, bugKey, log, commentWithPrefix)
+	bug, err := getJira(jc, bugKey, log, commentWithPrefix)
 	if err != nil || bug == nil {
 		return err
 	}
@@ -1662,7 +1708,7 @@ func handleCherrypick(e event, gc githubClient, jc jiraclient.Client, bc bugzill
 		return nil
 	}
 	clones := identifyClones(bug)
-	oldLink := fmt.Sprintf(bugLink, bugKey, jc.JiraURL(), bugKey)
+	oldLink := fmt.Sprintf(issueLink, bugKey, jc.JiraURL(), bugKey)
 	if options.TargetVersion == nil {
 		return comment(fmt.Sprintf("Could not make automatic cherrypick of %s for this PR as the target version is not set for this branch in the jira plugin config. Running refresh:\n/jira refresh", oldLink))
 	}
@@ -1687,7 +1733,7 @@ func handleCherrypick(e event, gc githubClient, jc jiraclient.Client, bc bugzill
 		log.WithError(err).Debugf("Failed to clone bug %s", bugKey)
 		return comment(formatError("cloning bug for cherrypick", jc.JiraURL(), bug.Key, err))
 	}
-	cloneLink := fmt.Sprintf(bugLink, clone.Key, jc.JiraURL(), clone.Key)
+	cloneLink := fmt.Sprintf(issueLink, clone.Key, jc.JiraURL(), clone.Key)
 	// add blocking issue link between parent and clone
 	blockLink := jira.IssueLink{
 		OutwardIssue: &jira.Issue{ID: clone.ID},
@@ -1735,12 +1781,41 @@ WARNING: Failed to update the target version for the clone. Please update the ta
 	return comment(response)
 }
 
-func bugKeyFromTitle(title string) (string, bool) {
-	mat := titleMatch.FindStringSubmatch(title)
-	if mat == nil {
-		return "", true
+// return values:
+// 1: jira key, if matched
+// 2: missing: true/false based on whether the title is missing a jira ref
+// 3: isBug: true/false based on whether the ref is a bug(OCPBUGS) or other jira issue
+func jiraKeyFromTitle(title string) (string, bool, bool) {
+	bugMatch := titleMatchJiraBug.FindStringSubmatch(title)
+	jiraMatch := titleMatchJiraIssue.FindStringSubmatch(title)
+
+	// if we found both a generic jira ref, and an OCPBUGS specific jira ref in the
+	// title, prefer the one that appears earliest in the title.
+	if bugMatch != nil && jiraMatch != nil {
+		if bugMatch[0] != jiraMatch[0] {
+			bugIdx := strings.Index(title, bugMatch[0])
+			jiraIdx := strings.Index(title, jiraMatch[0])
+			if jiraIdx < bugIdx {
+				// the jira reference came first, so ignore the bug match
+				bugMatch = nil
+			}
+		}
 	}
-	return strings.TrimSuffix(mat[0], ":"), false
+
+	if bugMatch != nil {
+		return strings.TrimSuffix(bugMatch[0], ":"), false, true
+	}
+
+	if jiraMatch != nil {
+		match := strings.TrimSuffix(jiraMatch[0], ":")
+		if strings.EqualFold(match, "NO-ISSUE") || strings.EqualFold(match, "NO-JIRA") {
+			match = "NO-JIRA"
+		}
+		return match, false, false
+	}
+
+	return "", true, false
+
 }
 
 func bzIDFromTitle(title string) (int, bool, error) {
@@ -1756,19 +1831,19 @@ func bzIDFromTitle(title string) (int, bool, error) {
 	return bugID, false, nil
 }
 
-func getBug(jc jiraclient.Client, bugKey string, log *logrus.Entry, comment func(string) error) (*jira.Issue, error) {
-	bug, err := jc.GetIssue(bugKey)
+func getJira(jc jiraclient.Client, jiraKey string, log *logrus.Entry, comment func(string) error) (*jira.Issue, error) {
+	issue, err := jc.GetIssue(jiraKey)
 	if err != nil && !jiraclient.IsNotFound(err) {
-		log.WithError(err).Warn("Unexpected error searching for Jira bug.")
-		return nil, comment(formatError("searching", jc.JiraURL(), bugKey, err))
+		log.WithError(err).Warn("Unexpected error searching for Jira issue.")
+		return nil, comment(formatError("searching", jc.JiraURL(), jiraKey, err))
 	}
-	if jiraclient.IsNotFound(err) || bug == nil {
-		log.Debug("No bug found.")
+	if jiraclient.IsNotFound(err) || issue == nil {
+		log.Debug("No jira issue found.")
 		return nil, comment(fmt.Sprintf(`No Jira issue with key %s exists in the tracker at %s.
-Once a valid bug is referenced in the title of this pull request, request a bug refresh with <code>/jira refresh</code>.`,
-			bugKey, jc.JiraURL()))
+Once a valid jira issue is referenced in the title of this pull request, request a refresh with <code>/jira refresh</code>.`,
+			jiraKey, jc.JiraURL()))
 	}
-	return bug, nil
+	return issue, nil
 }
 
 func getBZBug(bc bugzilla.Client, bugId int, log *logrus.Entry, comment func(string) error) (*bugzilla.Bug, error) {
@@ -1853,11 +1928,11 @@ var PrivateVisibility = jira.CommentVisibility{Type: "group", Value: "Red Hat Em
 
 func handleClose(e event, gc githubClient, jc jiraclient.Client, options JiraBranchOptions, log *logrus.Entry) error {
 	comment := e.comment(gc)
-	if e.missing {
+	if e.missing || !e.isBug {
 		return nil
 	}
 	if options.AddExternalLink != nil && *options.AddExternalLink {
-		response := fmt.Sprintf(`This pull request references `+bugLink+`. The bug has been updated to no longer refer to the pull request using the external bug tracker.`, e.key, jc.JiraURL(), e.key)
+		response := fmt.Sprintf(`This pull request references `+issueLink+`. The bug has been updated to no longer refer to the pull request using the external bug tracker.`, e.key, jc.JiraURL(), e.key)
 		changed, err := jc.DeleteRemoteLinkViaURL(e.key, prURLFromCommentURL(e.htmlUrl))
 		if err != nil && !strings.HasPrefix(err.Error(), "could not find remote link on issue with URL") {
 			log.WithError(err).Warn("Unexpected error removing external tracker bug from Jira bug.")
@@ -1876,7 +1951,7 @@ func handleClose(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 					return comment(formatError("getting remote links", jc.JiraURL(), e.key, err))
 				}
 				if len(links) == 0 {
-					bug, err := getBug(jc, e.key, log, comment)
+					bug, err := getJira(jc, e.key, log, comment)
 					if err != nil || bug == nil {
 						return err
 					}
