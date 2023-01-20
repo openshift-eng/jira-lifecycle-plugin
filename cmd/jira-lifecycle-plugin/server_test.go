@@ -403,7 +403,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues:         []jira.Issue{{ID: "1", Key: "JIRA-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityModerate}}}},
 			labels:         []string{labels.JiraInvalidBug},
 			expectedLabels: []string{labels.JiraValidRef},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue JIRA-123](https://my-jira.com/browse/JIRA-123), which is a valid jira issue.
+			expectedComment: `org/repo#1:@user: This pull request references JIRA-123 which is a valid jira issue.
 
 <details>
 

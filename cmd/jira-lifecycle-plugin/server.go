@@ -420,9 +420,11 @@ func handle(jc jiraclient.Client, ghc githubClient, bc bugzilla.Client, options 
 			if e.key == "NO-JIRA" {
 				response = "This pull request explicitly references no jira issue."
 			} else {
-				response = fmt.Sprintf(`This pull request references `+issueLink+`, which is a valid jira issue.`, e.key, jc.JiraURL(), e.key)
+				// don't linkify the jira ref in this case because the prow-jira plugin will do so and we don't want it to
+				// end up double-linkified.  The prow-jira plugin is configured to not linkify OCPBUGS refs, but it will
+				// linkify refs to other projects.
+				response = fmt.Sprintf("This pull request references %s which is a valid jira issue.", e.key)
 			}
-
 		}
 	}
 	if e.isBug && issue != nil {
