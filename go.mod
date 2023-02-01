@@ -30,7 +30,7 @@ require (
 	github.com/trivago/tgo v1.0.7
 	k8s.io/apimachinery v0.24.2
 	k8s.io/code-generator v0.24.2
-	k8s.io/test-infra v0.0.0-20221125181604-b02ce7741ab3
+	k8s.io/test-infra v0.0.0-20230201191744-44a95fbf3607
 	k8s.io/utils v0.0.0-20220728103510-ee6ede2d64ed
 	sigs.k8s.io/yaml v1.3.0
 )
