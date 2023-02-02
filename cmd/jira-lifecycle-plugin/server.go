@@ -1102,7 +1102,7 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 			// this shouldn't be possible due to earlier cherrypick check
 			return nil, errors.New("failed to get cherrypick string match")
 		}
-		e.key = strings.TrimPrefix(mat[0], "/jira cherrypick ")
+		e.key = strings.TrimPrefix(strings.TrimRight(mat[0], "\r\n "), "/jira cherrypick ")
 		e.cherrypick = true
 		e.cherrypickCmd = true
 	}

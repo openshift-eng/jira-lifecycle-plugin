@@ -2875,6 +2875,33 @@ Instructions for interacting with me using PR comments are available [here](http
 				org: "org", repo: "repo", baseRef: "branch", number: 1, key: "OCPBUGS-1234", body: "/jira cherrypick OCPBUGS-1234", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: true, cherrypick: true,
 			},
 		},
+		{
+			name: "multiline cherrypick comment event",
+			e: github.IssueCommentEvent{
+				Action: github.IssueCommentActionCreated,
+				Issue: github.Issue{
+					Number:      1,
+					PullRequest: &struct{}{},
+				},
+				Comment: github.IssueComment{
+					Body: "/jira cherrypick OCPBUGS-1234\r\nThis is part of a\r\nmultiline comment",
+					User: github.User{
+						Login: "user",
+					},
+					HTMLURL: "www.com",
+				},
+				Repo: github.Repo{
+					Owner: github.User{
+						Login: "org",
+					},
+					Name: "repo",
+				},
+			},
+			title: "OCPBUGS-123: oopsie doopsie",
+			expected: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 1, key: "OCPBUGS-1234", body: "/jira cherrypick OCPBUGS-1234\r\nThis is part of a\r\nmultiline comment", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: false, cherrypick: true, isBug: true,
+			},
+		},
 	}
 
 	for _, testCase := range testCases {
