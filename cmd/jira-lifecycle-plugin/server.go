@@ -42,14 +42,19 @@ const (
 )
 
 var (
-	titleMatchJiraIssue    = regexp.MustCompile(`(?i)[A-Z]+-([0-9]+):|NO-JIRA:|NO-ISSUE:`)
-	titleMatchJiraBug      = regexp.MustCompile(`(?i)OCPBUGS-([0-9]+):`)
+	titleMatchJiraIssue    = regexp.MustCompile(`(?i)([[:alpha:]]+-\d+,)*(NO-JIRA|NO-ISSUE|[[:alpha:]]+-\d+)+:`)
 	bzTitleMatch           = regexp.MustCompile(`(?i)Bug\s+([0-9]+):`)
 	refreshCommandMatch    = regexp.MustCompile(`(?mi)^/jira refresh\s*$`)
 	qaReviewCommandMatch   = regexp.MustCompile(`(?mi)^/jira cc-qa\s*$`)
-	cherrypickCommandMatch = regexp.MustCompile(`(?mi)^/jira cherrypick OCPBUGS-([0-9]+)\s*$`)
+	cherrypickCommandMatch = regexp.MustCompile(`(?mi)^/jira cherrypick (OCPBUGS-(\d+),)*(OCPBUGS-(\d+))+\s*$`)
 	cherrypickPRMatch      = regexp.MustCompile(`This is an automated cherry-pick of #([0-9]+)`)
 )
+
+type referencedBug struct {
+	Key   string
+	IsBug bool
+	IsBZ  bool
+}
 
 type dependent struct {
 	isBZ             bool
@@ -362,31 +367,35 @@ func bzURLToID(url string) (int, error) {
 
 func handle(jc jiraclient.Client, ghc githubClient, bc bugzilla.Client, options JiraBranchOptions, log *logrus.Entry, e event, allRepos sets.String) error {
 	comment := e.comment(ghc)
-	// check if bug is part of a restricted security level; if e.key is not set, this is a bz cherrypick, so we can ignore as the bz cherrypick function checks allowed groups for us
-	if e.isBug && !e.missing && e.key != "" {
-		issue, err := getJira(jc, e.key, log, comment)
-		if err != nil || issue == nil {
-			return err
-		}
-		bugAllowed, err := isBugAllowed(issue, options.AllowedSecurityLevels)
-		if err != nil {
-			return err
-		}
-		if !bugAllowed {
-			// ignore bugs that are in non-allowed security levels for this repo
-			if e.opened || e.refresh {
-				response := fmt.Sprintf(issueLink+" is in a security level that is not in the allowed security levels for this repo.", e.key, jc.JiraURL(), e.key)
-				if len(options.AllowedSecurityLevels) > 0 {
-					response += "\nAllowed security levels for this repo are:"
-					for _, group := range options.AllowedSecurityLevels {
-						response += "\n- " + group
-					}
-				} else {
-					response += " There are no allowed security levels configured for this repo."
+	// check if bug is part of a restricted security level; if the bug is missing, this is a bz cherrypick, so we can ignore as the bz cherrypick function checks allowed groups for us
+	if !e.missing {
+		for _, refBug := range e.bugs {
+			if refBug.IsBug && refBug.Key != "" {
+				issue, err := getJira(jc, refBug.Key, log, comment)
+				if err != nil || issue == nil {
+					return err
 				}
-				return comment(response)
+				bugAllowed, err := isBugAllowed(issue, options.AllowedSecurityLevels)
+				if err != nil {
+					return err
+				}
+				if !bugAllowed {
+					// ignore bugs that are in non-allowed security levels for this repo
+					if e.opened || e.refresh {
+						response := fmt.Sprintf(issueLink+" is in a security level that is not in the allowed security levels for this repo.", refBug.Key, jc.JiraURL(), refBug.Key)
+						if len(options.AllowedSecurityLevels) > 0 {
+							response += "\nAllowed security levels for this repo are:"
+							for _, group := range options.AllowedSecurityLevels {
+								response += "\n- " + group
+							}
+						} else {
+							response += " There are no allowed security levels configured for this repo."
+						}
+						return comment(response)
+					}
+					return nil
+				}
 			}
-			return nil
 		}
 	}
 	// cherrypicks follow a different pattern than normal validation
@@ -404,201 +413,218 @@ func handle(jc jiraclient.Client, ghc githubClient, bc bugzilla.Client, options 
 
 	var needsJiraValidRefLabel, needsJiraValidBugLabel, needsJiraInvalidBugLabel bool
 	var response, severityLabel string
+	var invalidIssues []string
+	if !e.noJira {
+		for _, refBug := range e.bugs {
+			// separate responses for different bugs
+			if response != "" {
+				response += "\n\n"
+			}
+			var issue *jira.Issue
+			var err error
+			if !e.missing {
+				issue, err = getJira(jc, refBug.Key, log, comment)
+				if err != nil {
+					return err
+				}
+			}
 
-	var issue *jira.Issue
-	var err error
-	if !e.missing && e.key != "NO-JIRA" {
-		issue, err = getJira(jc, e.key, log, comment)
-		if err != nil {
-			return err
-		}
-	}
-
-	if issue != nil || e.key == "NO-JIRA" {
-		needsJiraValidRefLabel = true
-		if !e.isBug {
-			if e.key == "NO-JIRA" {
-				response = "This pull request explicitly references no jira issue."
+			if issue == nil {
+				invalidIssues = append(invalidIssues, refBug.Key)
 			} else {
-				// don't linkify the jira ref in this case because the prow-jira plugin will do so and we don't want it to
-				// end up double-linkified.  The prow-jira plugin is configured to not linkify OCPBUGS refs, but it will
-				// linkify refs to other projects.
-				response = fmt.Sprintf("This pull request references %s which is a valid jira issue.", e.key)
+				needsJiraValidRefLabel = true
+				if !refBug.IsBug {
+					// don't linkify the jira ref in this case because the prow-jira plugin will do so and we don't want it to
+					// end up double-linkified.  The prow-jira plugin is configured to not linkify OCPBUGS refs, but it will
+					// linkify refs to other projects.
+					response += fmt.Sprintf("This pull request references %s which is a valid jira issue.", refBug.Key)
+				}
 			}
-		}
-	}
-	if e.isBug && issue != nil {
-		log = log.WithField("refKey", e.key)
+			if refBug.IsBug && issue != nil {
+				log = log.WithField("refKey", refBug.Key)
 
-		severity, err := getSimplifiedSeverity(issue)
-		if err != nil {
-			return err
-		}
-
-		severityLabel = getSeverityLabel(severity)
-
-		var dependents []dependent
-		if options.DependentBugStates != nil || options.DependentBugTargetVersions != nil {
-			for _, link := range issue.Fields.IssueLinks {
-				// identify if bug depends on this link; multiple different types of links may be blocker types; more can be added as they are identified
-				dependsOn := false
-				dependsOn = dependsOn || (link.InwardIssue != nil && link.Type.Name == "Blocks" && link.Type.Inward == "is blocked by")
-				dependsOn = dependsOn || (link.OutwardIssue != nil && link.Type.Name == "Depend" && link.Type.Outward == "depends on")
-				if !dependsOn {
-					continue
-				}
-				// link may be either an outward or inward issue; depends on the link type
-				linkIssue := link.InwardIssue
-				if linkIssue == nil {
-					linkIssue = link.OutwardIssue
-				}
-				// the issue in the link is very trimmed down; get full link for dependentIssue list
-				dependentIssue, err := jc.GetIssue(linkIssue.Key)
+				severity, err := getSimplifiedSeverity(issue)
 				if err != nil {
-					return comment(formatError(fmt.Sprintf("searching for dependent bug %s", linkIssue.Key), jc.JiraURL(), e.key, err))
+					return err
 				}
-				targetVersion, err := helpers.GetIssueTargetVersion(dependentIssue)
-				if err != nil {
-					return comment(formatError(fmt.Sprintf("failed to get target version for %s", dependentIssue.Key), jc.JiraURL(), e.key, err))
-				}
-				var targetVersionString *string
-				if len(targetVersion) != 0 {
-					targetVersionString = &targetVersion[0].Name
-				}
-				dependentState := JiraBugState{}
-				if dependentIssue.Fields.Status != nil {
-					dependentState.Status = dependentIssue.Fields.Status.Name
-				}
-				if dependentIssue.Fields.Resolution != nil {
-					dependentState.Resolution = dependentIssue.Fields.Resolution.Name
-				}
-				newDependent := dependent{
-					key:           dependentIssue.Key,
-					targetVersion: targetVersionString,
-					bugState:      dependentState,
-				}
-				dependents = append(dependents, newDependent)
-			}
-			if bc != nil {
-				bzDependsOn, _ := helpers.GetIssueBlockedByBugzillaBug(issue)
-				if bzDependsOn != nil && len(*bzDependsOn) > 0 {
-					bzIDInt, err := bzURLToID(*bzDependsOn)
-					if err != nil {
-						return comment(formatError(fmt.Sprintf("converting bugzilla URL %s to an ID", *bzDependsOn), bc.Endpoint(), e.key, err))
-					}
 
-					bzDependent, err := getBZBug(bc, bzIDInt, log, comment)
-					if err != nil {
-						return err
-					}
-					dependents = append(dependents, bugzillaBugToDependent(bzDependent))
+				newSeverityLabel := getSeverityLabel(severity)
+				if newSeverityLabel == labels.SeverityCritical {
+					severityLabel = newSeverityLabel
+				} else if newSeverityLabel == labels.SeverityImportant && severityLabel != labels.SeverityCritical {
+					severityLabel = newSeverityLabel
+				} else if newSeverityLabel == labels.SeverityModerate && severityLabel != labels.SeverityCritical && severityLabel != labels.SeverityImportant {
+					severityLabel = newSeverityLabel
+				} else if newSeverityLabel == labels.SeverityLow && severityLabel != labels.SeverityCritical && severityLabel != labels.SeverityImportant && severityLabel != labels.SeverityModerate {
+					severityLabel = newSeverityLabel
+				} else if newSeverityLabel == informationalSeverity && severityLabel == "" {
+					severityLabel = newSeverityLabel
 				}
-			}
-		}
 
-		bugzillaURL := ""
-		if bc != nil {
-			bugzillaURL = bc.Endpoint()
-
-			// if bug depends on a bugzilla bug, sync keywords, whiteboard, and CVE info to labels
-			for _, dependent := range dependents {
-				if dependent.isBZ {
-					// this cannot error here, as we converted the key for bugzilla bugs from int to string above
-					bzID, _ := strconv.Atoi(dependent.key)
-					bzDependent, err := getBZBug(bc, bzID, log, comment)
-					if err != nil {
-						return err
-					}
-					labels, err := getBZLabels(bc, bzDependent)
-					if err != nil {
-						return comment(formatError("identifying labels from dependent bugzilla bug", bc.Endpoint(), e.key, err))
-					}
-					existingLabels := sets.NewString(issue.Fields.Labels...)
-					allLabels := sets.NewString()
-					changed := false
-					for _, label := range labels {
-						allLabels.Insert(label)
-						if !existingLabels.Has(label) {
-							changed = true
+				var dependents []dependent
+				if options.DependentBugStates != nil || options.DependentBugTargetVersions != nil {
+					for _, link := range issue.Fields.IssueLinks {
+						// identify if bug depends on this link; multiple different types of links may be blocker types; more can be added as they are identified
+						dependsOn := false
+						dependsOn = dependsOn || (link.InwardIssue != nil && link.Type.Name == "Blocks" && link.Type.Inward == "is blocked by")
+						dependsOn = dependsOn || (link.OutwardIssue != nil && link.Type.Name == "Depend" && link.Type.Outward == "depends on")
+						if !dependsOn {
+							continue
 						}
+						// link may be either an outward or inward issue; depends on the link type
+						linkIssue := link.InwardIssue
+						if linkIssue == nil {
+							linkIssue = link.OutwardIssue
+						}
+						// the issue in the link is very trimmed down; get full link for dependentIssue list
+						dependentIssue, err := jc.GetIssue(linkIssue.Key)
+						if err != nil {
+							return comment(formatError(fmt.Sprintf("searching for dependent bug %s", linkIssue.Key), jc.JiraURL(), refBug.Key, err))
+						}
+						targetVersion, err := helpers.GetIssueTargetVersion(dependentIssue)
+						if err != nil {
+							return comment(formatError(fmt.Sprintf("failed to get target version for %s", dependentIssue.Key), jc.JiraURL(), refBug.Key, err))
+						}
+						var targetVersionString *string
+						if len(targetVersion) != 0 {
+							targetVersionString = &targetVersion[0].Name
+						}
+						dependentState := JiraBugState{}
+						if dependentIssue.Fields.Status != nil {
+							dependentState.Status = dependentIssue.Fields.Status.Name
+						}
+						if dependentIssue.Fields.Resolution != nil {
+							dependentState.Resolution = dependentIssue.Fields.Resolution.Name
+						}
+						newDependent := dependent{
+							key:           dependentIssue.Key,
+							targetVersion: targetVersionString,
+							bugState:      dependentState,
+						}
+						dependents = append(dependents, newDependent)
 					}
-					if changed {
-						updateIssue := jira.Issue{Key: issue.Key, Fields: &jira.IssueFields{Labels: allLabels.List()}}
-						if _, err := jc.UpdateIssue(&updateIssue); err != nil {
-							log.WithError(err).Warn("Unexpected error updating jira issue.")
-							return comment(formatError(fmt.Sprintf("updating list of labels to: %+v", allLabels.List()), jc.JiraURL(), e.key, err))
+					if bc != nil {
+						bzDependsOn, _ := helpers.GetIssueBlockedByBugzillaBug(issue)
+						if bzDependsOn != nil && len(*bzDependsOn) > 0 {
+							bzIDInt, err := bzURLToID(*bzDependsOn)
+							if err != nil {
+								return comment(formatError(fmt.Sprintf("converting bugzilla URL %s to an ID", *bzDependsOn), bc.Endpoint(), refBug.Key, err))
+							}
+
+							bzDependent, err := getBZBug(bc, bzIDInt, log, comment)
+							if err != nil {
+								return err
+							}
+							dependents = append(dependents, bugzillaBugToDependent(bzDependent))
 						}
 					}
 				}
-			}
-		}
-		valid, invalidDependentProject, validationsRun, why := validateBug(issue, dependents, options, jc.JiraURL(), bugzillaURL)
-		needsJiraValidBugLabel, needsJiraInvalidBugLabel = valid, !valid
-		if valid {
-			log.Debug("Valid bug found.")
-			response = fmt.Sprintf(`This pull request references `+issueLink+`, which is valid.`, e.key, jc.JiraURL(), e.key)
-			// if configured, move the bug to the new state
-			if options.StateAfterValidation != nil {
-				if options.StateAfterValidation.Status != "" && (issue.Fields.Status == nil || !strings.EqualFold(options.StateAfterValidation.Status, issue.Fields.Status.Name)) {
-					if err := jc.UpdateStatus(issue.ID, options.StateAfterValidation.Status); err != nil {
-						log.WithError(err).Warn("Unexpected error updating jira issue.")
-						return comment(formatError(fmt.Sprintf("updating to the %s state", options.StateAfterValidation.Status), jc.JiraURL(), e.key, err))
-					}
-					if options.StateAfterValidation.Resolution != "" && (issue.Fields.Resolution == nil || !strings.EqualFold(options.StateAfterValidation.Resolution, issue.Fields.Resolution.Name)) {
-						updateIssue := jira.Issue{Key: issue.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterValidation.Resolution}}}
-						if _, err := jc.UpdateIssue(&updateIssue); err != nil {
-							log.WithError(err).Warn("Unexpected error updating jira issue.")
-							return comment(formatError(fmt.Sprintf("updating to the %s resolution", options.StateAfterValidation.Resolution), jc.JiraURL(), e.key, err))
+
+				bugzillaURL := ""
+				if bc != nil {
+					bugzillaURL = bc.Endpoint()
+
+					// if bug depends on a bugzilla bug, sync keywords, whiteboard, and CVE info to labels
+					for _, dependent := range dependents {
+						if dependent.isBZ {
+							// this cannot error here, as we converted the key for bugzilla bugs from int to string above
+							bzID, _ := strconv.Atoi(dependent.key)
+							bzDependent, err := getBZBug(bc, bzID, log, comment)
+							if err != nil {
+								return err
+							}
+							labels, err := getBZLabels(bc, bzDependent)
+							if err != nil {
+								return comment(formatError("identifying labels from dependent bugzilla bug", bc.Endpoint(), refBug.Key, err))
+							}
+							existingLabels := sets.NewString(issue.Fields.Labels...)
+							allLabels := sets.NewString()
+							changed := false
+							for _, label := range labels {
+								allLabels.Insert(label)
+								if !existingLabels.Has(label) {
+									changed = true
+								}
+							}
+							if changed {
+								updateIssue := jira.Issue{Key: issue.Key, Fields: &jira.IssueFields{Labels: allLabels.List()}}
+								if _, err := jc.UpdateIssue(&updateIssue); err != nil {
+									log.WithError(err).Warn("Unexpected error updating jira issue.")
+									return comment(formatError(fmt.Sprintf("updating list of labels to: %+v", allLabels.List()), jc.JiraURL(), refBug.Key, err))
+								}
+							}
 						}
 					}
-					response += fmt.Sprintf(" The bug has been moved to the %s state.", options.StateAfterValidation)
 				}
-			}
+				valid, invalidDependentProject, validationsRun, why := validateBug(issue, dependents, options, jc.JiraURL(), bugzillaURL)
+				if !needsJiraInvalidBugLabel {
+					needsJiraValidBugLabel, needsJiraInvalidBugLabel = valid, !valid
+				}
+				if valid {
+					log.Debug("Valid bug found.")
+					response += fmt.Sprintf(`This pull request references `+issueLink+`, which is valid.`, refBug.Key, jc.JiraURL(), refBug.Key)
+					// if configured, move the bug to the new state
+					if options.StateAfterValidation != nil {
+						if options.StateAfterValidation.Status != "" && (issue.Fields.Status == nil || !strings.EqualFold(options.StateAfterValidation.Status, issue.Fields.Status.Name)) {
+							if err := jc.UpdateStatus(issue.ID, options.StateAfterValidation.Status); err != nil {
+								log.WithError(err).Warn("Unexpected error updating jira issue.")
+								return comment(formatError(fmt.Sprintf("updating to the %s state", options.StateAfterValidation.Status), jc.JiraURL(), refBug.Key, err))
+							}
+							if options.StateAfterValidation.Resolution != "" && (issue.Fields.Resolution == nil || !strings.EqualFold(options.StateAfterValidation.Resolution, issue.Fields.Resolution.Name)) {
+								updateIssue := jira.Issue{Key: issue.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterValidation.Resolution}}}
+								if _, err := jc.UpdateIssue(&updateIssue); err != nil {
+									log.WithError(err).Warn("Unexpected error updating jira issue.")
+									return comment(formatError(fmt.Sprintf("updating to the %s resolution", options.StateAfterValidation.Resolution), jc.JiraURL(), refBug.Key, err))
+								}
+							}
+							response += fmt.Sprintf(" The bug has been moved to the %s state.", options.StateAfterValidation)
+						}
+					}
 
-			response += "\n\n<details>"
-			if len(validationsRun) == 0 {
-				response += "<summary>No validations were run on this bug</summary>"
-			} else {
-				response += fmt.Sprintf("<summary>%d validation(s) were run on this bug</summary>\n", len(validationsRun))
-			}
-			for _, validation := range validationsRun {
-				response += fmt.Sprint("\n* ", validation)
-			}
-			response += "</details>"
+					response += "\n\n<details>"
+					if len(validationsRun) == 0 {
+						response += "<summary>No validations were run on this bug</summary>"
+					} else {
+						response += fmt.Sprintf("<summary>%d validation(s) were run on this bug</summary>\n", len(validationsRun))
+					}
+					for _, validation := range validationsRun {
+						response += fmt.Sprint("\n* ", validation)
+					}
+					response += "</details>"
 
-			qaContactDetail, err := helpers.GetIssueQaContact(issue)
-			if err != nil {
-				return comment(formatError("processing qa contact information for the bug", jc.JiraURL(), e.key, err))
-			}
-			if qaContactDetail == nil {
-				if e.cc {
-					response += fmt.Sprintf(issueLink+" does not have a QA contact, skipping assignment", e.key, jc.JiraURL(), e.key)
-				}
-			} else if qaContactDetail.EmailAddress == "" {
-				if e.cc {
-					response += fmt.Sprintf("QA contact for "+issueLink+" does not have a listed email, skipping assignment", e.key, jc.JiraURL(), e.key)
-				}
-			} else {
-				query := &emailToLoginQuery{}
-				email := qaContactDetail.EmailAddress
-				queryVars := map[string]interface{}{
-					"email": githubql.String(email),
-				}
-				err := ghc.QueryWithGitHubAppsSupport(context.Background(), query, queryVars, e.org)
-				if err != nil {
-					log.WithError(err).Error("Failed to run graphql github query")
-					return comment(formatError(fmt.Sprintf("querying GitHub for users with public email (%s)", email), jc.JiraURL(), e.key, err))
-				}
-				response += fmt.Sprint("\n\n", processQuery(query, email, log))
-			}
-		} else {
-			log.Debug("Invalid bug found.")
-			var formattedReasons string
-			for _, reason := range why {
-				formattedReasons += fmt.Sprintf(" - %s\n", reason)
-			}
-			if invalidDependentProject {
-				formattedReasons += `
+					qaContactDetail, err := helpers.GetIssueQaContact(issue)
+					if err != nil {
+						return comment(formatError("processing qa contact information for the bug", jc.JiraURL(), refBug.Key, err))
+					}
+					if qaContactDetail == nil {
+						if e.cc {
+							response += fmt.Sprintf(issueLink+" does not have a QA contact, skipping assignment", refBug.Key, jc.JiraURL(), refBug.Key)
+						}
+					} else if qaContactDetail.EmailAddress == "" {
+						if e.cc {
+							response += fmt.Sprintf("QA contact for "+issueLink+" does not have a listed email, skipping assignment", refBug.Key, jc.JiraURL(), refBug.Key)
+						}
+					} else {
+						query := &emailToLoginQuery{}
+						email := qaContactDetail.EmailAddress
+						queryVars := map[string]interface{}{
+							"email": githubql.String(email),
+						}
+						err := ghc.QueryWithGitHubAppsSupport(context.Background(), query, queryVars, e.org)
+						if err != nil {
+							log.WithError(err).Error("Failed to run graphql github query")
+							return comment(formatError(fmt.Sprintf("querying GitHub for users with public email (%s)", email), jc.JiraURL(), refBug.Key, err))
+						}
+						response += fmt.Sprint("\n\n", processQuery(query, email, log))
+					}
+				} else {
+					log.Debug("Invalid bug found.")
+					var formattedReasons string
+					for _, reason := range why {
+						formattedReasons += fmt.Sprintf(" - %s\n", reason)
+					}
+					if invalidDependentProject {
+						formattedReasons += `
 All dependent bugs must be part of the OCPBUGS project. If you are backporting a fix that was originally tracked in Bugzilla, follow these steps to handle the backport:
 1. Create a new bug in the OCPBUGS Jira project to match the original bugzilla bug. The important fields that should match are the title, description, target version, and status.
 2. Use the Jira UI to clone the Jira bug, then in the clone bug:
@@ -608,22 +634,27 @@ All dependent bugs must be part of the OCPBUGS project. If you are backporting a
 
 Note that the mirrored bug in OCPBUGSM should not be involved in this process at all.
 `
-			}
-			response = fmt.Sprintf(`This pull request references `+issueLink+`, which is invalid:
+					}
+					response += fmt.Sprintf(`This pull request references `+issueLink+`, which is invalid:
 %s
-Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jira bug are made, or edit the title of this pull request to link to a different bug.`, e.key, jc.JiraURL(), e.key, formattedReasons)
-		}
+Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jira bug are made, or edit the title of this pull request to link to a different bug.`, refBug.Key, jc.JiraURL(), refBug.Key, formattedReasons)
+				}
 
-		if options.AddExternalLink != nil && *options.AddExternalLink {
-			changed, err := upsertGitHubLinkToIssue(log, issue.ID, jc, e)
-			if err != nil {
-				log.WithError(err).Warn("Unexpected error adding external tracker bug to Jira bug.")
-				return comment(formatError("adding this pull request to the external tracker bugs", jc.JiraURL(), e.key, err))
-			}
-			if changed {
-				response += "\n\nThe bug has been updated to refer to the pull request using the external bug tracker."
+				if options.AddExternalLink != nil && *options.AddExternalLink {
+					changed, err := upsertGitHubLinkToIssue(log, issue.ID, jc, e)
+					if err != nil {
+						log.WithError(err).Warn("Unexpected error adding external tracker bug to Jira bug.")
+						return comment(formatError("adding this pull request to the external tracker bugs", jc.JiraURL(), refBug.Key, err))
+					}
+					if changed {
+						response += "\n\nThe bug has been updated to refer to the pull request using the external bug tracker."
+					}
+				}
 			}
 		}
+	} else {
+		needsJiraValidRefLabel = true
+		response = "This pull request explicitly references no jira issue."
 	}
 
 	// ensure label state is correct. Do not propagate errors
@@ -662,9 +693,10 @@ Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jir
 	if e.missing && (e.refresh || e.cc || hasJiraInvalidBugLabel || hasValidBZLabel || hasJiraValidBugLabel || hasJiraValidRefLabel) {
 		response = `No Jira issue is referenced in the title of this pull request.
 To reference a jira issue, add 'XYZ-NNN:' to the title of this pull request and request another refresh with <code>/jira refresh</code>.`
-	} else if e.key != "NO-JIRA" && issue == nil && (e.refresh || e.cc || hasJiraInvalidBugLabel || hasValidBZLabel || hasJiraValidBugLabel) {
+	} else if !e.noJira && len(invalidIssues) != 0 && (e.refresh || e.cc || hasJiraInvalidBugLabel || hasValidBZLabel || hasJiraValidBugLabel) {
 		// if the user attempted to reference a jira key, but we couldn't find the key in jira, give feedback to the user.
-		response = fmt.Sprintf("The referenced Jira %s could not be located, all automatically applied jira labels will be removed.", e.key)
+		response = fmt.Sprintf("The referenced Jira(s) %v could not be located, all automatically applied jira labels will be removed.", invalidIssues)
+		needsJiraValidRefLabel = false
 	}
 
 	if severityLabelToRemove != "" && severityLabel != severityLabelToRemove {
@@ -996,9 +1028,7 @@ func digestPR(log *logrus.Entry, pre github.PullRequestEvent, validateByDefault 
 	e := &event{org: org, repo: repo, baseRef: baseRef, number: number, merged: pre.PullRequest.Merged, closed: pre.Action == github.PullRequestActionClosed, opened: pre.Action == github.PullRequestActionOpened, state: pre.PullRequest.State, body: body, title: title, htmlUrl: pre.PullRequest.HTMLURL, login: pre.PullRequest.User.Login}
 	// Make sure the PR title is referencing a bug
 	var err error
-	e.key, e.missing, e.isBug = jiraKeyFromTitle(title)
-	// in the case that the title used to reference a bug and no longer does we
-	// want to handle this to remove labels
+	e.bugs, e.missing, e.noJira = jiraKeyFromTitle(title)
 
 	// Check if PR is a cherrypick
 	cherrypick, cherrypickFromPRNum, err := getCherryPickMatch(pre)
@@ -1038,18 +1068,26 @@ func digestPR(log *logrus.Entry, pre github.PullRequestEvent, validateByDefault 
 		// we're detecting this best-effort so we can handle it anyway
 		return intermediate, nil
 	}
-	prevId, missing, _ := jiraKeyFromTitle(changes.Title.From)
+	prevIds, missing, _ := jiraKeyFromTitle(changes.Title.From)
 	if missing {
 		// title did not previously reference a bug
 		return intermediate, nil
 	}
 
 	// if the referenced bug has not changed in the update, ignore it
-	if prevId == e.key {
-		logrus.Debugf("Referenced Jira issue (%s) has not changed, not handling event.", e.key)
-		return nil, nil
+	if len(prevIds) == len(e.bugs) {
+		var changed bool
+		for index, prevBug := range prevIds {
+			if e.bugs[index].Key != prevBug.Key {
+				changed = true
+				break
+			}
+		}
+		if !changed {
+			logrus.Debugf("Referenced Jira issue(s) (%+v) has not changed, not handling event.", e.bugs)
+			return nil, nil
+		}
 	}
-
 	// we know the PR previously referenced a bug, so whether
 	// it currently does or does not reference a bug, we should
 	// handle the event
@@ -1094,7 +1132,7 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 
 	e := &event{org: org, repo: repo, baseRef: pr.Base.Ref, number: number, merged: pr.Merged, state: pr.State, body: ice.Comment.Body, title: ice.Issue.Title, htmlUrl: ice.Comment.HTMLURL, login: ice.Comment.User.Login, refresh: refresh, cc: cc}
 
-	e.key, e.missing, e.isBug = jiraKeyFromTitle(pr.Title)
+	e.bugs, e.missing, e.noJira = jiraKeyFromTitle(pr.Title)
 
 	if cherrypick {
 		mat := cherrypickCommandMatch.FindStringSubmatch(ice.Comment.Body)
@@ -1102,7 +1140,15 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 			// this shouldn't be possible due to earlier cherrypick check
 			return nil, errors.New("failed to get cherrypick string match")
 		}
-		e.key = strings.TrimPrefix(strings.TrimRight(mat[0], "\r\n "), "/jira cherrypick ")
+		keys := strings.TrimPrefix(strings.TrimRight(mat[0], "\r\n "), "/jira cherrypick ")
+		splitKeys := strings.Split(keys, ",")
+		e.bugs = []referencedBug{} // reset bugs list to only include cherrypick comment specified bugs
+		for _, key := range splitKeys {
+			e.bugs = append(e.bugs, referencedBug{
+				Key:   key,
+				IsBug: strings.Contains(key, "OCPBUGS-"),
+			})
+		}
 		e.cherrypick = true
 		e.cherrypickCmd = true
 	}
@@ -1113,8 +1159,8 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 type event struct {
 	org, repo, baseRef              string
 	number                          int
-	key                             string
-	isBug                           bool
+	bugs                            []referencedBug
+	noJira                          bool
 	missing, merged, closed, opened bool
 	state                           string
 	body, title, htmlUrl, login     string
@@ -1400,150 +1446,172 @@ type prParts struct {
 }
 
 func handleMerge(e event, gc githubClient, jc jiraclient.Client, options JiraBranchOptions, log *logrus.Entry, allRepos sets.String) error {
-	comment := e.comment(gc)
-
 	if options.StateAfterMerge == nil {
 		return nil
 	}
-	if e.missing || !e.isBug {
+	if e.missing {
 		return nil
 	}
-	bug, err := getJira(jc, e.key, log, comment)
-	if err != nil || bug == nil {
-		return err
-	}
-	if options.ValidStates != nil || options.StateAfterValidation != nil {
-		// we should only migrate if we can be fairly certain that the bug
-		// is not in a state that required human intervention to get to.
-		// For instance, if a bug is closed after a PR merges it should not
-		// be possible for /jira refresh to move it back to the post-merge
-		// state.
-		var allowed []JiraBugState
-		if options.ValidStates != nil {
-			allowed = append(allowed, *options.ValidStates...)
-		}
+	comment := e.comment(gc)
 
-		if options.StateAfterValidation != nil {
-			allowed = append(allowed, *options.StateAfterValidation)
-		}
-		if !bugMatchesStates(bug, allowed) {
-			return comment(fmt.Sprintf(issueLink+" is in an unrecognized state (%s) and will not be moved to the %s state.", e.key, jc.JiraURL(), e.key, bug.Fields.Status.Name, options.StateAfterMerge))
-		}
-	}
-
-	links, err := jc.GetRemoteLinks(bug.ID)
-	if err != nil {
-		log.WithError(err).Warn("Unexpected error listing external tracker bugs for Jira bug.")
-		return comment(formatError("searching for external tracker bugs", jc.JiraURL(), e.key, err))
-	}
-	shouldMigrate := true
-	var mergedPRs []prParts
-	unmergedPrStates := map[prParts]string{}
-	for _, link := range links {
-		identifier := strings.TrimPrefix(link.Object.URL, "https://github.com/")
-		parts := strings.Split(identifier, "/")
-		if len(parts) >= 3 && parts[2] != "pull" {
-			// this is not a github link
+	msg := ""
+	for _, refBug := range e.bugs {
+		if !refBug.IsBug {
 			continue
 		}
-		if len(parts) != 4 && !(len(parts) == 5 && (parts[4] == "" || parts[4] == "files")) && !(len(parts) == 6 && ((parts[4] == "files" && parts[5] == "") || parts[4] == "commits")) {
-			log.WithError(err).Warn("Unexpected error splitting github URL for Jira external link.")
-			return comment(formatError(fmt.Sprintf("invalid pull identifier with %d parts: %q", len(parts), identifier), jc.JiraURL(), e.key, err))
+		if msg != "" {
+			msg += "\n\n"
 		}
-		number, err := strconv.Atoi(parts[3])
-		if err != nil {
-			log.WithError(err).Warn("Unexpected error splitting github URL for Jira external link.")
-			return comment(formatError(fmt.Sprintf("invalid pull identifier: could not parse %s as number", parts[3]), jc.JiraURL(), e.key, err))
+		bug, err := getJira(jc, refBug.Key, log, comment)
+		if err != nil || bug == nil {
+			return err
 		}
-		item := prParts{
-			Org:  parts[0],
-			Repo: parts[1],
-			Num:  number,
-		}
-		var merged bool
-		var state string
-		if e.org == item.Org && e.repo == item.Repo && e.number == item.Num {
-			merged = e.merged
-			state = e.state
-		} else {
-			// This could be literally anything, only process PRs in repos that are mentioned in our config, otherwise this will potentially
-			// fail.
-			if !allRepos.Has(item.Org + "/" + item.Repo) {
-				logrus.WithField("pr", item.Org+"/"+item.Repo+"#"+strconv.Itoa(item.Num)).Debug("Not processing PR from third-party repo")
+		if options.ValidStates != nil || options.StateAfterValidation != nil {
+			// we should only migrate if we can be fairly certain that the bug
+			// is not in a state that required human intervention to get to.
+			// For instance, if a bug is closed after a PR merges it should not
+			// be possible for /jira refresh to move it back to the post-merge
+			// state.
+			var allowed []JiraBugState
+			if options.ValidStates != nil {
+				allowed = append(allowed, *options.ValidStates...)
+			}
+
+			if options.StateAfterValidation != nil {
+				allowed = append(allowed, *options.StateAfterValidation)
+			}
+			if !bugMatchesStates(bug, allowed) {
+				msg += fmt.Sprintf(issueLink+" is in an unrecognized state (%s) and will not be moved to the %s state.", refBug.Key, jc.JiraURL(), refBug.Key, bug.Fields.Status.Name, options.StateAfterMerge)
 				continue
 			}
-			pr, err := gc.GetPullRequest(item.Org, item.Repo, item.Num)
-			if err != nil {
-				log.WithError(err).Warn("Unexpected error checking merge state of related pull request.")
-				return comment(formatError(fmt.Sprintf("checking the state of a related pull request at https://github.com/%s/%s/pull/%d", item.Org, item.Repo, item.Num), jc.JiraURL(), e.key, err))
+		}
+
+		links, err := jc.GetRemoteLinks(bug.ID)
+		if err != nil {
+			log.WithError(err).Warn("Unexpected error listing external tracker bugs for Jira bug.")
+			msg += formatError("searching for external tracker bugs", jc.JiraURL(), refBug.Key, err)
+			continue
+		}
+		shouldMigrate := true
+		var mergedPRs []prParts
+		unmergedPrStates := map[prParts]string{}
+		for _, link := range links {
+			identifier := strings.TrimPrefix(link.Object.URL, "https://github.com/")
+			parts := strings.Split(identifier, "/")
+			if len(parts) >= 3 && parts[2] != "pull" {
+				// this is not a github link
+				continue
 			}
-			merged = pr.Merged
-			state = pr.State
+			if len(parts) != 4 && !(len(parts) == 5 && (parts[4] == "" || parts[4] == "files")) && !(len(parts) == 6 && ((parts[4] == "files" && parts[5] == "") || parts[4] == "commits")) {
+				log.WithError(err).Warn("Unexpected error splitting github URL for Jira external link.")
+				msg += formatError(fmt.Sprintf("invalid pull identifier with %d parts: %q", len(parts), identifier), jc.JiraURL(), refBug.Key, err)
+				continue
+			}
+			number, err := strconv.Atoi(parts[3])
+			if err != nil {
+				log.WithError(err).Warn("Unexpected error splitting github URL for Jira external link.")
+				msg += formatError(fmt.Sprintf("invalid pull identifier: could not parse %s as number", parts[3]), jc.JiraURL(), refBug.Key, err)
+				continue
+			}
+			item := prParts{
+				Org:  parts[0],
+				Repo: parts[1],
+				Num:  number,
+			}
+			var merged bool
+			var state string
+			if e.org == item.Org && e.repo == item.Repo && e.number == item.Num {
+				merged = e.merged
+				state = e.state
+			} else {
+				// This could be literally anything, only process PRs in repos that are mentioned in our config, otherwise this will potentially
+				// fail.
+				if !allRepos.Has(item.Org + "/" + item.Repo) {
+					logrus.WithField("pr", item.Org+"/"+item.Repo+"#"+strconv.Itoa(item.Num)).Debug("Not processing PR from third-party repo")
+					continue
+				}
+				pr, err := gc.GetPullRequest(item.Org, item.Repo, item.Num)
+				if err != nil {
+					log.WithError(err).Warn("Unexpected error checking merge state of related pull request.")
+					msg += formatError(fmt.Sprintf("checking the state of a related pull request at https://github.com/%s/%s/pull/%d", item.Org, item.Repo, item.Num), jc.JiraURL(), refBug.Key, err)
+					continue
+				}
+				merged = pr.Merged
+				state = pr.State
+			}
+			if merged {
+				mergedPRs = append(mergedPRs, item)
+			} else {
+				unmergedPrStates[item] = state
+			}
+			// only update Jira bug status if all PRs have merged
+			shouldMigrate = shouldMigrate && merged
+			if !shouldMigrate {
+				// we could give more complete feedback to the user by checking all PRs
+				// but we save tokens by exiting when we find an unmerged one, so we
+				// prefer to do that
+				break
+			}
 		}
-		if merged {
-			mergedPRs = append(mergedPRs, item)
-		} else {
-			unmergedPrStates[item] = state
-		}
-		// only update Jira bug status if all PRs have merged
-		shouldMigrate = shouldMigrate && merged
-		if !shouldMigrate {
-			// we could give more complete feedback to the user by checking all PRs
-			// but we save tokens by exiting when we find an unmerged one, so we
-			// prefer to do that
-			break
-		}
-	}
 
-	link := func(pr prParts) string {
-		return fmt.Sprintf("[%s/%s#%d](https://github.com/%s/%s/pull/%d)", pr.Org, pr.Repo, pr.Num, pr.Org, pr.Repo, pr.Num)
-	}
-
-	mergedMessage := func(statement string) string {
-		var links []string
-		for _, bug := range mergedPRs {
-			links = append(links, fmt.Sprintf(" * %s", link(bug)))
+		link := func(pr prParts) string {
+			return fmt.Sprintf("[%s/%s#%d](https://github.com/%s/%s/pull/%d)", pr.Org, pr.Repo, pr.Num, pr.Org, pr.Repo, pr.Num)
 		}
-		return fmt.Sprintf(`%s pull requests linked via external trackers have merged:
+
+		mergedMessage := func(statement string) string {
+			var links []string
+			for _, bug := range mergedPRs {
+				links = append(links, fmt.Sprintf(" * %s", link(bug)))
+			}
+			return fmt.Sprintf(`%s pull requests linked via external trackers have merged:
 %s
 
 `, statement, strings.Join(links, "\n"))
-	}
+		}
 
-	var statements []string
-	for bug, state := range unmergedPrStates {
-		statements = append(statements, fmt.Sprintf(" * %s is %s", link(bug), state))
-	}
-	unmergedMessage := fmt.Sprintf(`The following pull requests linked via external trackers have not merged:
+		var statements []string
+		for bug, state := range unmergedPrStates {
+			statements = append(statements, fmt.Sprintf(" * %s is %s", link(bug), state))
+		}
+		unmergedMessage := fmt.Sprintf(`The following pull requests linked via external trackers have not merged:
 %s
 
 These pull request must merge or be unlinked from the Jira bug in order for it to move to the next state. Once unlinked, request a bug refresh with <code>/jira refresh</code>.
 
 `, strings.Join(statements, "\n"))
 
-	outcomeMessage := func(action string) string {
-		return fmt.Sprintf(issueLink+" has %sbeen moved to the %s state.", e.key, jc.JiraURL(), e.key, action, options.StateAfterMerge)
-	}
+		outcomeMessage := func(action string) string {
+			return fmt.Sprintf(issueLink+" has %sbeen moved to the %s state.", refBug.Key, jc.JiraURL(), refBug.Key, action, options.StateAfterMerge)
+		}
 
-	if shouldMigrate {
-		if options.StateAfterMerge != nil {
-			if options.StateAfterMerge.Status != "" && (bug.Fields.Status == nil || !strings.EqualFold(options.StateAfterMerge.Status, bug.Fields.Status.Name)) {
-				if err := jc.UpdateStatus(e.key, options.StateAfterMerge.Status); err != nil {
-					log.WithError(err).Warn("Unexpected error updating jira issue.")
-					return comment(formatError(fmt.Sprintf("updating to the %s state", options.StateAfterMerge.Status), jc.JiraURL(), e.key, err))
-				}
-				if options.StateAfterMerge.Resolution != "" && (bug.Fields.Resolution == nil || !strings.EqualFold(options.StateAfterMerge.Resolution, bug.Fields.Resolution.Name)) {
-					updateIssue := jira.Issue{Key: bug.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterMerge.Resolution}}}
-					if _, err := jc.UpdateIssue(&updateIssue); err != nil {
+		if shouldMigrate {
+			if options.StateAfterMerge != nil {
+				if options.StateAfterMerge.Status != "" && (bug.Fields.Status == nil || !strings.EqualFold(options.StateAfterMerge.Status, bug.Fields.Status.Name)) {
+					if err := jc.UpdateStatus(refBug.Key, options.StateAfterMerge.Status); err != nil {
 						log.WithError(err).Warn("Unexpected error updating jira issue.")
-						return comment(formatError(fmt.Sprintf("updating to the %s resolution", options.StateAfterMerge.Resolution), jc.JiraURL(), e.key, err))
+						msg += formatError(fmt.Sprintf("updating to the %s state", options.StateAfterMerge.Status), jc.JiraURL(), refBug.Key, err)
+						continue
+					}
+					if options.StateAfterMerge.Resolution != "" && (bug.Fields.Resolution == nil || !strings.EqualFold(options.StateAfterMerge.Resolution, bug.Fields.Resolution.Name)) {
+						updateIssue := jira.Issue{Key: bug.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterMerge.Resolution}}}
+						if _, err := jc.UpdateIssue(&updateIssue); err != nil {
+							log.WithError(err).Warn("Unexpected error updating jira issue.")
+							msg += formatError(fmt.Sprintf("updating to the %s resolution", options.StateAfterMerge.Resolution), jc.JiraURL(), refBug.Key, err)
+							continue
+						}
 					}
 				}
 			}
+			msg += fmt.Sprintf(issueLink+": %s%s", refBug.Key, jc.JiraURL(), refBug.Key, mergedMessage("All"), outcomeMessage(""))
+			continue
 		}
-		return comment(fmt.Sprintf("%s%s", mergedMessage("All"), outcomeMessage("")))
+		msg += fmt.Sprintf(issueLink+": %s%s%s", refBug.Key, jc.JiraURL(), refBug.Key, mergedMessage("Some"), unmergedMessage, outcomeMessage("not "))
 	}
-	return comment(fmt.Sprintf("%s%s%s", mergedMessage("Some"), unmergedMessage, outcomeMessage("not ")))
+	if msg == "" {
+		return nil
+	} else {
+		return comment(msg)
+	}
 }
 
 func identifyClones(issue *jira.Issue) []*jira.Issue {
@@ -1652,7 +1720,7 @@ func handleBZCherrypick(e event, gc githubClient, jc jiraclient.Client, bc bugzi
 	newIssue, err = jc.CreateIssue(newIssue)
 	if err != nil {
 		log.WithError(err).Error("failed to create jira issue for bz backport")
-		return comment(formatError("creating backport issue", jc.JiraURL(), e.key, err))
+		return comment(formatError("creating backport issue", jc.JiraURL(), e.bugs[0].Key, err))
 	}
 	oldLink = fmt.Sprintf(bzLink, parentBZID, bc.Endpoint(), parentBZID)
 	// Replace old bugID in title with new cloneID
@@ -1664,9 +1732,9 @@ func handleBZCherrypick(e event, gc githubClient, jc jiraclient.Client, bc bugzi
 
 func handleCherrypick(e event, gc githubClient, jc jiraclient.Client, bc bugzilla.Client, options JiraBranchOptions, log *logrus.Entry) error {
 	comment := e.comment(gc)
-	var bugKey string
+	var bugs []referencedBug
 	if e.cherrypickCmd {
-		bugKey = e.key
+		bugs = e.bugs
 	} else {
 		// get the info for the PR being cherrypicked from
 		pr, err := gc.GetPullRequest(e.org, e.repo, e.cherrypickFromPRNum)
@@ -1675,9 +1743,8 @@ func handleCherrypick(e event, gc githubClient, jc jiraclient.Client, bc bugzill
 			return comment(fmt.Sprintf("Error creating a cherry-pick bug in Jira: failed to check the state of cherrypicked pull request at https://github.com/%s/%s/pull/%d: %v.\nPlease contact an administrator to resolve this issue, then request a bug refresh with <code>/jira refresh</code>.", e.org, e.repo, e.cherrypickFromPRNum, err))
 		}
 		// Attempt to identify bug from PR title
-		var isBug bool
-		bugKey, _, isBug = jiraKeyFromTitle(pr.Title)
-		if !isBug {
+		bugs, _, _ = jiraKeyFromTitle(pr.Title)
+		if len(bugs) == 0 {
 			bzID, missing, err := bzIDFromTitle(pr.Title)
 			if err != nil {
 				log.WithError(err).Warn("Unexpected error identifying bugzilla bug from title")
@@ -1697,79 +1764,82 @@ func handleCherrypick(e event, gc githubClient, jc jiraclient.Client, bc bugzill
 	commentWithPrefix := func(body string) error {
 		return comment(fmt.Sprintf("Failed to create a cherry-pick bug in Jira: %s", body))
 	}
-	bug, err := getJira(jc, bugKey, log, commentWithPrefix)
-	if err != nil || bug == nil {
-		return err
-	}
-	allowed, err := isBugAllowed(bug, options.AllowedSecurityLevels)
-	if err != nil {
-		return fmt.Errorf("failed to check is issue is in allowed security level: %w", err)
-	}
-	if !allowed {
-		// ignore bugs that are in non-allowed groups for this repo
-		return nil
-	}
-	clones := identifyClones(bug)
-	oldLink := fmt.Sprintf(issueLink, bugKey, jc.JiraURL(), bugKey)
-	if options.TargetVersion == nil {
-		return comment(fmt.Sprintf("Could not make automatic cherrypick of %s for this PR as the target version is not set for this branch in the jira plugin config. Running refresh:\n/jira refresh", oldLink))
-	}
-	targetVersion := *options.TargetVersion
-	for _, baseClone := range clones {
-		// get full issue struct
-		clone, err := jc.GetIssue(baseClone.Key)
+	msg := ""
+	retitleList := make(map[string]string)
+refBugLoop:
+	for _, refBug := range bugs {
+		bug, err := getJira(jc, refBug.Key, log, commentWithPrefix)
+		if err != nil || bug == nil {
+			return err
+		}
+		allowed, err := isBugAllowed(bug, options.AllowedSecurityLevels)
 		if err != nil {
-			return fmt.Errorf("failed to get %s, which is a clone of %s: %w", baseClone.Key, bug.Key, err)
+			return fmt.Errorf("failed to check is issue is in allowed security level: %w", err)
 		}
-		cloneVersion, err := helpers.GetIssueTargetVersion(clone)
+		if !allowed {
+			// ignore bugs that are in non-allowed groups for this repo
+			continue
+		}
+		clones := identifyClones(bug)
+		oldLink := fmt.Sprintf(issueLink, refBug.Key, jc.JiraURL(), refBug.Key)
+		if options.TargetVersion == nil {
+			msg += fmt.Sprintf("Could not make automatic cherrypick of %s for this PR as the target version is not set for this branch in the jira plugin config. Running refresh:\n/jira refresh", oldLink) + "\n\n"
+			continue
+		}
+		targetVersion := *options.TargetVersion
+		for _, baseClone := range clones {
+			// get full issue struct
+			clone, err := jc.GetIssue(baseClone.Key)
+			if err != nil {
+				return fmt.Errorf("failed to get %s, which is a clone of %s: %w", baseClone.Key, bug.Key, err)
+			}
+			cloneVersion, err := helpers.GetIssueTargetVersion(clone)
+			if err != nil {
+				msg += formatError(fmt.Sprintf("getting the target version for clone %s", clone.Key), jc.JiraURL(), bug.Key, err) + "\n\n"
+				continue refBugLoop
+			}
+			if len(cloneVersion) == 1 && cloneVersion[0].Name == targetVersion {
+				msg += fmt.Sprintf("Detected clone of %s with correct target version. Will retitle the PR to link to the clone.", oldLink) + "\n\n"
+				retitleList[bug.Key] = clone.Key
+				continue refBugLoop
+			}
+		}
+		clone, err := jc.CloneIssue(bug)
 		if err != nil {
-			return comment(formatError(fmt.Sprintf("getting the target version for clone %s", clone.Key), jc.JiraURL(), bug.Key, err))
+			log.WithError(err).Debugf("Failed to clone bug %+v", bugs)
+			msg += formatError("cloning bug for cherrypick", jc.JiraURL(), bug.Key, err) + "\n\n"
+			continue
 		}
-		if len(cloneVersion) == 1 && cloneVersion[0].Name == targetVersion {
-			newTitle := strings.Replace(e.title, bugKey, clone.Key, 1)
-			return comment(fmt.Sprintf("Detected clone of %s with correct target version. Retitling PR to link to clone:\n/retitle %s", oldLink, newTitle))
-		}
-	}
-	clone, err := jc.CloneIssue(bug)
-	if err != nil {
-		log.WithError(err).Debugf("Failed to clone bug %s", bugKey)
-		return comment(formatError("cloning bug for cherrypick", jc.JiraURL(), bug.Key, err))
-	}
-	cloneLink := fmt.Sprintf(issueLink, clone.Key, jc.JiraURL(), clone.Key)
-	// add blocking issue link between parent and clone
-	blockLink := jira.IssueLink{
-		OutwardIssue: &jira.Issue{ID: clone.ID},
-		InwardIssue:  &jira.Issue{ID: bug.ID},
-		Type: jira.IssueLinkType{
-			Name:    "Blocks",
-			Inward:  "is blocked by",
-			Outward: "blocks",
-		},
-	}
-	if err := jc.CreateIssueLink(&blockLink); err != nil {
-		log.WithError(err).Debugf("Unable to create blocks link for bug %s", clone.Key)
-		return comment(formatError(fmt.Sprintf("updating cherry-pick bug in Jira: Created cherrypick %s, but encountered error creating `Blocks` type link with original bug", cloneLink), jc.JiraURL(), clone.Key, err))
-	}
-	// Replace old bugID in title with new cloneID
-	var newTitle string
-	if e.cherrypickCmd {
-		newTitle = fmt.Sprintf("%s: %s", clone.Key, e.title)
-	} else {
-		newTitle = strings.ReplaceAll(e.title, bugKey, clone.Key)
-	}
-	response := fmt.Sprintf("%s has been cloned as %s. Retitling PR to link against new bug.\n/retitle %s", oldLink, cloneLink, newTitle)
-	// Update the version of the bug to the target release
-	update := jira.Issue{
-		Key: clone.Key,
-		Fields: &jira.IssueFields{
-			Unknowns: tcontainer.MarshalMap{
-				helpers.TargetVersionField: []*jira.Version{{Name: targetVersion}},
+		cloneLink := fmt.Sprintf(issueLink, clone.Key, jc.JiraURL(), clone.Key)
+		// add blocking issue link between parent and clone
+		blockLink := jira.IssueLink{
+			OutwardIssue: &jira.Issue{ID: clone.ID},
+			InwardIssue:  &jira.Issue{ID: bug.ID},
+			Type: jira.IssueLinkType{
+				Name:    "Blocks",
+				Inward:  "is blocked by",
+				Outward: "blocks",
 			},
-		},
-	}
-	_, err = jc.UpdateIssue(&update)
-	if err != nil {
-		response += fmt.Sprintf(`
+		}
+		if err := jc.CreateIssueLink(&blockLink); err != nil {
+			log.WithError(err).Debugf("Unable to create blocks link for bug %s", clone.Key)
+			msg += formatError(fmt.Sprintf("updating cherry-pick bug in Jira: Created cherrypick %s, but encountered error creating `Blocks` type link with original bug", cloneLink), jc.JiraURL(), clone.Key, err) + "\n\n"
+			continue
+		}
+		response := fmt.Sprintf("%s has been cloned as %s. Will retitle bug to link to clone.", oldLink, cloneLink)
+		retitleList[bug.Key] = clone.Key
+		// Update the version of the bug to the target release
+		update := jira.Issue{
+			Key: clone.Key,
+			Fields: &jira.IssueFields{
+				Unknowns: tcontainer.MarshalMap{
+					helpers.TargetVersionField: []*jira.Version{{Name: targetVersion}},
+				},
+			},
+		}
+		_, err = jc.UpdateIssue(&update)
+		if err != nil {
+			response += fmt.Sprintf(`
 
 WARNING: Failed to update the target version for the clone. Please update the target version manually. Full error below:
 <details><summary>Full error message.</summary>
@@ -1779,45 +1849,76 @@ WARNING: Failed to update the target version for the clone. Please update the ta
 </code>
 
 </details>`, err)
+		}
+		msg += response + "\n\n"
 	}
-	return comment(response)
+	msg = strings.TrimSuffix(msg, "\n\n")
+	if len(retitleList) > 0 {
+		// Replace old bugID(s) in title with new cloneID(s)
+		var newTitle string
+		if e.cherrypickCmd {
+			// use a set to allow sorted keys for deterministic results
+			keySet := sets.NewString()
+			for _, newBug := range retitleList {
+				keySet.Insert(newBug)
+			}
+			var keyList string
+			for _, newBug := range keySet.List() {
+				keyList += newBug + ","
+			}
+			keyList = strings.TrimSuffix(keyList, ",")
+			newTitle = fmt.Sprintf("%s: %s", keyList, e.title)
+		} else {
+			newTitle = e.title
+			for oldKey, newKey := range retitleList {
+				newTitle = strings.ReplaceAll(newTitle, oldKey, newKey)
+			}
+		}
+		msg += "\n/retitle " + newTitle
+	}
+	return comment(msg)
 }
 
 // return values:
-// 1: jira key, if matched
+// 1: issues as an array of referencedBug, if exists
 // 2: missing: true/false based on whether the title is missing a jira ref
-// 3: isBug: true/false based on whether the ref is a bug(OCPBUGS) or other jira issue
-func jiraKeyFromTitle(title string) (string, bool, bool) {
-	bugMatch := titleMatchJiraBug.FindStringSubmatch(title)
-	jiraMatch := titleMatchJiraIssue.FindStringSubmatch(title)
-
-	// if we found both a generic jira ref, and an OCPBUGS specific jira ref in the
-	// title, prefer the one that appears earliest in the title.
-	if bugMatch != nil && jiraMatch != nil {
-		if bugMatch[0] != jiraMatch[0] {
-			bugIdx := strings.Index(title, bugMatch[0])
-			jiraIdx := strings.Index(title, jiraMatch[0])
-			if jiraIdx < bugIdx {
-				// the jira reference came first, so ignore the bug match
-				bugMatch = nil
-			}
+// 3: noJira: true/false based on whether the title contains jira excluding term (i.e. "NO-JIRA" or "NO-ISSUE")
+func jiraKeyFromTitle(title string) ([]referencedBug, bool, bool) {
+	/*
+		// we only match stuff before a ":"
+		splitTitle := strings.Split(title, ":")
+		if len(splitTitle) < 2 {
+			return nil, true, false
 		}
+		trimmedTitle := splitTitle[0]
+		// if there is a space before the `:`,  we ignore this, as the title is improperly formatted
+		if string(trimmedTitle[len(trimmedTitle)-1]) == " " {
+			return nil, true, false
+		}
+		// if there are square brackets, remove them and everything between them
+		leftBracket := strings.Index(title, "[")
+		rightBracket := strings.Index(title, "]")
+		if rightBracket-leftBracket != 0 {
+			trimmedTitle = trimmedTitle[0:leftBracket] + trimmedTitle[rightBracket+1:]
+		}
+	*/
+	matches := titleMatchJiraIssue.FindString(title)
+	if len(matches) == 0 {
+		return nil, true, false
 	}
-
-	if bugMatch != nil {
-		return strings.TrimSuffix(bugMatch[0], ":"), false, true
-	}
-
-	if jiraMatch != nil {
-		match := strings.TrimSuffix(jiraMatch[0], ":")
+	bugs := []referencedBug{}
+	splitMatch := strings.Split(matches, ",")
+	for _, match := range splitMatch {
+		match = strings.TrimSuffix(match, ":")
 		if strings.EqualFold(match, "NO-ISSUE") || strings.EqualFold(match, "NO-JIRA") {
-			match = "NO-JIRA"
+			return nil, false, true
 		}
-		return match, false, false
+		bugs = append(bugs, referencedBug{
+			Key:   match,
+			IsBug: strings.Contains(match, "OCPBUGS-"),
+		})
 	}
-
-	return "", true, false
-
+	return bugs, false, false
 }
 
 func bzIDFromTitle(title string) (int, bool, error) {
@@ -1930,57 +2031,72 @@ var PrivateVisibility = jira.CommentVisibility{Type: "group", Value: "Red Hat Em
 
 func handleClose(e event, gc githubClient, jc jiraclient.Client, options JiraBranchOptions, log *logrus.Entry) error {
 	comment := e.comment(gc)
-	if e.missing || !e.isBug {
+	if e.missing {
 		return nil
 	}
-	if options.AddExternalLink != nil && *options.AddExternalLink {
-		response := fmt.Sprintf(`This pull request references `+issueLink+`. The bug has been updated to no longer refer to the pull request using the external bug tracker.`, e.key, jc.JiraURL(), e.key)
-		changed, err := jc.DeleteRemoteLinkViaURL(e.key, prURLFromCommentURL(e.htmlUrl))
-		if err != nil && !strings.HasPrefix(err.Error(), "could not find remote link on issue with URL") {
-			log.WithError(err).Warn("Unexpected error removing external tracker bug from Jira bug.")
-			return comment(formatError("removing this pull request from the external tracker bugs", jc.JiraURL(), e.key, err))
+	msg := ""
+	for _, refBug := range e.bugs {
+		if !refBug.IsBug {
+			return nil
 		}
-		if options.StateAfterClose != nil {
-			issue, err := jc.GetIssue(e.key)
-			if err != nil {
-				log.WithError(err).Warn("Unexpected error getting Jira issue.")
-				return comment(formatError("getting issue", jc.JiraURL(), e.key, err))
+		if options.AddExternalLink != nil && *options.AddExternalLink {
+			response := fmt.Sprintf(`This pull request references `+issueLink+`. The bug has been updated to no longer refer to the pull request using the external bug tracker.`, refBug.Key, jc.JiraURL(), refBug.Key)
+			changed, err := jc.DeleteRemoteLinkViaURL(refBug.Key, prURLFromCommentURL(e.htmlUrl))
+			if err != nil && !strings.HasPrefix(err.Error(), "could not find remote link on issue with URL") {
+				log.WithError(err).Warn("Unexpected error removing external tracker bug from Jira bug.")
+				msg += formatError("removing this pull request from the external tracker bugs", jc.JiraURL(), refBug.Key, err) + "\n\n"
+				continue
 			}
-			if !strings.EqualFold(issue.Fields.Status.Name, status.Closed) {
-				links, err := jc.GetRemoteLinks(issue.ID)
+			if options.StateAfterClose != nil {
+				issue, err := jc.GetIssue(refBug.Key)
 				if err != nil {
-					log.WithError(err).Warn("Unexpected error getting remote links for Jira issue.")
-					return comment(formatError("getting remote links", jc.JiraURL(), e.key, err))
+					log.WithError(err).Warn("Unexpected error getting Jira issue.")
+					msg += formatError("getting issue", jc.JiraURL(), refBug.Key, err) + "\n\n"
+					continue
 				}
-				if len(links) == 0 {
-					bug, err := getJira(jc, e.key, log, comment)
-					if err != nil || bug == nil {
-						return err
+				if !strings.EqualFold(issue.Fields.Status.Name, status.Closed) {
+					links, err := jc.GetRemoteLinks(issue.ID)
+					if err != nil {
+						log.WithError(err).Warn("Unexpected error getting remote links for Jira issue.")
+						msg += formatError("getting remote links", jc.JiraURL(), refBug.Key, err) + "\n\n"
+						continue
 					}
-					if options.StateAfterClose.Status != "" && (bug.Fields.Status == nil || !strings.EqualFold(options.StateAfterClose.Status, bug.Fields.Status.Name)) {
-						if err := jc.UpdateStatus(issue.ID, options.StateAfterClose.Status); err != nil {
-							log.WithError(err).Warn("Unexpected error updating jira issue.")
-							return comment(formatError(fmt.Sprintf("updating to the %s state", options.StateAfterClose.Status), jc.JiraURL(), e.key, err))
+					if len(links) == 0 {
+						bug, err := getJira(jc, refBug.Key, log, comment)
+						if err != nil || bug == nil {
+							return err
 						}
-						if options.StateAfterClose.Resolution != "" && (bug.Fields.Resolution == nil || !strings.EqualFold(options.StateAfterClose.Resolution, bug.Fields.Resolution.Name)) {
-							updateIssue := jira.Issue{Key: bug.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterClose.Resolution}}}
-							if _, err := jc.UpdateIssue(&updateIssue); err != nil {
+						if options.StateAfterClose.Status != "" && (bug.Fields.Status == nil || !strings.EqualFold(options.StateAfterClose.Status, bug.Fields.Status.Name)) {
+							if err := jc.UpdateStatus(issue.ID, options.StateAfterClose.Status); err != nil {
 								log.WithError(err).Warn("Unexpected error updating jira issue.")
-								return comment(formatError(fmt.Sprintf("updating to the %s resolution", options.StateAfterClose.Resolution), jc.JiraURL(), e.key, err))
+								msg += formatError(fmt.Sprintf("updating to the %s state", options.StateAfterClose.Status), jc.JiraURL(), refBug.Key, err) + "\n\n"
+								continue
 							}
+							if options.StateAfterClose.Resolution != "" && (bug.Fields.Resolution == nil || !strings.EqualFold(options.StateAfterClose.Resolution, bug.Fields.Resolution.Name)) {
+								updateIssue := jira.Issue{Key: bug.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterClose.Resolution}}}
+								if _, err := jc.UpdateIssue(&updateIssue); err != nil {
+									log.WithError(err).Warn("Unexpected error updating jira issue.")
+									msg += formatError(fmt.Sprintf("updating to the %s resolution", options.StateAfterClose.Resolution), jc.JiraURL(), refBug.Key, err) + "\n\n"
+									continue
+								}
+							}
+							response += fmt.Sprintf(" All external bug links have been closed. The bug has been moved to the %s state.", options.StateAfterClose)
 						}
-						response += fmt.Sprintf(" All external bug links have been closed. The bug has been moved to the %s state.", options.StateAfterClose)
-					}
-					jiraComment := &jira.Comment{Body: fmt.Sprintf("Bug status changed to %s as previous linked PR https://github.com/%s/%s/pull/%d has been closed", options.StateAfterClose.Status, e.org, e.repo, e.number), Visibility: PrivateVisibility}
-					if _, err := jc.AddComment(bug.ID, jiraComment); err != nil {
-						response += "\nWarning: Failed to comment on Jira bug with reason for changed state."
+						jiraComment := &jira.Comment{Body: fmt.Sprintf("Bug status changed to %s as previous linked PR https://github.com/%s/%s/pull/%d has been closed", options.StateAfterClose.Status, e.org, e.repo, e.number), Visibility: PrivateVisibility}
+						if _, err := jc.AddComment(bug.ID, jiraComment); err != nil {
+							response += "\nWarning: Failed to comment on Jira bug with reason for changed state."
+						}
 					}
 				}
 			}
+			if changed {
+				msg += response + "\n\n"
+			}
 		}
-		if changed {
-			return comment(response)
-		}
+	}
+	if len(msg) != 0 {
+		msg = strings.TrimSuffix(msg, "\n\n")
+		return comment(msg)
 	}
 	return nil
 }
