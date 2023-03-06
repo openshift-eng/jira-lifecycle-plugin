@@ -11,6 +11,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/openshift-eng/jira-lifecycle-plugin/pkg/helpers"
 	"github.com/openshift-eng/jira-lifecycle-plugin/pkg/labels"
+	"github.com/openshift-eng/jira-lifecycle-plugin/pkg/status"
 	"github.com/sirupsen/logrus"
 	"github.com/trivago/tgo/tcontainer"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -166,7 +167,7 @@ func TestHandle(t *testing.T) {
 	}
 
 	base := &event{
-		org: "org", repo: "repo", baseRef: "branch", number: 1, key: "OCPBUGS-123", isBug: true, body: "This PR fixes OCPBUGS-123", title: "OCPBUGS-123: fixed it!", htmlUrl: "https://github.com/org/repo/pull/1", login: "user",
+		org: "org", repo: "repo", baseRef: "branch", number: 1, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}}, body: "This PR fixes OCPBUGS-123", title: "OCPBUGS-123: fixed it!", htmlUrl: "https://github.com/org/repo/pull/1", login: "user",
 	}
 	var testCases = []struct {
 		name                       string
@@ -178,11 +179,11 @@ func TestHandle(t *testing.T) {
 		opened                     bool
 		refresh                    bool
 		cherrypick                 bool
-		nonBug                     bool
 		cherryPickFromPRNum        int
 		body                       string
 		title                      string
-		key                        string
+		replaceReferencedBugs      []referencedBug
+		noJira                     bool
 		remoteLinks                map[string][]jira.RemoteLink
 		prs                        []github.PullRequest
 		issues                     []jira.Issue
@@ -193,6 +194,7 @@ func TestHandle(t *testing.T) {
 		expectedLabels             []string
 		expectedComment            string
 		expectedIssue              *jira.Issue
+		expectedIssue2             *jira.Issue
 		expectedNewRemoteLinks     []jira.RemoteLink
 		expectedRemovedRemoteLinks []jira.RemoteLink
 		existingIssueLinks         []*jira.IssueLink
@@ -212,7 +214,7 @@ func TestHandle(t *testing.T) {
 			overrideEvent: &event{
 				org: "org", repo: "repo", baseRef: "branch",
 				number:  1,
-				key:     "",
+				bugs:    nil,
 				htmlUrl: "https://github.com/org/repo/pull/1", login: "user",
 			},
 		},
@@ -323,6 +325,132 @@ Instructions for interacting with me using PR comments are available [here](http
 </details>`,
 		},
 		{
+			name: "one invalid bug and one valid bug adds invalid/severity labels and comments",
+			issues: []jira.Issue{
+				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
+				{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
+			},
+			replaceReferencedBugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "OCPBUGS-124", IsBug: true}},
+			options:               JiraBranchOptions{IsOpen: &open},
+			labels:                []string{},
+			expectedLabels:        []string{labels.JiraValidRef, labels.JiraInvalidBug, labels.SeverityCritical},
+			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is invalid:
+ - expected the bug to be open, but it isn't
+
+Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jira bug are made, or edit the title of this pull request to link to a different bug.
+
+This pull request references [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124), which is valid.
+
+<details><summary>1 validation(s) were run on this bug</summary>
+
+* bug is open, matching expected state (open)</details>
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`,
+		},
+		{
+			name: "one valid bug and one invalid bug adds invalid/severity labels and comments",
+			issues: []jira.Issue{
+				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
+				{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
+			},
+			replaceReferencedBugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "OCPBUGS-124", IsBug: true}},
+			options:               JiraBranchOptions{IsOpen: &open},
+			labels:                []string{},
+			expectedLabels:        []string{labels.JiraValidRef, labels.JiraInvalidBug, labels.SeverityCritical},
+			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
+
+<details><summary>1 validation(s) were run on this bug</summary>
+
+* bug is open, matching expected state (open)</details>
+
+This pull request references [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124), which is invalid:
+ - expected the bug to be open, but it isn't
+
+Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jira bug are made, or edit the title of this pull request to link to a different bug.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`,
+		},
+		{
+			name: "two valid bugs valid/severity labels and comments",
+			issues: []jira.Issue{
+				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
+				{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
+			},
+			replaceReferencedBugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "OCPBUGS-124", IsBug: true}},
+			options:               JiraBranchOptions{IsOpen: &open},
+			labels:                []string{},
+			expectedLabels:        []string{labels.JiraValidRef, labels.JiraValidBug, labels.BugzillaValidBug, labels.SeverityCritical},
+			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
+
+<details><summary>1 validation(s) were run on this bug</summary>
+
+* bug is open, matching expected state (open)</details>
+
+This pull request references [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124), which is valid.
+
+<details><summary>1 validation(s) were run on this bug</summary>
+
+* bug is open, matching expected state (open)</details>
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`,
+		},
+		{
+			name: "two valid bugs with different severities set valid and higher severity labels and comments",
+			issues: []jira.Issue{
+				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
+				{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityImportant}}},
+			},
+			replaceReferencedBugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "OCPBUGS-124", IsBug: true}},
+			options:               JiraBranchOptions{IsOpen: &open},
+			labels:                []string{},
+			expectedLabels:        []string{labels.JiraValidRef, labels.JiraValidBug, labels.BugzillaValidBug, labels.SeverityCritical},
+			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
+
+<details><summary>1 validation(s) were run on this bug</summary>
+
+* bug is open, matching expected state (open)</details>
+
+This pull request references [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124), which is valid.
+
+<details><summary>1 validation(s) were run on this bug</summary>
+
+* bug is open, matching expected state (open)</details>
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`,
+		},
+		{
 			name:           "invalid bug adds keeps human-added valid bug label",
 			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityImportant}}}},
 			options:        JiraBranchOptions{IsOpen: &open},
@@ -397,12 +525,11 @@ Instructions for interacting with me using PR comments are available [here](http
 			}},
 		},
 		{
-			name:           "valid jira removes invalid label, adds valid label, comments",
-			key:            "JIRA-123",
-			nonBug:         true,
-			issues:         []jira.Issue{{ID: "1", Key: "JIRA-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityModerate}}}},
-			labels:         []string{labels.JiraInvalidBug},
-			expectedLabels: []string{labels.JiraValidRef},
+			name:                  "valid jira removes invalid label, adds valid label, comments",
+			replaceReferencedBugs: []referencedBug{{Key: "JIRA-123", IsBug: false}},
+			issues:                []jira.Issue{{ID: "1", Key: "JIRA-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityModerate}}}},
+			labels:                []string{labels.JiraInvalidBug},
+			expectedLabels:        []string{labels.JiraValidRef},
 			expectedComment: `org/repo#1:@user: This pull request references JIRA-123 which is a valid jira issue.
 
 <details>
@@ -416,11 +543,38 @@ Instructions for interacting with me using PR comments are available [here](http
 </details>`,
 		},
 		{
-			name:           "invalid jira with status update removes valid label, comments",
-			key:            "JIRA-123",
-			nonBug:         true,
-			labels:         []string{labels.JiraValidRef},
-			expectedLabels: []string{},
+			name: "valid bug and valid jira ref adds valid/severity labels and comments",
+			issues: []jira.Issue{
+				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
+				{ID: "2", Key: "JIRA-123", Fields: &jira.IssueFields{}},
+			},
+			replaceReferencedBugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "JIRA-123", IsBug: false}},
+			options:               JiraBranchOptions{IsOpen: &open},
+			labels:                []string{},
+			expectedLabels:        []string{labels.JiraValidRef, labels.JiraValidBug, labels.BugzillaValidBug, labels.SeverityCritical},
+			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
+
+<details><summary>1 validation(s) were run on this bug</summary>
+
+* bug is open, matching expected state (open)</details>
+
+This pull request references JIRA-123 which is a valid jira issue.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`,
+		},
+		{
+			name:                  "invalid jira with status update removes valid label, comments",
+			replaceReferencedBugs: []referencedBug{{Key: "JIRA-123", IsBug: false}},
+			labels:                []string{labels.JiraValidRef},
+			expectedLabels:        []string{},
 			expectedComment: `org/repo#1:@user: No Jira issue with key JIRA-123 exists in the tracker at https://my-jira.com.
 Once a valid jira issue is referenced in the title of this pull request, request a refresh with <code>/jira refresh</code>.
 
@@ -436,8 +590,7 @@ Instructions for interacting with me using PR comments are available [here](http
 		},
 		{
 			name:           "valid no-jira removes invalid label, adds valid label, comments",
-			key:            "NO-JIRA",
-			nonBug:         true,
+			noJira:         true,
 			labels:         []string{labels.JiraInvalidBug},
 			expectedLabels: []string{labels.JiraValidRef},
 			expectedComment: `org/repo#1:@user: This pull request explicitly references no jira issue.
@@ -572,7 +725,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				IssueLinks: []*jira.IssueLink{&cloneLinkTo123, &blocksLinkTo123},
 			}}},
 			overrideEvent: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 2, key: "OCPBUGS-124", isBug: true, body: "This PR fixes OCPBUGS-124", title: "OCPBUGS-124: fixed it!", htmlUrl: "https://github.com/org/repo/pull/2", login: "user",
+				org: "org", repo: "repo", baseRef: "branch", number: 2, bugs: []referencedBug{{Key: "OCPBUGS-124", IsBug: true}}, body: "This PR fixes OCPBUGS-124", title: "OCPBUGS-124: fixed it!", htmlUrl: "https://github.com/org/repo/pull/2", login: "user",
 			},
 			existingIssueLinks: []*jira.IssueLink{&cloneBetween123to124, &blocksBetween123to124},
 			issueGetErrors:     map[string]error{"OCPBUGS-123": errors.New("injected error getting bug")},
@@ -616,7 +769,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			}}},
 			overrideEvent: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 2, key: "OCPBUGS-124", isBug: true, body: "This PR fixes OCPBUGS-124", title: "OCPBUGS-124: fixed it!", htmlUrl: "https://github.com/org/repo/pull/2", login: "user",
+				org: "org", repo: "repo", baseRef: "branch", number: 2, bugs: []referencedBug{{Key: "OCPBUGS-124", IsBug: true}}, body: "This PR fixes OCPBUGS-124", title: "OCPBUGS-124: fixed it!", htmlUrl: "https://github.com/org/repo/pull/2", login: "user",
 			},
 			existingIssueLinks: []*jira.IssueLink{&cloneBetween123to124, &blocksBetween123to124},
 			options:            JiraBranchOptions{IsOpen: &yes, TargetVersion: &v1Str, DependentBugStates: &verified, DependentBugTargetVersions: &[]string{v2Str}},
@@ -659,7 +812,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			}},
 			prs:     []github.PullRequest{{Number: base.number, Merged: true}},
 			options: JiraBranchOptions{StateAfterMerge: &JiraBugState{Status: "CLOSED", Resolution: "MERGED"}}, // no requirements --> always valid
-			expectedComment: `org/repo#1:@user: All pull requests linked via external trackers have merged:
+			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
  * [org/repo#1](https://github.com/org/repo/pull/1)
 
 [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been moved to the CLOSED (MERGED) state.
@@ -680,6 +833,62 @@ Instructions for interacting with me using PR comments are available [here](http
 			}},
 		},
 		{
+			name:   "2 valid bugs on merged PR with one external link migrates to new state with resolution and comments",
+			merged: true,
+			issues: []jira.Issue{
+				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Modified}}},
+				{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Modified}}},
+			},
+			replaceReferencedBugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "OCPBUGS-124", IsBug: true}},
+			remoteLinks: map[string][]jira.RemoteLink{"OCPBUGS-123": {{ID: 1, Object: &jira.RemoteLinkObject{
+				URL:   "https://github.com/org/repo/pull/1",
+				Title: "org/repo#1: OCPBUGS-123,OCPBUGS-124: fixed it!",
+				Icon: &jira.RemoteLinkIcon{
+					Url16x16: "https://github.com/favicon.ico",
+					Title:    "GitHub",
+				},
+			}}}, "OCPBUGS-124": {{ID: 2, Object: &jira.RemoteLinkObject{
+				URL:   "https://github.com/org/repo/pull/1",
+				Title: "org/repo#1: OCPBUGS-123,OCPBUGS-124: fixed it!",
+				Icon: &jira.RemoteLinkIcon{
+					Url16x16: "https://github.com/favicon.ico",
+					Title:    "GitHub",
+				},
+			}}},
+			},
+			prs:     []github.PullRequest{{Number: base.number, Merged: true}},
+			options: JiraBranchOptions{StateAfterMerge: &JiraBugState{Status: "CLOSED", Resolution: "MERGED"}}, // no requirements --> always valid
+			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
+ * [org/repo#1](https://github.com/org/repo/pull/1)
+
+[Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been moved to the CLOSED (MERGED) state.
+
+[Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124): All pull requests linked via external trackers have merged:
+ * [org/repo#1](https://github.com/org/repo/pull/1)
+
+[Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) has been moved to the CLOSED (MERGED) state.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`,
+			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Status:     &jira.Status{Name: "CLOSED"},
+				Resolution: &jira.Resolution{Name: "MERGED"},
+				Unknowns:   tcontainer.MarshalMap{},
+			}},
+			expectedIssue2: &jira.Issue{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+				Status:     &jira.Status{Name: "CLOSED"},
+				Resolution: &jira.Resolution{Name: "MERGED"},
+				Unknowns:   tcontainer.MarshalMap{},
+			}},
+		},
+		{
 			name:   "valid bug on merged PR with one external link migrates to new state and comments",
 			merged: true,
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{}}},
@@ -694,7 +903,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			}},
 			prs:     []github.PullRequest{{Number: base.number, Merged: true}},
 			options: JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
-			expectedComment: `org/repo#1:@user: All pull requests linked via external trackers have merged:
+			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
  * [org/repo#1](https://github.com/org/repo/pull/1)
 
 [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been moved to the MODIFIED state.
@@ -748,7 +957,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			}},
 			prs:     []github.PullRequest{{Number: base.number, Merged: true}, {Number: 22, Merged: true}, {Number: 23, Merged: true}},
 			options: JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
-			expectedComment: `org/repo#1:@user: All pull requests linked via external trackers have merged:
+			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
  * [org/repo#1](https://github.com/org/repo/pull/1)
  * [org/repo#22](https://github.com/org/repo/pull/22)
  * [org/repo#23](https://github.com/org/repo/pull/23)
@@ -795,7 +1004,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			prs:           []github.PullRequest{{Number: base.number, Merged: true}, {Number: 22, Merged: false, State: "open"}},
 			options:       JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{}},
-			expectedComment: `org/repo#1:@user: Some pull requests linked via external trackers have merged:
+			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): Some pull requests linked via external trackers have merged:
  * [org/repo#1](https://github.com/org/repo/pull/1)
 
 The following pull requests linked via external trackers have not merged:
@@ -816,6 +1025,78 @@ Instructions for interacting with me using PR comments are available [here](http
 </details>`,
 		},
 		{
+			name:   "2 valid bugs on merged PR, one with unmerged external links and one with merged external links",
+			merged: true,
+			issues: []jira.Issue{
+				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Modified}}},
+				{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Modified}}},
+			},
+			replaceReferencedBugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "OCPBUGS-124", IsBug: true}},
+			remoteLinks: map[string][]jira.RemoteLink{"OCPBUGS-123": {{
+				ID: 1, Object: &jira.RemoteLinkObject{
+					URL:   "https://github.com/org/repo/pull/1",
+					Title: "org/repo#1: OCPBUGS-123,OCPBUGS-124: fixed it!",
+					Icon: &jira.RemoteLinkIcon{
+						Url16x16: "https://github.com/favicon.ico",
+						Title:    "GitHub",
+					},
+				},
+			}, {
+				ID: 2,
+				Object: &jira.RemoteLinkObject{
+					URL:   "https://github.com/org/repo/pull/22",
+					Title: "org/repo#22: OCPBUGS-123: fixed it!",
+					Icon: &jira.RemoteLinkIcon{
+						Url16x16: "https://github.com/favicon.ico",
+						Title:    "GitHub",
+					},
+				},
+			},
+			}, "OCPBUGS-124": {{ID: 2, Object: &jira.RemoteLinkObject{
+				URL:   "https://github.com/org/repo/pull/1",
+				Title: "org/repo#1: OCPBUGS-123,OCPBUGS-124: fixed it!",
+				Icon: &jira.RemoteLinkIcon{
+					Url16x16: "https://github.com/favicon.ico",
+					Title:    "GitHub",
+				},
+			}}},
+			},
+			prs:     []github.PullRequest{{Number: base.number, Merged: true}, {Number: 22, Merged: false, State: "open"}},
+			options: JiraBranchOptions{StateAfterMerge: &JiraBugState{Status: "CLOSED", Resolution: "MERGED"}},
+			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): Some pull requests linked via external trackers have merged:
+ * [org/repo#1](https://github.com/org/repo/pull/1)
+
+The following pull requests linked via external trackers have not merged:
+ * [org/repo#22](https://github.com/org/repo/pull/22) is open
+
+These pull request must merge or be unlinked from the Jira bug in order for it to move to the next state. Once unlinked, request a bug refresh with <code>/jira refresh</code>.
+
+[Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has not been moved to the CLOSED (MERGED) state.
+
+[Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124): All pull requests linked via external trackers have merged:
+ * [org/repo#1](https://github.com/org/repo/pull/1)
+
+[Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) has been moved to the CLOSED (MERGED) state.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`,
+			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Status: &jira.Status{Name: "MODIFIED"},
+			}},
+			expectedIssue2: &jira.Issue{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+				Status:     &jira.Status{Name: "CLOSED"},
+				Resolution: &jira.Resolution{Name: "MERGED"},
+				Unknowns:   tcontainer.MarshalMap{},
+			}},
+		},
+		{
 			name:   "External bug on rep that is not in our config is ignored, bug gets set to MODIFIED",
 			merged: true,
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{}}},
@@ -831,7 +1112,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			prs:           []github.PullRequest{{Number: 22, Merged: false, State: "open"}},
 			options:       JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: "MODIFIED"}}},
-			expectedComment: `org/repo#1:@user: All pull requests linked via external trackers have merged:
+			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
 
 
 [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been moved to the MODIFIED state.
@@ -1084,6 +1365,100 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 		},
 		{
+			name:                  "closed PR for multiple bugs removes links, changes bug states, and comments",
+			merged:                false,
+			closed:                true,
+			replaceReferencedBugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "OCPBUGS-124", IsBug: true}},
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Status: &jira.Status{Name: "POST"},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField: severityCritical,
+				},
+			}}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is also a bug",
+				}}},
+				Status: &jira.Status{Name: "POST"},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField: severityCritical,
+				},
+			}}},
+			remoteLinks: map[string][]jira.RemoteLink{"OCPBUGS-123": {{ID: 1, Object: &jira.RemoteLinkObject{
+				URL:   "https://github.com/org/repo/pull/1",
+				Title: "org/repo#1: OCPBUGS-123,OCPBUGS-124: fixed it!",
+				Icon: &jira.RemoteLinkIcon{
+					Url16x16: "https://github.com/favicon.ico",
+					Title:    "GitHub",
+				},
+			}},
+			}, "OCPBUGS-124": {{ID: 2, Object: &jira.RemoteLinkObject{
+				URL:   "https://github.com/org/repo/pull/1",
+				Title: "org/repo#1: OCPBUGS-123,OCPBUGS-124: fixed it!",
+				Icon: &jira.RemoteLinkIcon{
+					Url16x16: "https://github.com/favicon.ico",
+					Title:    "GitHub",
+				},
+			}},
+			}},
+			prs:     []github.PullRequest{{Number: base.number, Merged: false}},
+			options: JiraBranchOptions{AddExternalLink: &yes, StateAfterClose: &JiraBugState{Status: "NEW"}},
+			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123). The bug has been updated to no longer refer to the pull request using the external bug tracker. All external bug links have been closed. The bug has been moved to the NEW state.
+
+This pull request references [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). The bug has been updated to no longer refer to the pull request using the external bug tracker. All external bug links have been closed. The bug has been moved to the NEW state.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`,
+			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Status: &jira.Status{Name: "NEW"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}, {
+					Body:       "Bug status changed to NEW as previous linked PR https://github.com/org/repo/pull/1 has been closed",
+					Visibility: PrivateVisibility,
+				}}},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField: severityCritical,
+				},
+			}},
+			expectedIssue2: &jira.Issue{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+				Status: &jira.Status{Name: "NEW"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is also a bug",
+				}, {
+					Body:       "Bug status changed to NEW as previous linked PR https://github.com/org/repo/pull/1 has been closed",
+					Visibility: PrivateVisibility,
+				}}},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField: severityCritical,
+				},
+			}},
+			expectedRemovedRemoteLinks: []jira.RemoteLink{{ID: 1, Object: &jira.RemoteLinkObject{
+				URL:   "https://github.com/org/repo/pull/1",
+				Title: "org/repo#1: OCPBUGS-123,OCPBUGS-124: fixed it!",
+				Icon: &jira.RemoteLinkIcon{
+					Url16x16: "https://github.com/favicon.ico",
+					Title:    "GitHub",
+				},
+			}}, {ID: 2, Object: &jira.RemoteLinkObject{
+				URL:   "https://github.com/org/repo/pull/1",
+				Title: "org/repo#1: OCPBUGS-123,OCPBUGS-124: fixed it!",
+				Icon: &jira.RemoteLinkIcon{
+					Url16x16: "https://github.com/favicon.ico",
+					Title:    "GitHub",
+				},
+			}}},
+		},
+		{
 			name:    "closed PR with missing bug does nothing",
 			merged:  false,
 			closed:  true,
@@ -1172,7 +1547,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			cherrypick:          true,
 			cherryPickFromPRNum: 1,
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). Retitling PR to link against new bug.
+			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). Will retitle bug to link to clone.
 /retitle [v1] OCPBUGS-124: fixed it!
 
 <details>
@@ -1201,6 +1576,200 @@ Instructions for interacting with me using PR comments are available [here](http
 			}},
 		},
 		{
+			name: "Cherrypick PR for multiple bugs results in multiple cloned bug creation",
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Status: &jira.Status{Name: "CLOSED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      severityCritical,
+					helpers.TargetVersionField: &v2,
+				},
+			}}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+				Status: &jira.Status{Name: "CLOSED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      severityCritical,
+					helpers.TargetVersionField: &v2,
+				},
+			}}},
+			replaceReferencedBugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "OCPBUGS-124", IsBug: true}},
+			prs:                   []github.PullRequest{{Number: base.number, Body: base.body, Title: "OCPBUGS-123,OCPBUGS-124: fixed it!"}, {Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] OCPBUGS-123,OCPBUGS-124: fixed it!"}},
+			title:                 "[v1] OCPBUGS-123,OCPBUGS-124: fixed it!",
+			cherrypick:            true,
+			cherryPickFromPRNum:   1,
+			options:               JiraBranchOptions{TargetVersion: &v1Str},
+			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-125](https://my-jira.com/browse/OCPBUGS-125). Will retitle bug to link to clone.
+
+[Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) has been cloned as [Jira Issue OCPBUGS-126](https://my-jira.com/browse/OCPBUGS-126). Will retitle bug to link to clone.
+/retitle [v1] OCPBUGS-125,OCPBUGS-126: fixed it!
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`,
+			expectedIssue: &jira.Issue{ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
+				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
+				Status:      &jira.Status{Name: "CLOSED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				IssueLinks: []*jira.IssueLink{&cloneLinkTo123JustID, &blocksLinkTo123JustID},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
+					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
+				},
+			}},
+			expectedIssue2: &jira.Issue{ID: "4", Key: "OCPBUGS-126", Fields: &jira.IssueFields{
+				Description: "This is a clone of issue OCPBUGS-124. The following is the description of the original issue: \n---\n",
+				Status:      &jira.Status{Name: "CLOSED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				IssueLinks: []*jira.IssueLink{{
+					Type: jira.IssueLinkType{
+						Name:    "Cloners",
+						Inward:  "is cloned by",
+						Outward: "clones",
+					},
+					OutwardIssue: &jira.Issue{ID: "2"},
+				}, {
+					Type: jira.IssueLinkType{
+						Name:    "Blocks",
+						Inward:  "is blocked by",
+						Outward: "blocks",
+					},
+					InwardIssue: &jira.Issue{ID: "2"},
+				}},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
+					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
+				},
+			}},
+		},
+		{
+			name: "Cherrypick PR for multiple bugs with 1 failure still comments for both bugs",
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Status: &jira.Status{Name: "CLOSED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      severityCritical,
+					helpers.TargetVersionField: &v2,
+				},
+			}}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+				Status: &jira.Status{Name: "CLOSED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      severityCritical,
+					helpers.TargetVersionField: &v2,
+				},
+			}}},
+			replaceReferencedBugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "OCPBUGS-124", IsBug: true}},
+			issueUpdateErrors:     map[string]error{"OCPBUGS-125": errors.New("injected error updating bug OCPBUGS-125")},
+			prs:                   []github.PullRequest{{Number: base.number, Body: base.body, Title: "OCPBUGS-123,OCPBUGS-124: fixed it!"}, {Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] OCPBUGS-123,OCPBUGS-124: fixed it!"}},
+			title:                 "[v1] OCPBUGS-123,OCPBUGS-124: fixed it!",
+			cherrypick:            true,
+			cherryPickFromPRNum:   1,
+			options:               JiraBranchOptions{TargetVersion: &v1Str},
+			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-125](https://my-jira.com/browse/OCPBUGS-125). Will retitle bug to link to clone.
+
+WARNING: Failed to update the target version for the clone. Please update the target version manually. Full error below:
+<details><summary>Full error message.</summary>
+
+<code>
+injected error updating bug OCPBUGS-125
+</code>
+
+</details>
+
+[Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) has been cloned as [Jira Issue OCPBUGS-126](https://my-jira.com/browse/OCPBUGS-126). Will retitle bug to link to clone.
+/retitle [v1] OCPBUGS-125,OCPBUGS-126: fixed it!
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`,
+			expectedIssue: &jira.Issue{ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
+				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
+				Status:      &jira.Status{Name: "CLOSED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				IssueLinks: []*jira.IssueLink{&cloneLinkTo123JustID, &blocksLinkTo123JustID},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
+					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v2Str}},
+				},
+			}},
+			expectedIssue2: &jira.Issue{ID: "4", Key: "OCPBUGS-126", Fields: &jira.IssueFields{
+				Description: "This is a clone of issue OCPBUGS-124. The following is the description of the original issue: \n---\n",
+				Status:      &jira.Status{Name: "CLOSED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				IssueLinks: []*jira.IssueLink{{
+					Type: jira.IssueLinkType{
+						Name:    "Cloners",
+						Inward:  "is cloned by",
+						Outward: "clones",
+					},
+					OutwardIssue: &jira.Issue{ID: "2"},
+				}, {
+					Type: jira.IssueLinkType{
+						Name:    "Blocks",
+						Inward:  "is blocked by",
+						Outward: "blocks",
+					},
+					InwardIssue: &jira.Issue{ID: "2"},
+				}},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
+					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
+				},
+			}},
+		},
+		{
 			name: "Cherrypick comment results in cloned bug creation",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "CLOSED"},
@@ -1217,12 +1786,12 @@ Instructions for interacting with me using PR comments are available [here](http
 			}}},
 			prs: []github.PullRequest{{Number: 2, Body: "This is a manually created cherrypick of #1.\n\n/assign user", Title: "[v1] " + base.title}},
 			overrideEvent: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 2, key: "OCPBUGS-123", body: "/jira cherrypick OCPBUGS-123", title: "fixed it!", htmlUrl: "https://github.com/org/repo/pull/1", login: "user", cherrypick: true, cherrypickCmd: true, missing: true,
+				org: "org", repo: "repo", baseRef: "branch", number: 2, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}}, body: "/jira cherrypick OCPBUGS-123", title: "fixed it!", htmlUrl: "https://github.com/org/repo/pull/1", login: "user", cherrypick: true, cherrypickCmd: true, missing: true,
 			},
 			cherrypick: true,
 			missing:    true,
 			options:    JiraBranchOptions{TargetVersion: &v1Str},
-			expectedComment: `org/repo#2:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). Retitling PR to link against new bug.
+			expectedComment: `org/repo#2:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). Will retitle bug to link to clone.
 /retitle OCPBUGS-124: fixed it!
 
 <details>
@@ -1244,6 +1813,100 @@ Instructions for interacting with me using PR comments are available [here](http
 					Name: "OCPBUGS",
 				},
 				IssueLinks: []*jira.IssueLink{&cloneLinkTo123JustID, &blocksLinkTo123JustID},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
+					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
+				},
+			}},
+		},
+		{
+			name: "Cherrypick comment for multiple bugs results in multiple cloned bug creation",
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Status: &jira.Status{Name: "CLOSED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      severityCritical,
+					helpers.TargetVersionField: &v2,
+				},
+			}}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+				Status: &jira.Status{Name: "CLOSED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      severityCritical,
+					helpers.TargetVersionField: &v2,
+				},
+			}}},
+			replaceReferencedBugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "OCPBUGS-124", IsBug: true}},
+			prs:                   []github.PullRequest{{Number: 2, Body: "This is a manually created cherrypick of #1.\n\n/assign user", Title: "[v1] fixing stuff"}},
+			overrideEvent: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 2, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "OCPBUGS-124", IsBug: true}}, body: "/jira cherrypick OCPBUGS-123,OCPBUGS-124", title: "fixed it!", htmlUrl: "https://github.com/org/repo/pull/1", login: "user", cherrypick: true, cherrypickCmd: true, missing: true,
+			},
+			cherrypick: true,
+			missing:    true,
+			options:    JiraBranchOptions{TargetVersion: &v1Str},
+			expectedComment: `org/repo#2:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-125](https://my-jira.com/browse/OCPBUGS-125). Will retitle bug to link to clone.
+
+[Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) has been cloned as [Jira Issue OCPBUGS-126](https://my-jira.com/browse/OCPBUGS-126). Will retitle bug to link to clone.
+/retitle OCPBUGS-125,OCPBUGS-126: fixed it!
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>/jira cherrypick OCPBUGS-123,OCPBUGS-124
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`,
+			expectedIssue: &jira.Issue{ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
+				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
+				Status:      &jira.Status{Name: "CLOSED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				IssueLinks: []*jira.IssueLink{&cloneLinkTo123JustID, &blocksLinkTo123JustID},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
+					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
+				},
+			}},
+			expectedIssue2: &jira.Issue{ID: "4", Key: "OCPBUGS-126", Fields: &jira.IssueFields{
+				Description: "This is a clone of issue OCPBUGS-124. The following is the description of the original issue: \n---\n",
+				Status:      &jira.Status{Name: "CLOSED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				IssueLinks: []*jira.IssueLink{{
+					Type: jira.IssueLinkType{
+						Name:    "Cloners",
+						Inward:  "is cloned by",
+						Outward: "clones",
+					},
+					OutwardIssue: &jira.Issue{ID: "2"},
+				}, {
+					Type: jira.IssueLinkType{
+						Name:    "Blocks",
+						Inward:  "is blocked by",
+						Outward: "blocks",
+					},
+					InwardIssue: &jira.Issue{ID: "2"},
+				}},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
 					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
@@ -1340,8 +2003,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			cherrypick:          true,
 			cherryPickFromPRNum: 1,
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). Retitling PR to link against new bug.
-/retitle [v1] OCPBUGS-124: fixed it!
+			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). Will retitle bug to link to clone.
 
 WARNING: Failed to update the target version for the clone. Please update the target version manually. Full error below:
 <details><summary>Full error message.</summary>
@@ -1351,6 +2013,7 @@ injected error updating bug OCPBUGS-124
 </code>
 
 </details>
+/retitle [v1] OCPBUGS-124: fixed it!
 
 <details>
 
@@ -1387,7 +2050,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			cherrypick:          true,
 			cherryPickFromPRNum: 1,
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
-			expectedComment: `org/repo#1:@user: Detected clone of [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) with correct target version. Retitling PR to link to clone:
+			expectedComment: `org/repo#1:@user: Detected clone of [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) with correct target version. Will retitle the PR to link to the clone.
 /retitle [v1] OCPBUGS-124: fixed it!
 
 <details>
@@ -1399,6 +2062,81 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
 </details>`,
+		}, {
+			name: "If clone with correct target version already exists in multibug PR, retitle PR for correct clone and create clone for other bug",
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				IssueLinks: []*jira.IssueLink{&cloneLinkTo124, &blocksLinkTo124},
+				Status:     &jira.Status{Name: "CLOSED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      severityCritical,
+					helpers.TargetVersionField: &v2,
+				},
+			}}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+				IssueLinks: []*jira.IssueLink{&cloneLinkTo123, &blocksLinkTo123},
+				Status:     &jira.Status{Name: "NEW"},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      severityCritical,
+					helpers.TargetVersionField: &v1,
+				},
+			}}, {ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
+				Status: &jira.Status{Name: "CLOSED"},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      severityCritical,
+					helpers.TargetVersionField: &v1,
+				},
+			}},
+			},
+			prs:                 []github.PullRequest{{Number: base.number, Body: base.body, Title: "OCPBUGS-123,OCPBUGS-125: fixed it!"}, {Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] OCPBUGS-123,OCPBUGS-125: fixed it!"}},
+			title:               "[v1] OCPBUGS-123,OCPBUGS-125: fixed it!",
+			cherrypick:          true,
+			cherryPickFromPRNum: 1,
+			options:             JiraBranchOptions{TargetVersion: &v1Str},
+			expectedComment: `org/repo#1:@user: Detected clone of [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) with correct target version. Will retitle the PR to link to the clone.
+
+[Jira Issue OCPBUGS-125](https://my-jira.com/browse/OCPBUGS-125) has been cloned as [Jira Issue OCPBUGS-126](https://my-jira.com/browse/OCPBUGS-126). Will retitle bug to link to clone.
+/retitle [v1] OCPBUGS-124,OCPBUGS-126: fixed it!
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`,
+			expectedIssue: &jira.Issue{ID: "4", Key: "OCPBUGS-126", Fields: &jira.IssueFields{
+				Description: "This is a clone of issue OCPBUGS-125. The following is the description of the original issue: \n---\n",
+				Status:      &jira.Status{Name: "CLOSED"},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				IssueLinks: []*jira.IssueLink{{
+					Type: jira.IssueLinkType{
+						Name:    "Cloners",
+						Inward:  "is cloned by",
+						Outward: "clones",
+					},
+					OutwardIssue: &jira.Issue{ID: "3"},
+				}, {
+					Type: jira.IssueLinkType{
+						Name:    "Blocks",
+						Inward:  "is blocked by",
+						Outward: "blocks",
+					},
+					InwardIssue: &jira.Issue{ID: "3"},
+				}},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
+					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
+				},
+			}},
 		}, {
 			name: "Clone for different version does not block creation of new clone",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
@@ -1426,7 +2164,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			cherrypick:          true,
 			cherryPickFromPRNum: 1,
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-125](https://my-jira.com/browse/OCPBUGS-125). Retitling PR to link against new bug.
+			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-125](https://my-jira.com/browse/OCPBUGS-125). Will retitle bug to link to clone.
 /retitle [v1] OCPBUGS-125: fixed it!
 
 <details>
@@ -1570,7 +2308,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			}}},
 			overrideEvent: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 2, key: "OCPBUGS-124", isBug: true, body: "This PR fixes OCPBUGS-124", title: "OCPBUGS-124: fixed it!", htmlUrl: "https://github.com/org/repo/pull/2", login: "user",
+				org: "org", repo: "repo", baseRef: "branch", number: 2, bugs: []referencedBug{{Key: "OCPBUGS-124", IsBug: true}}, body: "This PR fixes OCPBUGS-124", title: "OCPBUGS-124: fixed it!", htmlUrl: "https://github.com/org/repo/pull/2", login: "user",
 			},
 			existingIssueLinks: []*jira.IssueLink{{
 				Type: jira.IssueLinkType{
@@ -1631,7 +2369,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			overrideEvent: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 2, key: "", body: "This is an automated cherry-pick of #1.\n\n/assign user", title: "[v1] Bug 1: fixed it!", htmlUrl: "https://github.com/org/repo/pull/2", login: "user",
+				org: "org", repo: "repo", baseRef: "branch", number: 2, bugs: nil, body: "This is an automated cherry-pick of #1.\n\n/assign user", title: "[v1] Bug 1: fixed it!", htmlUrl: "https://github.com/org/repo/pull/2", login: "user",
 			},
 			prs:                 []github.PullRequest{{Number: base.number, Body: base.body, Title: "Bug 1: fixed it!"}, {Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] " + "Bug 1: fixed it!"}},
 			title:               "[v1] Bug 1: fixed it!",
@@ -1695,7 +2433,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			overrideEvent: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 2, key: "", body: "This is an automated cherry-pick of #1.\n\n/assign user", title: "[v1] Bug 1: fixed it!", htmlUrl: "https://github.com/org/repo/pull/2", login: "user",
+				org: "org", repo: "repo", baseRef: "branch", number: 2, bugs: nil, body: "This is an automated cherry-pick of #1.\n\n/assign user", title: "[v1] Bug 1: fixed it!", htmlUrl: "https://github.com/org/repo/pull/2", login: "user",
 			},
 			prs:                 []github.PullRequest{{Number: base.number, Body: base.body, Title: "Bug 1: fixed it!"}, {Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] " + "Bug 1: fixed it!"}},
 			title:               "[v1] Bug 1: fixed it!",
@@ -1813,7 +2551,15 @@ Instructions for interacting with me using PR comments are available [here](http
 			testEvent.merged = tc.merged
 			testEvent.closed = tc.closed || tc.merged
 			testEvent.opened = tc.opened
-			testEvent.isBug = !tc.nonBug
+			if tc.replaceReferencedBugs != nil {
+				newEvent := testEvent
+				newEvent.bugs = []referencedBug{}
+				testEvent.bugs = tc.replaceReferencedBugs
+			}
+			if tc.noJira {
+				testEvent.noJira = true
+				testEvent.bugs = nil
+			}
 			testEvent.cherrypick = tc.cherrypick
 			testEvent.cherrypickFromPRNum = tc.cherryPickFromPRNum
 			if tc.body != "" {
@@ -1821,9 +2567,6 @@ Instructions for interacting with me using PR comments are available [here](http
 			}
 			if tc.title != "" {
 				testEvent.title = tc.title
-			}
-			if tc.key != "" {
-				testEvent.key = tc.key
 			}
 
 			gc := fakegithub.NewFakeClient()
@@ -1898,6 +2641,15 @@ Instructions for interacting with me using PR comments are available [here](http
 				}
 				if !reflect.DeepEqual(actual, tc.expectedIssue) {
 					t.Errorf("%s: got incorrect bug after update: %s", tc.name, cmp.Diff(actual, tc.expectedIssue, allowEventAndDate))
+				}
+			}
+			if tc.expectedIssue2 != nil {
+				actual, err := jiraClient.GetIssue(tc.expectedIssue2.ID)
+				if err != nil {
+					t.Errorf("%s: failed to get expected bug during test: %v", tc.name, err)
+				}
+				if !reflect.DeepEqual(actual, tc.expectedIssue2) {
+					t.Errorf("%s: got incorrect bug after update: %s", tc.name, cmp.Diff(actual, tc.expectedIssue2, allowEventAndDate))
 				}
 			}
 		})
@@ -2226,7 +2978,7 @@ func TestDigestPR(t *testing.T) {
 			},
 			validateByDefault: &yes,
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", missing: true, opened: true, key: "", title: "fixing a typo", htmlUrl: "http.com", login: "user",
+				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", missing: true, opened: true, bugs: nil, title: "fixing a typo", htmlUrl: "http.com", login: "user",
 			},
 		},
 		{
@@ -2253,7 +3005,61 @@ func TestDigestPR(t *testing.T) {
 				},
 			},
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: true, key: "OCPBUGS-123", isBug: true, title: "OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
+				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: true, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}}, title: "OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
+			},
+		},
+		{
+			name: "title referencing multiple bugs gets an event",
+			pre: github.PullRequestEvent{
+				Action: github.PullRequestActionOpened,
+				PullRequest: github.PullRequest{
+					Base: github.PullRequestBranch{
+						Repo: github.Repo{
+							Owner: github.User{
+								Login: "org",
+							},
+							Name: "repo",
+						},
+						Ref: "branch",
+					},
+					Number:  1,
+					Title:   "OCPBUGS-123,OCPBUGS-124: fixed it!",
+					State:   "open",
+					HTMLURL: "http.com",
+					User: github.User{
+						Login: "user",
+					},
+				},
+			},
+			expected: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: true, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "OCPBUGS-124", IsBug: true}}, title: "OCPBUGS-123,OCPBUGS-124: fixed it!", htmlUrl: "http.com", login: "user",
+			},
+		},
+		{
+			name: "title referencing bug and jira issue gets an event",
+			pre: github.PullRequestEvent{
+				Action: github.PullRequestActionOpened,
+				PullRequest: github.PullRequest{
+					Base: github.PullRequestBranch{
+						Repo: github.Repo{
+							Owner: github.User{
+								Login: "org",
+							},
+							Name: "repo",
+						},
+						Ref: "branch",
+					},
+					Number:  1,
+					Title:   "OCPBUGS-123,JIRA-123: fixed it!",
+					State:   "open",
+					HTMLURL: "http.com",
+					User: github.User{
+						Login: "user",
+					},
+				},
+			},
+			expected: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: true, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "JIRA-123", IsBug: false}}, title: "OCPBUGS-123,JIRA-123: fixed it!", htmlUrl: "http.com", login: "user",
 			},
 		},
 		{
@@ -2280,7 +3086,7 @@ func TestDigestPR(t *testing.T) {
 				},
 			},
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: true, key: "SOMEJIRA-123", isBug: false, title: "SOMEJIRA-123: implement feature!", htmlUrl: "http.com", login: "user",
+				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: true, bugs: []referencedBug{{Key: "SOMEJIRA-123", IsBug: false}}, title: "SOMEJIRA-123: implement feature!", htmlUrl: "http.com", login: "user",
 			},
 		},
 		{
@@ -2307,7 +3113,7 @@ func TestDigestPR(t *testing.T) {
 				},
 			},
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: true, key: "NO-JIRA", isBug: false, title: "NO-ISSUE: typo fixup", htmlUrl: "http.com", login: "user",
+				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: true, bugs: nil, noJira: true, title: "NO-ISSUE: typo fixup", htmlUrl: "http.com", login: "user",
 			},
 		},
 		{
@@ -2334,7 +3140,7 @@ func TestDigestPR(t *testing.T) {
 				},
 			},
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: true, key: "NO-JIRA", isBug: false, title: "NO-JIRA: typo fixup", htmlUrl: "http.com", login: "user",
+				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: true, bugs: nil, noJira: true, title: "NO-JIRA: typo fixup", htmlUrl: "http.com", login: "user",
 			},
 		},
 		{
@@ -2361,7 +3167,7 @@ func TestDigestPR(t *testing.T) {
 				},
 			},
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, merged: true, closed: true, key: "OCPBUGS-123", isBug: true, title: "OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
+				org: "org", repo: "repo", baseRef: "branch", number: 1, merged: true, closed: true, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}}, title: "OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
 			},
 		},
 		{
@@ -2387,7 +3193,7 @@ func TestDigestPR(t *testing.T) {
 				},
 			},
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, merged: false, closed: true, key: "OCPBUGS-123", isBug: true, title: "OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
+				org: "org", repo: "repo", baseRef: "branch", number: 1, merged: false, closed: true, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}}, title: "OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
 			},
 		},
 		{
@@ -2445,7 +3251,7 @@ func TestDigestPR(t *testing.T) {
 				},
 			},
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "release-4.4", number: 3, opened: true, body: "This is an automated cherry-pick of #2\n\n/assign user", title: "[release-4.4] OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user", cherrypick: true, cherrypickFromPRNum: 2, key: "OCPBUGS-123", isBug: true,
+				org: "org", repo: "repo", baseRef: "release-4.4", number: 3, opened: true, body: "This is an automated cherry-pick of #2\n\n/assign user", title: "[release-4.4] OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user", cherrypick: true, cherrypickFromPRNum: 2, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}},
 			},
 		},
 		{
@@ -2474,7 +3280,7 @@ func TestDigestPR(t *testing.T) {
 				},
 			},
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "release-4.4", number: 3, key: "OCPBUGS-123", isBug: true, body: "This is an automated cherry-pick of #2\n\n/assign user", title: "[release-4.4] OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
+				org: "org", repo: "repo", baseRef: "release-4.4", number: 3, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}}, body: "This is an automated cherry-pick of #2\n\n/assign user", title: "[release-4.4] OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
 			},
 		},
 		{
@@ -2525,7 +3331,7 @@ func TestDigestPR(t *testing.T) {
 				Changes: []byte(`{"title":{"from":"fixed it! (WIP)"}}`),
 			},
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, opened: true, key: "OCPBUGS-123", isBug: true, title: "OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
+				org: "org", repo: "repo", baseRef: "branch", number: 1, opened: true, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}}, title: "OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
 			},
 		},
 		{
@@ -2709,7 +3515,61 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, key: "OCPBUGS-123", isBug: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+				org: "org", repo: "repo", baseRef: "branch", number: 1, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+			},
+		},
+		{
+			name: "title referencing multiple bugs gets an event",
+			e: github.IssueCommentEvent{
+				Action: github.IssueCommentActionCreated,
+				Issue: github.Issue{
+					Number:      1,
+					PullRequest: &struct{}{},
+				},
+				Comment: github.IssueComment{
+					Body: "/jira refresh",
+					User: github.User{
+						Login: "user",
+					},
+					HTMLURL: "www.com",
+				},
+				Repo: github.Repo{
+					Owner: github.User{
+						Login: "org",
+					},
+					Name: "repo",
+				},
+			},
+			title: "OCPBUGS-123,OCPBUGS-124: oopsie doopsie",
+			expected: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 1, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "OCPBUGS-124", IsBug: true}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+			},
+		},
+		{
+			name: "title referencing bug and jira issue gets an event",
+			e: github.IssueCommentEvent{
+				Action: github.IssueCommentActionCreated,
+				Issue: github.Issue{
+					Number:      1,
+					PullRequest: &struct{}{},
+				},
+				Comment: github.IssueComment{
+					Body: "/jira refresh",
+					User: github.User{
+						Login: "user",
+					},
+					HTMLURL: "www.com",
+				},
+				Repo: github.Repo{
+					Owner: github.User{
+						Login: "org",
+					},
+					Name: "repo",
+				},
+			},
+			title: "OCPBUGS-123,JIRA-123: oopsie doopsie",
+			expected: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 1, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "JIRA-123", IsBug: false}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
 			},
 		},
 		{
@@ -2736,7 +3596,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			title: "SOMEJIRA-123: oopsie doopsie",
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, key: "SOMEJIRA-123", isBug: false, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+				org: "org", repo: "repo", baseRef: "branch", number: 1, bugs: []referencedBug{{Key: "SOMEJIRA-123", IsBug: false}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
 			},
 		},
 		{
@@ -2763,7 +3623,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			title: "NO-JIRA: oopsie doopsie",
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, key: "NO-JIRA", isBug: false, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+				org: "org", repo: "repo", baseRef: "branch", number: 1, bugs: nil, noJira: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
 			},
 		},
 		{
@@ -2790,7 +3650,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			title: "NO-ISSUE: oopsie doopsie",
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, key: "NO-JIRA", isBug: false, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+				org: "org", repo: "repo", baseRef: "branch", number: 1, bugs: nil, noJira: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
 			},
 		},
 		{
@@ -2818,7 +3678,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			title:  "OCPBUGS-123: oopsie doopsie",
 			merged: true,
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, key: "OCPBUGS-123", isBug: true, merged: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+				org: "org", repo: "repo", baseRef: "branch", number: 1, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}}, merged: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
 			},
 		},
 		{
@@ -2845,7 +3705,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, key: "OCPBUGS-123", isBug: true, body: "/jira cc-qa", htmlUrl: "www.com", login: "user", cc: true,
+				org: "org", repo: "repo", baseRef: "branch", number: 1, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}}, body: "/jira cc-qa", htmlUrl: "www.com", login: "user", cc: true,
 			},
 		},
 		{
@@ -2872,7 +3732,34 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			title: "oopsie doopsie",
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, key: "OCPBUGS-1234", body: "/jira cherrypick OCPBUGS-1234", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: true, cherrypick: true,
+				org: "org", repo: "repo", baseRef: "branch", number: 1, bugs: []referencedBug{{Key: "OCPBUGS-1234", IsBug: true}}, body: "/jira cherrypick OCPBUGS-1234", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: true, cherrypick: true,
+			},
+		},
+		{
+			name: "cherrypick comment event for multiple bugs has cherrypick bools set to true and correct bug keys set",
+			e: github.IssueCommentEvent{
+				Action: github.IssueCommentActionCreated,
+				Issue: github.Issue{
+					Number:      1,
+					PullRequest: &struct{}{},
+				},
+				Comment: github.IssueComment{
+					Body: "/jira cherrypick OCPBUGS-1234,OCPBUGS-1235",
+					User: github.User{
+						Login: "user",
+					},
+					HTMLURL: "www.com",
+				},
+				Repo: github.Repo{
+					Owner: github.User{
+						Login: "org",
+					},
+					Name: "repo",
+				},
+			},
+			title: "oopsie doopsie",
+			expected: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 1, bugs: []referencedBug{{Key: "OCPBUGS-1234", IsBug: true}, {Key: "OCPBUGS-1235", IsBug: true}}, body: "/jira cherrypick OCPBUGS-1234,OCPBUGS-1235", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: true, cherrypick: true,
 			},
 		},
 		{
@@ -2899,7 +3786,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, key: "OCPBUGS-1234", body: "/jira cherrypick OCPBUGS-1234\r\nThis is part of a\r\nmultiline comment", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: false, cherrypick: true, isBug: true,
+				org: "org", repo: "repo", baseRef: "branch", number: 1, bugs: []referencedBug{{Key: "OCPBUGS-1234", IsBug: true}}, body: "/jira cherrypick OCPBUGS-1234\r\nThis is part of a\r\nmultiline comment", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: false, cherrypick: true,
 			},
 		},
 	}
@@ -2931,78 +3818,105 @@ Instructions for interacting with me using PR comments are available [here](http
 func TestBugKeyFromTitle(t *testing.T) {
 	var testCases = []struct {
 		title            string
-		expectedKey      string
+		expectedRefBugs  []referencedBug
 		expectedNotFound bool
-		expectedIsBug    bool
+		expectedNoJira   bool
 	}{
 		{
 			title:            "no match",
-			expectedKey:      "",
+			expectedRefBugs:  nil,
 			expectedNotFound: true,
 		},
 		{
-			title:         "OCPBUGS-12: Canonical",
-			expectedKey:   "OCPBUGS-12",
-			expectedIsBug: true,
+			title:           "OCPBUGS-12: Canonical",
+			expectedRefBugs: []referencedBug{{Key: "OCPBUGS-12", IsBug: true}},
+		},
+		{
+			title:           "OCPBUGS-12,OCPBUGS-13: Multiple Canonical",
+			expectedRefBugs: []referencedBug{{Key: "OCPBUGS-12", IsBug: true}, {Key: "OCPBUGS-13", IsBug: true}},
 		},
 		{
 			title:            "OCPBUGS-12 : Space before colon",
-			expectedKey:      "",
+			expectedRefBugs:  nil,
 			expectedNotFound: true,
 		},
 		{
-			title:         "[rebase release-1.0] OCPBUGS-12: Prefix",
-			expectedKey:   "OCPBUGS-12",
-			expectedIsBug: true,
+			title:           "[rebase release-1.0] OCPBUGS-12: Prefix",
+			expectedRefBugs: []referencedBug{{Key: "OCPBUGS-12", IsBug: true}},
 		},
 		{
-			title:         "Revert: \"OCPBUGS-12: Revert default\"",
-			expectedKey:   "OCPBUGS-12",
-			expectedIsBug: true,
+			title:           "[rebase release-1.0] OCPBUGS-12,OCPBUGS-13: Multiple Prefix",
+			expectedRefBugs: []referencedBug{{Key: "OCPBUGS-12", IsBug: true}, {Key: "OCPBUGS-13", IsBug: true}},
 		},
 		{
-			title:         "OCPBUGS-34: Revert: \"OCPBUGS-12: Revert default\"",
-			expectedKey:   "OCPBUGS-34",
-			expectedIsBug: true,
+			title:           "Revert: \"OCPBUGS-12: Revert default\"",
+			expectedRefBugs: []referencedBug{{Key: "OCPBUGS-12", IsBug: true}},
 		},
 		{
-			title:       "[rebase release-1.0] JIRA-12: Prefix",
-			expectedKey: "JIRA-12",
+			title:           "Revert: \"OCPBUGS-12,OCPBUGS-13: Multiple Revert default\"",
+			expectedRefBugs: []referencedBug{{Key: "OCPBUGS-12", IsBug: true}, {Key: "OCPBUGS-13", IsBug: true}},
 		},
 		{
-			title:       "JIRA-34: Revert: \"OCPBUGS-12: Revert default\"",
-			expectedKey: "JIRA-34",
+			title:           "OCPBUGS-34: Revert: \"OCPBUGS-12: Revert default\"",
+			expectedRefBugs: []referencedBug{{Key: "OCPBUGS-34", IsBug: true}},
 		},
 		{
-			title:         "OCPBUGS-12: Revert: \"JIRA-34: Revert default\"",
-			expectedKey:   "OCPBUGS-12",
-			expectedIsBug: true,
+			title:           "OCPBUGS-34,OCPBUGS-35: Revert: \"OCPBUGS-12: Revert default\"",
+			expectedRefBugs: []referencedBug{{Key: "OCPBUGS-34", IsBug: true}, {Key: "OCPBUGS-35", IsBug: true}},
 		},
 		{
-			title:       "No-issue: OCPBUGS-12: blah blah",
-			expectedKey: "NO-JIRA",
+			title:           "[rebase release-1.0] JIRA-12: Prefix",
+			expectedRefBugs: []referencedBug{{Key: "JIRA-12", IsBug: false}},
 		},
 		{
-			title:         "OCPBUGS-12: NO-ISSUE: blah blah",
-			expectedKey:   "OCPBUGS-12",
-			expectedIsBug: true,
+			title:           "[rebase release-1.0] OCPBUGS-13,JIRA-12: Prefix",
+			expectedRefBugs: []referencedBug{{Key: "OCPBUGS-13", IsBug: true}, {Key: "JIRA-12", IsBug: false}},
 		},
 		{
-			title:       "No-jira: OCPBUGS-12: blah blah",
-			expectedKey: "NO-JIRA",
+			title:           "JIRA-34: Revert: \"OCPBUGS-12: Revert default\"",
+			expectedRefBugs: []referencedBug{{Key: "JIRA-34", IsBug: false}},
+		},
+		{
+			title:           "OCPBUGS-12: Revert: \"JIRA-34: Revert default\"",
+			expectedRefBugs: []referencedBug{{Key: "OCPBUGS-12", IsBug: true}},
+		},
+		{
+			title:           "JIRA-34,OCPBUGS-13: Revert: \"OCPBUGS-12: Revert default\"",
+			expectedRefBugs: []referencedBug{{Key: "JIRA-34", IsBug: false}, {Key: "OCPBUGS-13", IsBug: true}},
+		},
+		{
+			title:           "No-issue: OCPBUGS-12: blah blah",
+			expectedRefBugs: nil,
+			expectedNoJira:  true,
+		},
+		{
+			title:           "OCPBUGS-12: NO-ISSUE: blah blah",
+			expectedRefBugs: []referencedBug{{Key: "OCPBUGS-12", IsBug: true}},
+		},
+		{
+			title:           "No-jira: OCPBUGS-12: blah blah",
+			expectedRefBugs: nil,
+			expectedNoJira:  true,
 		},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.title, func(t *testing.T) {
-			key, notFound, isBug := jiraKeyFromTitle(testCase.title)
-			if key != testCase.expectedKey {
-				t.Errorf("%s: unexpected %s != %s", testCase.title, key, testCase.expectedKey)
+			bugs, notFound, noJira := jiraKeyFromTitle(testCase.title)
+			if len(testCase.expectedRefBugs) != len(bugs) {
+				t.Errorf("%s: length of expected refbugs (%d) not equal to length of returned refbugs (%d): %+v", testCase.title, len(testCase.expectedRefBugs), len(bugs), bugs)
+			} else {
+				for index, bug := range bugs {
+					expectedBug := testCase.expectedRefBugs[index]
+					if expectedBug.Key != bug.Key || expectedBug.IsBug != bug.IsBug || expectedBug.IsBZ != bug.IsBZ {
+						t.Errorf("%s: unexpected %+v != %+v", testCase.title, bug, expectedBug)
+					}
+				}
 			}
 			if notFound != testCase.expectedNotFound {
 				t.Errorf("%s: unexpected %t != %t", testCase.title, notFound, testCase.expectedNotFound)
 			}
-			if isBug != testCase.expectedIsBug {
-				t.Errorf("%s: unexpected %t != %t", testCase.title, isBug, testCase.expectedIsBug)
+			if noJira != testCase.expectedNoJira {
+				t.Errorf("%s: unexpected %t != %t", testCase.title, noJira, testCase.expectedNoJira)
 			}
 		})
 	}
