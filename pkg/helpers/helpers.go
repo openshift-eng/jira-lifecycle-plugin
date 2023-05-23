@@ -8,11 +8,10 @@ import (
 )
 
 const (
-	QAContactField       = "customfield_12315948"
-	SeverityField        = "customfield_12316142"
-	TargetVersionField   = "customfield_12319940"
-	BlockedByBugzillaBug = "customfield_12322152"
-	ReleaseBlockerField  = "customfield_12319743"
+	QAContactField      = "customfield_12315948"
+	SeverityField       = "customfield_12316142"
+	TargetVersionField  = "customfield_12319940"
+	ReleaseBlockerField = "customfield_12319743"
 )
 
 // GetUnknownField will attempt to get the specified field from the Unknowns struct and unmarshal
@@ -91,18 +90,6 @@ func GetIssueSeverity(issue *jira.Issue) (*CustomField, error) {
 	var obj *CustomField
 	isSet, err := GetUnknownField(SeverityField, issue, func() interface{} {
 		obj = &CustomField{}
-		return obj
-	})
-	if !isSet {
-		return nil, err
-	}
-	return obj, err
-}
-
-func GetIssueBlockedByBugzillaBug(issue *jira.Issue) (*string, error) {
-	var obj *string
-	isSet, err := GetUnknownField(BlockedByBugzillaBug, issue, func() interface{} {
-		obj = func(s string) *string { return &s }("")
 		return obj
 	})
 	if !isSet {
