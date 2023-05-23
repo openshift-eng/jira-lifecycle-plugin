@@ -17,7 +17,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/yaml"
 
-	"k8s.io/test-infra/prow/bugzilla"
 	prowconfig "k8s.io/test-infra/prow/config"
 	cherrypicker "k8s.io/test-infra/prow/external-plugins/cherrypicker/lib"
 	"k8s.io/test-infra/prow/github"
@@ -202,9 +201,6 @@ func TestHandle(t *testing.T) {
 		overrideEvent          *event
 		disabledProjects       []string
 		expectedCommentUpdates []string
-		bugs                   []bugzilla.Bug
-		bugComments            map[int][]bugzilla.Comment
-		bugSubComponents       map[int]map[string][]string
 	}{
 		{
 			name:    "Unrelated event gets no action",
@@ -288,7 +284,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraInvalidBug},
-			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.BugzillaValidBug, labels.SeverityCritical},
+			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
 
 <details><summary>No validations were run on this bug</summary></details>
@@ -307,7 +303,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			name:           "invalid bug adds invalid label, removes valid label and comments",
 			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityImportant}}}},
 			options:        JiraBranchOptions{IsOpen: &open},
-			labels:         []string{labels.JiraValidBug, labels.BugzillaValidBug, labels.SeverityCritical},
+			labels:         []string{labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraInvalidBug, labels.SeverityImportant},
 			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is invalid:
  - expected the bug to be open, but it isn't
@@ -395,7 +391,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			replaceReferencedBugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "OCPBUGS-124", IsBug: true}},
 			options:               JiraBranchOptions{IsOpen: &open},
 			labels:                []string{},
-			expectedLabels:        []string{labels.JiraValidRef, labels.JiraValidBug, labels.BugzillaValidBug, labels.SeverityCritical},
+			expectedLabels:        []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
 
 <details><summary>1 validation(s) were run on this bug</summary>
@@ -427,7 +423,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			replaceReferencedBugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "OCPBUGS-124", IsBug: true}},
 			options:               JiraBranchOptions{IsOpen: &open},
 			labels:                []string{},
-			expectedLabels:        []string{labels.JiraValidRef, labels.JiraValidBug, labels.BugzillaValidBug, labels.SeverityCritical},
+			expectedLabels:        []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
 
 <details><summary>1 validation(s) were run on this bug</summary>
@@ -455,8 +451,8 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityImportant}}}},
 			options:        JiraBranchOptions{IsOpen: &open},
 			humanLabelled:  true,
-			labels:         []string{labels.JiraValidBug, labels.BugzillaValidBug, labels.SeverityCritical},
-			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.BugzillaValidBug, labels.SeverityImportant},
+			labels:         []string{labels.JiraValidBug, labels.SeverityCritical},
+			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityImportant},
 			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is invalid:
  - expected the bug to be open, but it isn't
 
@@ -477,7 +473,7 @@ Instructions for interacting with me using PR comments are available [here](http
 		{
 			name:    "no bug removes all labels and comments",
 			missing: true,
-			labels:  []string{labels.JiraValidBug, labels.BugzillaValidBug, labels.JiraInvalidBug},
+			labels:  []string{labels.JiraValidBug, labels.JiraInvalidBug},
 			expectedComment: `org/repo#1:@user: No Jira issue is referenced in the title of this pull request.
 To reference a jira issue, add 'XYZ-NNN:' to the title of this pull request and request another refresh with <code>/jira refresh</code>.
 
@@ -505,7 +501,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			}},
 			options:        JiraBranchOptions{StateAfterValidation: &updated}, // no requirements --> always valid
 			labels:         []string{labels.JiraInvalidBug},
-			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.BugzillaValidBug, labels.SeverityModerate},
+			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityModerate},
 			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid. The bug has been moved to the UPDATED state.
 
 <details><summary>No validations were run on this bug</summary></details>
@@ -551,7 +547,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			replaceReferencedBugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "JIRA-123", IsBug: false}},
 			options:               JiraBranchOptions{IsOpen: &open},
 			labels:                []string{},
-			expectedLabels:        []string{labels.JiraValidRef, labels.JiraValidBug, labels.BugzillaValidBug, labels.SeverityCritical},
+			expectedLabels:        []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
 
 <details><summary>1 validation(s) were run on this bug</summary>
@@ -610,7 +606,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityLow}}}},
 			options:        JiraBranchOptions{StateAfterValidation: &JiraBugState{Status: "CLOSED", Resolution: "VALIDATED"}}, // no requirements --> always valid
 			labels:         []string{labels.JiraInvalidBug},
-			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.BugzillaValidBug, labels.SeverityLow},
+			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityLow},
 			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid. The bug has been moved to the CLOSED (VALIDATED) state.
 
 <details><summary>No validations were run on this bug</summary></details>
@@ -641,7 +637,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: "UPDATED"}}}},
 			options:        JiraBranchOptions{StateAfterValidation: &updated}, // no requirements --> always valid
 			labels:         []string{labels.JiraInvalidBug},
-			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.BugzillaValidBug},
+			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug},
 			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
 
 <details><summary>No validations were run on this bug</summary></details>
@@ -662,7 +658,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123"}},
 			options:        JiraBranchOptions{AddExternalLink: &yes}, // no requirements --> always valid
 			labels:         []string{labels.JiraInvalidBug},
-			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.BugzillaValidBug},
+			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug},
 			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
 
 <details><summary>No validations were run on this bug</summary></details>
@@ -703,7 +699,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			}},
 			options:        JiraBranchOptions{AddExternalLink: &yes}, // no requirements --> always valid
 			labels:         []string{labels.JiraInvalidBug},
-			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.BugzillaValidBug},
+			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug},
 			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
 
 <details><summary>No validations were run on this bug</summary></details>
@@ -774,7 +770,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			existingIssueLinks: []*jira.IssueLink{&cloneBetween123to124, &blocksBetween123to124},
 			options:            JiraBranchOptions{IsOpen: &yes, TargetVersion: &v1Str, DependentBugStates: &verified, DependentBugTargetVersions: &[]string{v2Str}},
 			labels:             []string{labels.JiraInvalidBug},
-			expectedLabels:     []string{labels.JiraValidRef, labels.JiraValidBug, labels.BugzillaValidBug},
+			expectedLabels:     []string{labels.JiraValidRef, labels.JiraValidBug},
 			expectedComment: `org/repo#2:@user: This pull request references [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124), which is valid.
 
 <details><summary>5 validation(s) were run on this bug</summary>
@@ -2203,7 +2199,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			prs:            []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}},
 			refresh:        true,
 			body:           "/jira refresh",
-			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.BugzillaValidBug},
+			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug},
 			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
 
 <details><summary>No validations were run on this bug</summary></details>
@@ -2264,7 +2260,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			}}}},
 			options:        JiraBranchOptions{StateAfterValidation: &updated, AllowedSecurityLevels: []string{"security"}},
 			labels:         []string{labels.JiraInvalidBug},
-			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.BugzillaValidBug, labels.SeverityModerate},
+			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityModerate},
 			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid. The bug has been moved to the UPDATED state.
 
 <details><summary>No validations were run on this bug</summary></details>
@@ -2328,15 +2324,6 @@ Instructions for interacting with me using PR comments are available [here](http
  - bug has dependents
  - dependent bug OCPBUGSM-123 is not in the required ` + "`OCPBUGS`" + ` project
 
-All dependent bugs must be part of the OCPBUGS project. If you are backporting a fix that was originally tracked in Bugzilla, follow these steps to handle the backport:
-1. Create a new bug in the OCPBUGS Jira project to match the original bugzilla bug. The important fields that should match are the title, description, target version, and status.
-2. Use the Jira UI to clone the Jira bug, then in the clone bug:
-  a. Set the target version to the release you are cherrypicking to.
-  b. Add an issue link “is blocked by”, which links to the original jira bug
-3. Use the cherrypick github command to create the cherrypicked PR. Once that new PR is created, retitle the PR and replace the BUG XXX: with OCPBUGS-XXX: to match the new Jira story.
-
-Note that the mirrored bug in OCPBUGSM should not be involved in this process at all.
-
 Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jira bug are made, or edit the title of this pull request to link to a different bug.
 
 <details>
@@ -2348,181 +2335,6 @@ In response to [this](https://github.com/org/repo/pull/2):
 
 Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
 </details>`,
-		}, {
-			name: "Cherrypick PR on Bugzilla cherrypick creates new issues with BZ link",
-			bugs: []bugzilla.Bug{{
-				Summary:       "This is a title",
-				TargetRelease: []string{v2Str},
-				ID:            1,
-				Component:     []string{"Installer"},
-			}},
-			bugComments: map[int][]bugzilla.Comment{
-				1: {{
-					Text: "This is a description",
-				}},
-			},
-			bugSubComponents: map[int]map[string][]string{
-				1: {
-					"Installer": {
-						"openshift-ansible",
-					},
-				},
-			},
-			overrideEvent: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 2, bugs: nil, body: "This is an automated cherry-pick of #1.\n\n/assign user", title: "[v1] Bug 1: fixed it!", htmlUrl: "https://github.com/org/repo/pull/2", login: "user",
-			},
-			prs:                 []github.PullRequest{{Number: base.number, Body: base.body, Title: "Bug 1: fixed it!"}, {Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] " + "Bug 1: fixed it!"}},
-			title:               "[v1] Bug 1: fixed it!",
-			cherrypick:          true,
-			cherryPickFromPRNum: 1,
-			options:             JiraBranchOptions{TargetVersion: &v1Str},
-			expectedComment: `org/repo#2:@user: [Bugzilla Bug 1](www.bugzilla/show_bug.cgi?id=1) has been cloned as [Jira Issue -1](https://my-jira.com/browse/-1). Retitling PR to link against new bug.
-/retitle [v1] -1: fixed it!
-
-<details>
-
-In response to [this](https://github.com/org/repo/pull/2):
-
->This is an automated cherry-pick of #1.
->
->/assign user
-
-
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
-</details>`,
-			expectedIssue: &jira.Issue{ID: "1", Key: "-1", Fields: &jira.IssueFields{
-				Summary:     "This is a title",
-				Description: "This bug is a backport clone of [Bugzilla Bug 1](www.bugzilla/show_bug.cgi?id=1). The following is the description of the original bug:\n---\nThis is a description",
-				Project: jira.Project{
-					Key: "OCPBUGS",
-				},
-				Type: jira.IssueType{
-					Name: "Bug",
-				},
-				AffectsVersions: []*jira.AffectsVersion{{Name: v1Str}},
-				Components:      []*jira.Component{{Name: "Installer / openshift-ansible"}},
-				Unknowns: tcontainer.MarshalMap{
-					helpers.TargetVersionField:   v1,
-					helpers.BlockedByBugzillaBug: "www.bugzilla/show_bug.cgi?id=1",
-				},
-			}},
-		}, {
-			name: "Cherrypick PR on Bugzilla cherrypick for CVE creates new bug with correct labels",
-			bugs: []bugzilla.Bug{{
-				Summary:       "This is a title",
-				TargetRelease: []string{v2Str},
-				ID:            1,
-				Component:     []string{"Installer"},
-				Keywords:      []string{"Security", "SecurityTracking"},
-				Whiteboard:    "component:test-component",
-				Blocks:        []int{2},
-			}, {
-				ID:    2,
-				Alias: []string{"CVE-2022-12345"},
-			}},
-			bugComments: map[int][]bugzilla.Comment{
-				1: {{
-					Text: "This is a description",
-				}},
-			},
-			bugSubComponents: map[int]map[string][]string{
-				1: {
-					"Installer": {
-						"openshift-ansible",
-					},
-				},
-			},
-			overrideEvent: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 2, bugs: nil, body: "This is an automated cherry-pick of #1.\n\n/assign user", title: "[v1] Bug 1: fixed it!", htmlUrl: "https://github.com/org/repo/pull/2", login: "user",
-			},
-			prs:                 []github.PullRequest{{Number: base.number, Body: base.body, Title: "Bug 1: fixed it!"}, {Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] " + "Bug 1: fixed it!"}},
-			title:               "[v1] Bug 1: fixed it!",
-			cherrypick:          true,
-			cherryPickFromPRNum: 1,
-			options:             JiraBranchOptions{TargetVersion: &v1Str},
-			expectedComment: `org/repo#2:@user: [Bugzilla Bug 1](www.bugzilla/show_bug.cgi?id=1) has been cloned as [Jira Issue -1](https://my-jira.com/browse/-1). Retitling PR to link against new bug.
-/retitle [v1] -1: fixed it!
-
-<details>
-
-In response to [this](https://github.com/org/repo/pull/2):
-
->This is an automated cherry-pick of #1.
->
->/assign user
-
-
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
-</details>`,
-			expectedIssue: &jira.Issue{ID: "1", Key: "-1", Fields: &jira.IssueFields{
-				Summary:     "This is a title",
-				Description: "This bug is a backport clone of [Bugzilla Bug 1](www.bugzilla/show_bug.cgi?id=1). The following is the description of the original bug:\n---\nThis is a description",
-				Project: jira.Project{
-					Key: "OCPBUGS",
-				},
-				Type: jira.IssueType{
-					Name: "Bug",
-				},
-				AffectsVersions: []*jira.AffectsVersion{{Name: v1Str}},
-				Components:      []*jira.Component{{Name: "Installer / openshift-ansible"}},
-				Unknowns: tcontainer.MarshalMap{
-					helpers.TargetVersionField:   v1,
-					helpers.BlockedByBugzillaBug: "www.bugzilla/show_bug.cgi?id=1",
-				},
-				Labels: []string{"Security", "SecurityTracking", "component:test-component", "CVE-2022-12345", "flaw:bz#2"},
-			}},
-		}, {
-			name: "Existing issue has labels updated on refresh",
-			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
-				Status: &jira.Status{Name: "MODIFIED"},
-				Unknowns: tcontainer.MarshalMap{
-					helpers.BlockedByBugzillaBug: "www.bugzilla/show_bug.cgi?id=1",
-					helpers.TargetVersionField:   v1,
-				}}},
-			},
-			refresh: true,
-			body:    "/jira refresh",
-			bugs: []bugzilla.Bug{{
-				ID:            1,
-				TargetRelease: []string{v2Str},
-				Status:        "VERIFIED",
-				Keywords:      []string{"Security", "SecurityTracking"},
-				Whiteboard:    "component:test-component",
-				Blocks:        []int{2},
-			}, {
-				ID:    2,
-				Alias: []string{"CVE-2022-12345"},
-			}},
-			title:   "Bug 1: fixed it!",
-			options: JiraBranchOptions{ValidateByDefault: &yes, IsOpen: &yes, TargetVersion: &v1Str, DependentBugStates: &verified, DependentBugTargetVersions: &[]string{v2Str}},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
-
-<details><summary>5 validation(s) were run on this bug</summary>
-
-* bug is open, matching expected state (open)
-* bug target version (v1) matches configured target version for branch (v1)
-* dependent bug [Bugzilla Bug 1](www.bugzilla/show_bug.cgi?id=1) is in the state VERIFIED, which is one of the valid states (VERIFIED)
-* dependent [Bugzilla Bug 1](www.bugzilla/show_bug.cgi?id=1) targets the "v2" version, which is one of the valid target versions: v2
-* bug has dependents</details>
-
-<details>
-
-In response to [this](https://github.com/org/repo/pull/1):
-
->/jira refresh
-
-
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
-</details>`,
-			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.BugzillaValidBug},
-			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
-				Status: &jira.Status{Name: "MODIFIED"},
-				Unknowns: tcontainer.MarshalMap{
-					helpers.TargetVersionField:   []interface{}{map[string]interface{}{"name": string("v1")}},
-					helpers.BlockedByBugzillaBug: "www.bugzilla/show_bug.cgi?id=1",
-				},
-				Labels: []string{"CVE-2022-12345", "Security", "SecurityTracking", "component:test-component", "flaw:bz#2"},
-			}},
 		},
 	}
 
@@ -2585,19 +2397,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			// client with a custom one that has an empty Query function
 			// TODO: implement a basic fake query function in test-infra fakegithub library and start unit testing the query path
 			fakeClient := fakeGHClient{gc}
-			bc := bugzilla.Fake{
-				EndpointString: "www.bugzilla",
-				Bugs:           map[int]bugzilla.Bug{},
-				BugComments:    tc.bugComments,
-				SubComponents:  map[int]map[string][]string{},
-			}
-			for _, bug := range tc.bugs {
-				bc.Bugs[bug.ID] = bug
-			}
-			for id, subComponent := range tc.bugSubComponents {
-				bc.SubComponents[id] = subComponent
-			}
-			if err := handle(jiraClient, fakeClient, &bc, tc.options, logrus.WithField("testCase", tc.name), testEvent, sets.NewString("org/repo")); err != nil {
+			if err := handle(jiraClient, fakeClient, tc.options, logrus.WithField("testCase", tc.name), testEvent, sets.NewString("org/repo")); err != nil {
 				t.Fatalf("handle failed: %v", err)
 			}
 
@@ -3907,7 +3707,7 @@ func TestBugKeyFromTitle(t *testing.T) {
 			} else {
 				for index, bug := range bugs {
 					expectedBug := testCase.expectedRefBugs[index]
-					if expectedBug.Key != bug.Key || expectedBug.IsBug != bug.IsBug || expectedBug.IsBZ != bug.IsBZ {
+					if expectedBug.Key != bug.Key || expectedBug.IsBug != bug.IsBug {
 						t.Errorf("%s: unexpected %+v != %+v", testCase.title, bug, expectedBug)
 					}
 				}
@@ -3922,55 +3722,6 @@ func TestBugKeyFromTitle(t *testing.T) {
 	}
 }
 
-func TestBZIDFromTitle(t *testing.T) {
-	var testCases = []struct {
-		title            string
-		expectedID       int
-		expectedNotFound bool
-	}{
-		{
-			title:            "no match",
-			expectedID:       0,
-			expectedNotFound: true,
-		},
-		{
-			title:      "Bug 12: Canonical",
-			expectedID: 12,
-		},
-		{
-			title:            "Bug 12 : Space before colon",
-			expectedID:       0,
-			expectedNotFound: true,
-		},
-		{
-			title:      "[rebase release-1.0] Bug 12: Prefix",
-			expectedID: 12,
-		},
-		{
-			title:      "Revert: \"Bug 12: Revert default\"",
-			expectedID: 12,
-		},
-		{
-			title:      "Bug 34: Revert: \"Bug 12: Revert default\"",
-			expectedID: 34,
-		},
-	}
-	for _, testCase := range testCases {
-		t.Run(testCase.title, func(t *testing.T) {
-			key, notFound, err := bzIDFromTitle(testCase.title)
-			if err != nil {
-				t.Errorf("%s: unexpected error: %v", testCase.title, err)
-			}
-			if key != testCase.expectedID {
-				t.Errorf("%s: unexpected %d != %d", testCase.title, key, testCase.expectedID)
-			}
-			if notFound != testCase.expectedNotFound {
-				t.Errorf("%s: unexpected %t != %t", testCase.title, notFound, testCase.expectedNotFound)
-			}
-		})
-	}
-}
-
 func TestValidateBug(t *testing.T) {
 	open, closed := true, false
 	oneStr, twoStr := "v1", "v2"
@@ -3980,14 +3731,13 @@ func TestValidateBug(t *testing.T) {
 	modified := JiraBugState{Status: "MODIFIED"}
 	updated := JiraBugState{Status: "UPDATED"}
 	var testCases = []struct {
-		name                    string
-		issue                   *jira.Issue
-		dependents              []dependent
-		options                 JiraBranchOptions
-		valid                   bool
-		validations             []string
-		why                     []string
-		invalidDependentProject bool
+		name        string
+		issue       *jira.Issue
+		dependents  []dependent
+		options     JiraBranchOptions
+		valid       bool
+		validations []string
+		why         []string
 	}{
 		{
 			name:    "no requirements means a valid bug",
@@ -4278,13 +4028,12 @@ func TestValidateBug(t *testing.T) {
 				"bug has dependents",
 				"dependent bug OCPBUGSM-38676 is not in the required `OCPBUGS` project",
 			},
-			invalidDependentProject: true,
 		},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			valid, invalidDependentProject, validations, why := validateBug(testCase.issue, testCase.dependents, testCase.options, "https://my-jira.com", "https://my-bugzilla.com")
+			valid, validations, why := validateBug(testCase.issue, testCase.dependents, testCase.options, "https://my-jira.com")
 			if valid != testCase.valid {
 				t.Errorf("%s: didn't validate bug correctly, expected %t got %t", testCase.name, testCase.valid, valid)
 			}
@@ -4293,9 +4042,6 @@ func TestValidateBug(t *testing.T) {
 			}
 			if !reflect.DeepEqual(why, testCase.why) {
 				t.Errorf("%s: didn't get correct reasons why: %v", testCase.name, cmp.Diff(testCase.why, why, allowEventAndDate))
-			}
-			if invalidDependentProject != testCase.invalidDependentProject {
-				t.Errorf("%s: didn't get correct dependent bug project validation, expected %t got %t", testCase.name, testCase.invalidDependentProject, invalidDependentProject)
 			}
 		})
 	}
