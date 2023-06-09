@@ -8,10 +8,11 @@ import (
 )
 
 const (
-	QAContactField      = "customfield_12315948"
-	SeverityField       = "customfield_12316142"
-	TargetVersionField  = "customfield_12319940"
-	ReleaseBlockerField = "customfield_12319743"
+	QAContactField        = "customfield_12315948"
+	SeverityField         = "customfield_12316142"
+	TargetVersionFieldOld = "customfield_12319940"
+	TargetVersionField    = "customfield_12323140"
+	ReleaseBlockerField   = "customfield_12319743"
 )
 
 // GetUnknownField will attempt to get the specified field from the Unknowns struct and unmarshal
@@ -76,7 +77,14 @@ func GetIssueQaContact(issue *jira.Issue) (*jira.User, error) {
 
 func GetIssueTargetVersion(issue *jira.Issue) ([]*jira.Version, error) {
 	var obj *[]*jira.Version
-	isSet, err := GetUnknownField(TargetVersionField, issue, func() interface{} {
+	isSet, err := GetUnknownField(TargetVersionFieldOld, issue, func() interface{} {
+		obj = &[]*jira.Version{{}}
+		return obj
+	})
+	if isSet {
+		return *obj, err
+	}
+	isSet, err = GetUnknownField(TargetVersionField, issue, func() interface{} {
 		obj = &[]*jira.Version{{}}
 		return obj
 	})
