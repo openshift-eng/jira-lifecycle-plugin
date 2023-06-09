@@ -81,7 +81,7 @@ func GetIssueTargetVersion(issue *jira.Issue) ([]*jira.Version, error) {
 		obj = &[]*jira.Version{{}}
 		return obj
 	})
-	if isSet {
+	if isSet && obj != nil && *obj != nil {
 		return *obj, err
 	}
 	isSet, err = GetUnknownField(TargetVersionField, issue, func() interface{} {
