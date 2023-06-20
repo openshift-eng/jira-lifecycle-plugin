@@ -77,14 +77,14 @@ func GetIssueQaContact(issue *jira.Issue) (*jira.User, error) {
 
 func GetIssueTargetVersion(issue *jira.Issue) ([]*jira.Version, error) {
 	var obj *[]*jira.Version
-	isSet, err := GetUnknownField(TargetVersionFieldOld, issue, func() interface{} {
+	isSet, err := GetUnknownField(TargetVersionField, issue, func() interface{} {
 		obj = &[]*jira.Version{{}}
 		return obj
 	})
 	if isSet && obj != nil && *obj != nil {
 		return *obj, err
 	}
-	isSet, err = GetUnknownField(TargetVersionField, issue, func() interface{} {
+	isSet, err = GetUnknownField(TargetVersionFieldOld, issue, func() interface{} {
 		obj = &[]*jira.Version{{}}
 		return obj
 	})
