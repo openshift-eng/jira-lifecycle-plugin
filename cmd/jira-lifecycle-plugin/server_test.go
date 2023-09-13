@@ -539,6 +539,27 @@ Instructions for interacting with me using PR comments are available [here](http
 </details>`,
 		},
 		{
+			name:                  "valid jira with incorrect version removes invalid label, adds valid label,comments",
+			replaceReferencedBugs: []referencedBug{{Key: "JIRA-123", IsBug: false}},
+			issues:                []jira.Issue{{ID: "1", Key: "JIRA-123", Fields: &jira.IssueFields{Type: jira.IssueType{Name: "Issue"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityModerate}}}},
+			labels:                []string{labels.JiraInvalidBug},
+			expectedLabels:        []string{labels.JiraValidRef},
+			options:               JiraBranchOptions{TargetVersion: &v1Str},
+			expectedComment: `org/repo#1:@user: This pull request references JIRA-123 which is a valid jira issue.
+
+Warning: The referenced jira issue has an invalid target version for the target branch this PR targets: expected the issue to target the "v1" version, but no target version was set.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`,
+		},
+		{
 			name: "valid bug and valid jira ref adds valid/severity labels and comments",
 			issues: []jira.Issue{
 				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
@@ -3787,6 +3808,9 @@ func TestValidateBug(t *testing.T) {
 		{
 			name: "not matching target version requirement means an invalid bug",
 			issue: &jira.Issue{Fields: &jira.IssueFields{
+				Type: jira.IssueType{
+					Name: "Bug",
+				},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.TargetVersionField: &two,
 				},
@@ -3796,8 +3820,12 @@ func TestValidateBug(t *testing.T) {
 			why:     []string{"expected the bug to target the \"v1\" version, but it targets \"v2\" instead"},
 		},
 		{
-			name:    "not setting target version requirement means an invalid bug",
-			issue:   &jira.Issue{Fields: &jira.IssueFields{}},
+			name: "not setting target version requirement means an invalid bug",
+			issue: &jira.Issue{Fields: &jira.IssueFields{
+				Type: jira.IssueType{
+					Name: "Bug",
+				},
+			}},
 			options: JiraBranchOptions{TargetVersion: &oneStr},
 			valid:   false,
 			why:     []string{"expected the bug to target the \"v1\" version, but no target version was set"},
@@ -3885,6 +3913,9 @@ func TestValidateBug(t *testing.T) {
 		{
 			name: "matching no requirements means an invalid bug",
 			issue: &jira.Issue{Fields: &jira.IssueFields{
+				Type: jira.IssueType{
+					Name: "Bug",
+				},
 				Status: &jira.Status{Name: "CLOSED"},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.TargetVersionField: &one,
