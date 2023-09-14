@@ -406,6 +406,12 @@ func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, l
 					// end up double-linkified.  The prow-jira plugin is configured to not linkify OCPBUGS refs, but it will
 					// linkify refs to other projects.
 					response += fmt.Sprintf("This pull request references %s which is a valid jira issue.", refBug.Key)
+					// We still want to notify if the pull request branch and bug target version mismatch
+					if options.TargetVersion != nil {
+						if err := validateTargetVersion(issue, *options.TargetVersion); err != nil {
+							response += fmt.Sprintf("\n\nWarning: The referenced jira issue has an invalid target version for the target branch this PR targets: %v.", err)
+						}
+					}
 				}
 			}
 			if refBug.IsBug && issue != nil {
@@ -1179,23 +1185,11 @@ func validateBug(bug *jira.Issue, dependents []dependent, options JiraBranchOpti
 	}
 
 	if options.TargetVersion != nil {
-		targetVersion, err := helpers.GetIssueTargetVersion(bug)
-		if err != nil {
+		if err := validateTargetVersion(bug, *options.TargetVersion); err != nil {
+			errors = append(errors, err.Error())
 			valid = false
-			errors = append(errors, fmt.Sprintf("failed to get target version for bug: %v", err))
 		} else {
-			if len(targetVersion) == 0 {
-				valid = false
-				errors = append(errors, fmt.Sprintf("expected the bug to target the %q version, but no target version was set", *options.TargetVersion))
-			} else if len(targetVersion) > 1 {
-				valid = false
-				errors = append(errors, fmt.Sprintf("expected the bug to target only the %q version, but multiple target versions were set", *options.TargetVersion))
-			} else if *options.TargetVersion != targetVersion[0].Name {
-				valid = false
-				errors = append(errors, fmt.Sprintf("expected the bug to target the %q version, but it targets %q instead", *options.TargetVersion, targetVersion[0].Name))
-			} else {
-				validations = append(validations, fmt.Sprintf("bug target version (%s) matches configured target version for branch (%s)", targetVersion[0].Name, *options.TargetVersion))
-			}
+			validations = append(validations, fmt.Sprintf("bug target version (%s) matches configured target version for branch (%s)", *options.TargetVersion, *options.TargetVersion))
 		}
 	}
 
@@ -1293,6 +1287,29 @@ func validateBug(bug *jira.Issue, dependents []dependent, options JiraBranchOpti
 	}
 
 	return valid, validations, errors
+}
+
+func validateTargetVersion(issue *jira.Issue, requiredTargetVersion string) error {
+	issueType := ""
+	if issue.Fields != nil {
+		issueType = strings.ToLower(issue.Fields.Type.Name)
+	} else {
+		issueType = "bug"
+	}
+	targetVersion, err := helpers.GetIssueTargetVersion(issue)
+	if err != nil {
+		return fmt.Errorf("failed to get target version for %s: %v", issueType, err)
+	}
+	if len(targetVersion) == 0 {
+		return fmt.Errorf("expected the %s to target the %q version, but no target version was set", issueType, requiredTargetVersion)
+	}
+	if len(targetVersion) > 1 {
+		return fmt.Errorf("expected the %s to target only the %q version, but multiple target versions were set", issueType, requiredTargetVersion)
+	}
+	if requiredTargetVersion != targetVersion[0].Name {
+		return fmt.Errorf("expected the %s to target the %q version, but it targets %q instead", issueType, requiredTargetVersion, targetVersion[0].Name)
+	}
+	return nil
 }
 
 type prParts struct {
