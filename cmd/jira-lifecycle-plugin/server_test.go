@@ -185,6 +185,7 @@ func TestHandle(t *testing.T) {
 		noJira                     bool
 		remoteLinks                map[string][]jira.RemoteLink
 		prs                        []github.PullRequest
+		prComments                 map[int][]github.IssueComment
 		issues                     []jira.Issue
 		issueGetErrors             map[string]error
 		issueCreateErrors          map[string]error
@@ -319,6 +320,62 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
 </details>`,
+		},
+		{
+			name: "invalid bug with matching previous comment adds invalid label, removes valid label and comments",
+			prComments: map[int][]github.IssueComment{1: {{Body: `@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is invalid:
+ - expected the bug to be open, but it isn't
+
+Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jira bug are made, or edit the title of this pull request to link to a different bug.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`, User: github.User{Login: fakegithub.Bot}}}},
+			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityImportant}}}},
+			options:        JiraBranchOptions{IsOpen: &open},
+			labels:         []string{labels.JiraValidBug, labels.SeverityCritical},
+			expectedLabels: []string{labels.JiraValidRef, labels.JiraInvalidBug, labels.SeverityImportant},
+			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is invalid:
+ - expected the bug to be open, but it isn't
+
+Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jira bug are made, or edit the title of this pull request to link to a different bug.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`,
+		},
+		{
+			name: "invalid bug with correct state and previous comment does not comment",
+			prComments: map[int][]github.IssueComment{1: {{Body: `@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is invalid:
+ - expected the bug to be open, but it isn't
+
+Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jira bug are made, or edit the title of this pull request to link to a different bug.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`, User: github.User{Login: fakegithub.Bot}}}},
+			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityImportant}}}},
+			options:        JiraBranchOptions{IsOpen: &open},
+			labels:         []string{labels.JiraValidRef, labels.JiraInvalidBug, labels.SeverityImportant},
+			expectedLabels: []string{labels.JiraValidRef, labels.JiraInvalidBug, labels.SeverityImportant},
 		},
 		{
 			name: "one invalid bug and one valid bug adds invalid/severity labels and comments",
@@ -621,6 +678,69 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
 </details>`,
+		},
+		{
+			name:           "valid no-jira with no changes comments if there is no previous matching comment",
+			prComments:     map[int][]github.IssueComment{1: {{Body: "Hello", User: github.User{Login: "alex"}}, {Body: "Hello again", User: github.User{Login: fakegithub.Bot}}}},
+			noJira:         true,
+			labels:         []string{labels.JiraValidRef},
+			expectedLabels: []string{labels.JiraValidRef},
+			expectedComment: `org/repo#1:@user: This pull request explicitly references no jira issue.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`,
+		},
+		{
+			name: "valid no-jira with no changes comments if there if latest bot comment does not match",
+			prComments: map[int][]github.IssueComment{1: {{Body: "Hello", User: github.User{Login: "alex"}}, {Body: `org/repo#1:@user: This pull request explicitly references no jira issue.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`, User: github.User{Login: fakegithub.Bot}}, {Body: "different comment", User: github.User{Login: fakegithub.Bot}}}},
+			noJira:         true,
+			labels:         []string{labels.JiraValidRef},
+			expectedLabels: []string{labels.JiraValidRef},
+			expectedComment: `org/repo#1:@user: This pull request explicitly references no jira issue.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`,
+		},
+		{
+			name: "valid no-jira with no changes does not comments if latest bot comment matches",
+			prComments: map[int][]github.IssueComment{1: {{Body: "Hello", User: github.User{Login: "alex"}}, {Body: `org/repo#1:@user: This pull request explicitly references no jira issue.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`, User: github.User{Login: fakegithub.Bot}}}},
+			noJira:         true,
+			labels:         []string{labels.JiraValidRef},
+			expectedLabels: []string{labels.JiraValidRef},
 		},
 		{
 			name:           "valid bug with status update removes invalid label, adds valid label, comments and updates status with resolution",
@@ -2235,6 +2355,40 @@ In response to [this](https://github.com/org/repo/pull/1):
 Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
 </details>`,
 		}, {
+			name: "Bug matching previous bot comment still comments on /jira refresh with no changes",
+			prComments: map[int][]github.IssueComment{1: {{Body: "Hello", User: github.User{Login: "alex"}}, {Body: `@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
+
+<details><summary>No validations were run on this bug</summary></details>
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>/jira refresh
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`, User: github.User{Login: fakegithub.Bot}}}},
+			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{"security": jiraclient.SecurityLevel{Name: "security"}}}}},
+			prs:            []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}},
+			refresh:        true,
+			body:           "/jira refresh",
+			labels:         []string{labels.JiraValidRef, labels.JiraValidBug},
+			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug},
+			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
+
+<details><summary>No validations were run on this bug</summary></details>
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>/jira refresh
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`,
+		}, {
 			name:    "Bug with non-allowed security level results in comment on /jira refresh",
 			issues:  []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{"security": jiraclient.SecurityLevel{Name: "security"}}}}},
 			prs:     []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}},
@@ -2405,6 +2559,9 @@ Instructions for interacting with me using PR comments are available [here](http
 			gc := fakegithub.NewFakeClient()
 			gc.IssueLabelsExisting = []string{}
 			gc.IssueComments = map[int][]github.IssueComment{}
+			for key, comments := range tc.prComments {
+				gc.IssueComments[key] = comments
+			}
 			gc.PullRequests = map[int]*github.PullRequest{}
 			gc.WasLabelAddedByHumanVal = tc.humanLabelled
 			for _, label := range tc.labels {

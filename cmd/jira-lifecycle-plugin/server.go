@@ -311,6 +311,7 @@ type githubClient interface {
 	EditComment(org, repo string, id int, comment string) error
 	GetIssue(org, repo string, number int) (*github.Issue, error)
 	EditIssue(org, repo string, number int, issue *github.Issue) (*github.Issue, error)
+	ListIssueComments(org, repo string, number int) ([]github.IssueComment, error)
 	GetPullRequest(org, repo string, number int) (*github.PullRequest, error)
 	CreateComment(owner, repo string, number int, comment string) error
 	GetIssueLabels(org, repo string, number int) ([]github.Label, error)
@@ -318,6 +319,7 @@ type githubClient interface {
 	RemoveLabel(owner, repo string, number int, label string) error
 	WasLabelAddedByHuman(org, repo string, num int, label string) (bool, error)
 	QueryWithGitHubAppsSupport(ctx context.Context, q interface{}, vars map[string]interface{}, org string) error
+	BotUserChecker() (func(candidate string) bool, error)
 }
 
 func (s *server) handleIssueComment(l *logrus.Entry, e github.IssueCommentEvent) {
@@ -607,15 +609,18 @@ To reference a jira issue, add 'XYZ-NNN:' to the title of this pull request and 
 		needsJiraValidRefLabel = false
 	}
 
+	var labelsChanged bool
 	if severityLabelToRemove != "" && severityLabel != severityLabelToRemove {
 		if err := ghc.RemoveLabel(e.org, e.repo, e.number, severityLabelToRemove); err != nil {
 			log.WithError(err).Error("Failed to remove severity bug label.")
 		}
+		labelsChanged = true
 	}
 	if severityLabel != "" && severityLabel != severityLabelToRemove {
 		if err := ghc.AddLabel(e.org, e.repo, e.number, severityLabel); err != nil {
 			log.WithError(err).Error("Failed to add severity bug label.")
 		}
+		labelsChanged = true
 	}
 
 	if hasJiraValidRefLabel && !needsJiraValidRefLabel {
@@ -651,12 +656,14 @@ To reference a jira issue, add 'XYZ-NNN:' to the title of this pull request and 
 			if err := ghc.AddLabel(e.org, e.repo, e.number, labels.JiraValidRef); err != nil {
 				log.WithError(err).Error("Failed to add valid ref label.")
 			}
+			labelsChanged = true
 		}
 	} else {
 		if hasJiraValidRefLabel {
 			if err := ghc.RemoveLabel(e.org, e.repo, e.number, labels.JiraValidRef); err != nil {
 				log.WithError(err).Error("Failed to remove valid ref label.")
 			}
+			labelsChanged = true
 		}
 	}
 
@@ -665,12 +672,14 @@ To reference a jira issue, add 'XYZ-NNN:' to the title of this pull request and 
 			if err := ghc.AddLabel(e.org, e.repo, e.number, labels.JiraValidBug); err != nil {
 				log.WithError(err).Error("Failed to add valid bug label.")
 			}
+			labelsChanged = true
 		}
 	} else {
 		if hasJiraValidBugLabel {
 			if err := ghc.RemoveLabel(e.org, e.repo, e.number, labels.JiraValidBug); err != nil {
 				log.WithError(err).Error("Failed to remove valid bug label.")
 			}
+			labelsChanged = true
 		}
 	}
 
@@ -678,13 +687,48 @@ To reference a jira issue, add 'XYZ-NNN:' to the title of this pull request and 
 		if err := ghc.AddLabel(e.org, e.repo, e.number, labels.JiraInvalidBug); err != nil {
 			log.WithError(err).Error("Failed to add invalid bug label.")
 		}
+		labelsChanged = true
 	} else if !needsJiraInvalidBugLabel && hasJiraInvalidBugLabel {
 		if err := ghc.RemoveLabel(e.org, e.repo, e.number, labels.JiraInvalidBug); err != nil {
 			log.WithError(err).Error("Failed to remove invalid bug label.")
 		}
+		labelsChanged = true
 	}
 
-	if response != "" {
+	var duplicateComment bool
+	// we always want to comment if the labels changed or a refresh was manually triggered
+	if !labelsChanged && !e.refresh {
+		comments, err := ghc.ListIssueComments(e.org, e.repo, e.number)
+		if err != nil {
+			log.WithError(err).Error("Failed to list issue comments.")
+		} else {
+			// comments are returned in order of ID, which is oldest first. Reverse it
+			for i, j := 0, len(comments)-1; i < j; i, j = i+1, j-1 {
+				comments[i], comments[j] = comments[j], comments[i]
+			}
+			isBot, err := ghc.BotUserChecker()
+			if err != nil {
+				log.WithError(err).Error("Failed to create bot user checker.")
+			} else {
+				var lastBotComment *github.IssueComment
+				for _, comment := range comments {
+					if isBot(comment.User.Login) {
+						lastBotComment = &comment
+						break
+					}
+				}
+				if lastBotComment != nil {
+					// the comment function prepends the user and appends details (which may be different for different events),
+					// so we can't do an exact match. A `strings.Contains` should be good enough
+					if strings.Contains(lastBotComment.Body, response) {
+						duplicateComment = true
+					}
+				}
+			}
+		}
+	}
+
+	if response != "" && !duplicateComment {
 		return comment(response)
 	}
 	return nil
