@@ -46,6 +46,7 @@ func TestHandle(t *testing.T) {
 	v2 := []*jira.Version{{Name: v2Str}}
 	v3 := []*jira.Version{{Name: "v3"}}
 	updated := JiraBugState{Status: "UPDATED"}
+	updated2 := JiraBugState{Status: "UPDATED2"}
 	modified := JiraBugState{Status: "MODIFIED"}
 	verified := []JiraBugState{{Status: "VERIFIED"}}
 	jiraTransitions := []jira.Transition{
@@ -82,6 +83,20 @@ func TestHandle(t *testing.T) {
 			Name: "CLOSED",
 			To: jira.Status{
 				Name: "CLOSED",
+			},
+		},
+		{
+			ID:   "6",
+			Name: "UPDATED2",
+			To: jira.Status{
+				Name: "UPDATED2",
+			},
+		},
+		{
+			ID:   "7",
+			Name: "NEW2",
+			To: jira.Status{
+				Name: "NEW2",
 			},
 		},
 	}
@@ -545,6 +560,43 @@ Instructions for interacting with me using PR comments are available [here](http
 </details>`,
 		},
 		{
+			name: "valid premerge bug with status update comments and updates status",
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Unknowns:        tcontainer.MarshalMap{helpers.SeverityField: severityModerate},
+				FixVersions:     []*jira.FixVersion{{Name: "premerge"}},
+				AffectsVersions: []*jira.AffectsVersion{{Name: "premerge"}},
+			}}},
+			remoteLinks: map[string][]jira.RemoteLink{"OCPBUGS-123": {{ID: 1, Object: &jira.RemoteLinkObject{
+				URL:   "https://github.com/org/repo/pull/1",
+				Title: "org/repo#1: OCPBUGS-123: fixed it!",
+				Icon: &jira.RemoteLinkIcon{
+					Url16x16: "https://github.com/favicon.ico",
+					Title:    "GitHub",
+				},
+			}},
+			}},
+			options:        JiraBranchOptions{StateAfterValidation: &updated, PreMergeStateAfterValidation: &updated2}, // no requirements --> always valid
+			labels:         []string{labels.QEApproved},
+			expectedLabels: []string{labels.JiraValidRef, labels.QEApproved},
+			expectedComment: `org/repo#1:@user: This pull request references OCPBUGS-123 which is a valid jira issue. The bug has been moved to the UPDATED2 state.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`,
+			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Status:          &jira.Status{Name: "UPDATED2"},
+				Unknowns:        tcontainer.MarshalMap{helpers.SeverityField: severityModerate},
+				FixVersions:     []*jira.FixVersion{{Name: "premerge"}},
+				AffectsVersions: []*jira.AffectsVersion{{Name: "premerge"}},
+			}},
+		},
+		{
 			name:   "valid bug with status update removes invalid label, adds valid label, comments and updates status",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityModerate}}}},
 			remoteLinks: map[string][]jira.RemoteLink{"OCPBUGS-123": {{ID: 1, Object: &jira.RemoteLinkObject{
@@ -967,6 +1019,49 @@ Instructions for interacting with me using PR comments are available [here](http
 				Status:     &jira.Status{Name: "CLOSED"},
 				Resolution: &jira.Resolution{Name: "MERGED"},
 				Unknowns:   tcontainer.MarshalMap{},
+			}},
+		},
+		{
+			name:   "valid premerge bug on merged PR with one external link migrates to new state with resolution and comments",
+			merged: true,
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Status:          &jira.Status{Name: "MODIFIED"},
+				FixVersions:     []*jira.FixVersion{{Name: "premerge"}},
+				AffectsVersions: []*jira.AffectsVersion{{Name: "premerge"}},
+			}}},
+			remoteLinks: map[string][]jira.RemoteLink{"OCPBUGS-123": {{ID: 1, Object: &jira.RemoteLinkObject{
+				URL:   "https://github.com/org/repo/pull/1",
+				Title: "org/repo#1: OCPBUGS-123: fixed it!",
+				Icon: &jira.RemoteLinkIcon{
+					Url16x16: "https://github.com/favicon.ico",
+					Title:    "GitHub",
+				},
+			}},
+			}},
+			labels:         []string{labels.QEApproved},
+			expectedLabels: []string{labels.QEApproved},
+			prs:            []github.PullRequest{{Number: base.number, Merged: true}},
+			options:        JiraBranchOptions{StateAfterMerge: &JiraBugState{Status: "CLOSED", Resolution: "MERGED"}, PreMergeStateAfterMerge: &JiraBugState{Status: "UPDATED2", Resolution: "MERGED2"}}, // no requirements --> always valid
+			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
+ * [org/repo#1](https://github.com/org/repo/pull/1)
+
+[Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been moved to the UPDATED2 (MERGED2) state.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`,
+			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Status:          &jira.Status{Name: "UPDATED2"},
+				Resolution:      &jira.Resolution{Name: "MERGED2"},
+				FixVersions:     []*jira.FixVersion{{Name: "premerge"}},
+				AffectsVersions: []*jira.AffectsVersion{{Name: "premerge"}},
+				Unknowns:        tcontainer.MarshalMap{},
 			}},
 		},
 		{
@@ -1490,6 +1585,69 @@ Instructions for interacting with me using PR comments are available [here](http
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField: severityCritical,
 				},
+			}},
+			expectedRemovedRemoteLinks: []jira.RemoteLink{{ID: 1, Object: &jira.RemoteLinkObject{
+				URL:   "https://github.com/org/repo/pull/1",
+				Title: "org/repo#1: OCPBUGS-123: fixed it!",
+				Icon: &jira.RemoteLinkIcon{
+					Url16x16: "https://github.com/favicon.ico",
+					Title:    "GitHub",
+				},
+			}},
+			},
+		},
+		{
+			name:   "closed PR of premerge bug removes link, changes bug state, and comments",
+			merged: false,
+			closed: true,
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Status: &jira.Status{Name: "POST"},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField: severityCritical,
+				},
+				FixVersions:     []*jira.FixVersion{{Name: "premerge"}},
+				AffectsVersions: []*jira.AffectsVersion{{Name: "premerge"}},
+			}}},
+			remoteLinks: map[string][]jira.RemoteLink{"OCPBUGS-123": {{ID: 1, Object: &jira.RemoteLinkObject{
+				URL:   "https://github.com/org/repo/pull/1",
+				Title: "org/repo#1: OCPBUGS-123: fixed it!",
+				Icon: &jira.RemoteLinkIcon{
+					Url16x16: "https://github.com/favicon.ico",
+					Title:    "GitHub",
+				},
+			}},
+			}},
+			labels:         []string{labels.QEApproved},
+			expectedLabels: []string{labels.QEApproved},
+			prs:            []github.PullRequest{{Number: base.number, Merged: false}},
+			options:        JiraBranchOptions{AddExternalLink: &yes, StateAfterClose: &JiraBugState{Status: "NEW"}, PreMergeStateAfterClose: &JiraBugState{Status: "NEW2"}},
+			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123). The bug has been updated to no longer refer to the pull request using the external bug tracker. All external bug links have been closed. The bug has been moved to the NEW2 state.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`,
+			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Status: &jira.Status{Name: "NEW2"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}, {
+					Body:       "Bug status changed to NEW as previous linked PR https://github.com/org/repo/pull/1 has been closed",
+					Visibility: PrivateVisibility,
+				}}},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField: severityCritical,
+				},
+				FixVersions:     []*jira.FixVersion{{Name: "premerge"}},
+				AffectsVersions: []*jira.AffectsVersion{{Name: "premerge"}},
 			}},
 			expectedRemovedRemoteLinks: []jira.RemoteLink{{ID: 1, Object: &jira.RemoteLinkObject{
 				URL:   "https://github.com/org/repo/pull/1",

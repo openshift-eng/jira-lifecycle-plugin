@@ -403,11 +403,44 @@ func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, l
 				invalidIssues = append(invalidIssues, refBug.Key)
 			} else {
 				needsJiraValidRefLabel = true
+				premergeUpdated := false
+				// check labels for premerge verification
+				if refBug.IsBug {
+					if labels, err := ghc.GetIssueLabels(e.org, e.repo, e.number); err != nil {
+						log.WithError(err).Warn("Could not list labels on PR")
+					} else {
+						premergeVerified := isPreMergeVerified(issue, labels)
+						if premergeVerified && options.PreMergeStateAfterValidation != nil {
+							if options.PreMergeStateAfterValidation.Status != "" && (issue.Fields.Status == nil || !strings.EqualFold(issue.Fields.Status.Name, options.PreMergeStateAfterValidation.Status)) {
+								if err := jc.UpdateStatus(issue.Key, options.PreMergeStateAfterValidation.Status); err != nil {
+									log.WithError(err).Warn("Unexpected error updating jira issue.")
+									response += formatError(fmt.Sprintf("updating to the %s state", options.PreMergeStateAfterValidation.Status), jc.JiraURL(), refBug.Key, err)
+									continue
+								}
+								premergeUpdated = true
+							}
+							if options.PreMergeStateAfterValidation.Resolution != "" && (issue.Fields.Resolution == nil || !strings.EqualFold(issue.Fields.Status.Name, options.PreMergeStateAfterValidation.Resolution)) {
+								updateIssue := jira.Issue{Key: issue.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.PreMergeStateAfterValidation.Resolution}}}
+								if _, err := jc.UpdateIssue(&updateIssue); err != nil {
+									log.WithError(err).Warn("Unexpected error updating jira issue.")
+									response += formatError(fmt.Sprintf("updating to the %s resolution", options.PreMergeStateAfterMerge.Resolution), jc.JiraURL(), refBug.Key, err)
+									continue
+								}
+								premergeUpdated = true
+							}
+						}
+						// if this is a premerge verified issue, we don't want to run the usual verification on it; just treat it as a reference instead
+						refBug.IsBug = !premergeVerified
+					}
+				}
 				if !refBug.IsBug {
 					// don't linkify the jira ref in this case because the prow-jira plugin will do so and we don't want it to
 					// end up double-linkified.  The prow-jira plugin is configured to not linkify OCPBUGS refs, but it will
 					// linkify refs to other projects.
 					response += fmt.Sprintf("This pull request references %s which is a valid jira issue.", refBug.Key)
+					if premergeUpdated {
+						response += fmt.Sprintf(" The bug has been moved to the %s state.", PrettyStatus(options.PreMergeStateAfterValidation.Status, options.PreMergeStateAfterValidation.Resolution))
+					}
 					// We still want to notify if the pull request branch and bug target version mismatch
 					if options.TargetVersion != nil {
 						if err := validateTargetVersion(issue, *options.TargetVersion); err != nil {
@@ -752,6 +785,31 @@ func getSimplifiedSeverity(issue *jira.Issue) (string, error) {
 	return splitSeverity[len(splitSeverity)-1], nil
 }
 
+func isPreMergeVerified(issue *jira.Issue, prLabels []github.Label) bool {
+	var hasLabel, hasFixVersions, hasAffectsVersions bool
+	for _, label := range prLabels {
+		if label.Name == labels.QEApproved {
+			hasLabel = true
+			break
+		}
+	}
+	if issue != nil && issue.Fields != nil {
+		for _, version := range issue.Fields.FixVersions {
+			if version != nil && version.Name == "premerge" {
+				hasFixVersions = true
+				break
+			}
+		}
+		for _, version := range issue.Fields.AffectsVersions {
+			if version != nil && version.Name == "premerge" {
+				hasAffectsVersions = true
+				break
+			}
+		}
+	}
+	return hasLabel && hasFixVersions && hasAffectsVersions
+}
+
 type line struct {
 	content   string
 	replacing bool
@@ -938,7 +996,8 @@ func digestPR(log *logrus.Entry, pre github.PullRequestEvent, validateByDefault 
 	if pre.Action != github.PullRequestActionOpened &&
 		pre.Action != github.PullRequestActionReopened &&
 		pre.Action != github.PullRequestActionEdited &&
-		pre.Action != github.PullRequestActionClosed {
+		pre.Action != github.PullRequestActionClosed &&
+		pre.Action != github.PullRequestActionLabeled {
 		return nil, nil
 	}
 
@@ -1502,19 +1561,46 @@ These pull request must merge or be unlinked from the Jira bug in order for it t
 		}
 
 		if shouldMigrate {
-			if options.StateAfterMerge != nil {
-				if options.StateAfterMerge.Status != "" && (bug.Fields.Status == nil || !strings.EqualFold(options.StateAfterMerge.Status, bug.Fields.Status.Name)) {
-					if err := jc.UpdateStatus(refBug.Key, options.StateAfterMerge.Status); err != nil {
-						log.WithError(err).Warn("Unexpected error updating jira issue.")
-						msg += formatError(fmt.Sprintf("updating to the %s state", options.StateAfterMerge.Status), jc.JiraURL(), refBug.Key, err)
-						continue
-					}
-					if options.StateAfterMerge.Resolution != "" && (bug.Fields.Resolution == nil || !strings.EqualFold(options.StateAfterMerge.Resolution, bug.Fields.Resolution.Name)) {
-						updateIssue := jira.Issue{Key: bug.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterMerge.Resolution}}}
-						if _, err := jc.UpdateIssue(&updateIssue); err != nil {
-							log.WithError(err).Warn("Unexpected error updating jira issue.")
-							msg += formatError(fmt.Sprintf("updating to the %s resolution", options.StateAfterMerge.Resolution), jc.JiraURL(), refBug.Key, err)
+			labels, err := gc.GetIssueLabels(e.org, e.repo, e.number)
+			if err != nil {
+				log.WithError(err).Warn("Could not list labels on PR")
+			}
+			if isPreMergeVerified(bug, labels) {
+				outcomeMessage = func(action string) string {
+					return fmt.Sprintf(issueLink+" has %sbeen moved to the %s state.", refBug.Key, jc.JiraURL(), refBug.Key, action, options.PreMergeStateAfterMerge)
+				}
+				if options.PreMergeStateAfterMerge != nil {
+					if options.PreMergeStateAfterMerge.Status != "" && (bug.Fields.Status == nil || !strings.EqualFold(bug.Fields.Status.Name, options.PreMergeStateAfterMerge.Status)) {
+						if err := jc.UpdateStatus(bug.Key, options.PreMergeStateAfterMerge.Status); err != nil {
+							log.WithError(err).Warn("Unexpected error updating jira bug.")
+							msg += formatError(fmt.Sprintf("updating to the %s state", options.PreMergeStateAfterMerge.Status), jc.JiraURL(), refBug.Key, err)
 							continue
+						}
+					}
+					if options.PreMergeStateAfterMerge.Resolution != "" && (bug.Fields.Resolution == nil || !strings.EqualFold(bug.Fields.Status.Name, options.PreMergeStateAfterMerge.Resolution)) {
+						updatebug := jira.Issue{Key: bug.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.PreMergeStateAfterMerge.Resolution}}}
+						if _, err := jc.UpdateIssue(&updatebug); err != nil {
+							log.WithError(err).Warn("Unexpected error updating jira bug.")
+							msg += formatError(fmt.Sprintf("updating to the %s resolution", options.PreMergeStateAfterMerge.Resolution), jc.JiraURL(), refBug.Key, err)
+							continue
+						}
+					}
+				}
+			} else {
+				if options.StateAfterMerge != nil {
+					if options.StateAfterMerge.Status != "" && (bug.Fields.Status == nil || !strings.EqualFold(options.StateAfterMerge.Status, bug.Fields.Status.Name)) {
+						if err := jc.UpdateStatus(refBug.Key, options.StateAfterMerge.Status); err != nil {
+							log.WithError(err).Warn("Unexpected error updating jira issue.")
+							msg += formatError(fmt.Sprintf("updating to the %s state", options.StateAfterMerge.Status), jc.JiraURL(), refBug.Key, err)
+							continue
+						}
+						if options.StateAfterMerge.Resolution != "" && (bug.Fields.Resolution == nil || !strings.EqualFold(options.StateAfterMerge.Resolution, bug.Fields.Resolution.Name)) {
+							updateIssue := jira.Issue{Key: bug.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterMerge.Resolution}}}
+							if _, err := jc.UpdateIssue(&updateIssue); err != nil {
+								log.WithError(err).Warn("Unexpected error updating jira issue.")
+								msg += formatError(fmt.Sprintf("updating to the %s resolution", options.StateAfterMerge.Resolution), jc.JiraURL(), refBug.Key, err)
+								continue
+							}
 						}
 					}
 				}
@@ -1574,6 +1660,14 @@ refBugLoop:
 		bug, err := getJira(jc, refBug.Key, log, commentWithPrefix)
 		if err != nil || bug == nil {
 			return err
+		}
+		// ignore premerge bugs
+		if labels, err := gc.GetIssueLabels(e.org, e.repo, e.number); err != nil {
+			log.WithError(err).Warn("Could not list labels on PR")
+		} else {
+			if isPreMergeVerified(bug, labels) {
+				continue
+			}
 		}
 		allowed, err := isBugAllowed(bug, options.AllowedSecurityLevels)
 		if err != nil {
@@ -1791,7 +1885,7 @@ func handleClose(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 				msg += formatError("removing this pull request from the external tracker bugs", jc.JiraURL(), refBug.Key, err) + "\n\n"
 				continue
 			}
-			if options.StateAfterClose != nil {
+			if options.StateAfterClose != nil || options.PreMergeStateAfterClose != nil {
 				issue, err := jc.GetIssue(refBug.Key)
 				if err != nil {
 					log.WithError(err).Warn("Unexpected error getting Jira issue.")
@@ -1810,22 +1904,49 @@ func handleClose(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 						if err != nil || bug == nil {
 							return err
 						}
-						if options.StateAfterClose.Status != "" && (bug.Fields.Status == nil || !strings.EqualFold(options.StateAfterClose.Status, bug.Fields.Status.Name)) {
-							if err := jc.UpdateStatus(issue.ID, options.StateAfterClose.Status); err != nil {
-								log.WithError(err).Warn("Unexpected error updating jira issue.")
-								msg += formatError(fmt.Sprintf("updating to the %s state", options.StateAfterClose.Status), jc.JiraURL(), refBug.Key, err) + "\n\n"
-								continue
-							}
-							if options.StateAfterClose.Resolution != "" && (bug.Fields.Resolution == nil || !strings.EqualFold(options.StateAfterClose.Resolution, bug.Fields.Resolution.Name)) {
-								updateIssue := jira.Issue{Key: bug.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterClose.Resolution}}}
-								if _, err := jc.UpdateIssue(&updateIssue); err != nil {
+						premergeVerified := false
+						if labels, err := gc.GetIssueLabels(e.org, e.repo, e.number); err != nil {
+							log.WithError(err).Warn("Could not list labels on PR")
+						} else {
+							premergeVerified = isPreMergeVerified(bug, labels)
+						}
+						updatedState := JiraBugState{}
+						if premergeVerified {
+							updatedState = JiraBugState{Status: options.PreMergeStateAfterClose.Status, Resolution: options.PreMergeStateAfterClose.Resolution}
+							if options.PreMergeStateAfterClose.Status != "" && (bug.Fields.Status == nil || !strings.EqualFold(options.PreMergeStateAfterClose.Status, bug.Fields.Status.Name)) {
+								if err := jc.UpdateStatus(issue.ID, options.PreMergeStateAfterClose.Status); err != nil {
 									log.WithError(err).Warn("Unexpected error updating jira issue.")
-									msg += formatError(fmt.Sprintf("updating to the %s resolution", options.StateAfterClose.Resolution), jc.JiraURL(), refBug.Key, err) + "\n\n"
+									msg += formatError(fmt.Sprintf("updating to the %s state", options.PreMergeStateAfterClose.Status), jc.JiraURL(), refBug.Key, err) + "\n\n"
 									continue
 								}
+								if options.PreMergeStateAfterClose.Resolution != "" && (bug.Fields.Resolution == nil || !strings.EqualFold(options.PreMergeStateAfterClose.Resolution, bug.Fields.Resolution.Name)) {
+									updateIssue := jira.Issue{Key: bug.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.PreMergeStateAfterClose.Resolution}}}
+									if _, err := jc.UpdateIssue(&updateIssue); err != nil {
+										log.WithError(err).Warn("Unexpected error updating jira issue.")
+										msg += formatError(fmt.Sprintf("updating to the %s resolution", options.PreMergeStateAfterClose.Resolution), jc.JiraURL(), refBug.Key, err) + "\n\n"
+										continue
+									}
+								}
 							}
-							response += fmt.Sprintf(" All external bug links have been closed. The bug has been moved to the %s state.", options.StateAfterClose)
+						} else {
+							updatedState = JiraBugState{Status: options.StateAfterClose.Status, Resolution: options.StateAfterClose.Resolution}
+							if options.StateAfterClose.Status != "" && (bug.Fields.Status == nil || !strings.EqualFold(options.StateAfterClose.Status, bug.Fields.Status.Name)) {
+								if err := jc.UpdateStatus(issue.ID, options.StateAfterClose.Status); err != nil {
+									log.WithError(err).Warn("Unexpected error updating jira issue.")
+									msg += formatError(fmt.Sprintf("updating to the %s state", options.StateAfterClose.Status), jc.JiraURL(), refBug.Key, err) + "\n\n"
+									continue
+								}
+								if options.StateAfterClose.Resolution != "" && (bug.Fields.Resolution == nil || !strings.EqualFold(options.StateAfterClose.Resolution, bug.Fields.Resolution.Name)) {
+									updateIssue := jira.Issue{Key: bug.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterClose.Resolution}}}
+									if _, err := jc.UpdateIssue(&updateIssue); err != nil {
+										log.WithError(err).Warn("Unexpected error updating jira issue.")
+										msg += formatError(fmt.Sprintf("updating to the %s resolution", options.StateAfterClose.Resolution), jc.JiraURL(), refBug.Key, err) + "\n\n"
+										continue
+									}
+								}
+							}
 						}
+						response += fmt.Sprintf(" All external bug links have been closed. The bug has been moved to the %s state.", &updatedState)
 						jiraComment := &jira.Comment{Body: fmt.Sprintf("Bug status changed to %s as previous linked PR https://github.com/%s/%s/pull/%d has been closed", options.StateAfterClose.Status, e.org, e.repo, e.number), Visibility: PrivateVisibility}
 						if _, err := jc.AddComment(bug.ID, jiraComment); err != nil {
 							response += "\nWarning: Failed to comment on Jira bug with reason for changed state."

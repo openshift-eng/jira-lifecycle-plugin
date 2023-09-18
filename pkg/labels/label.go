@@ -4,6 +4,7 @@ const (
 	JiraValidRef          = "jira/valid-reference"
 	JiraValidBug          = "jira/valid-bug"
 	JiraInvalidBug        = "jira/invalid-bug"
+	QEApproved            = "qe-approved"
 	SeverityCritical      = "jira/severity-critical"
 	SeverityImportant     = "jira/severity-important"
 	SeverityModerate      = "jira/severity-moderate"
