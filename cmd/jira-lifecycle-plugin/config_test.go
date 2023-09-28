@@ -65,11 +65,13 @@ func TestResolveJiraOptions(t *testing.T) {
 	open, closed := true, false
 	yes, no := true, false
 	one, two := "v1", "v2"
-	modified, verified, post, pre := "MODIFIED", "VERIFIED", "POST", "PRE"
+	modified, verified, post, pre, post2, pre2 := "MODIFIED", "VERIFIED", "POST", "PRE", "POST2", "PRE2"
 	modifiedState := JiraBugState{Status: modified}
 	verifiedState := JiraBugState{Status: verified}
 	postState := JiraBugState{Status: post}
 	preState := JiraBugState{Status: pre}
+	post2State := JiraBugState{Status: post2}
+	pre2State := JiraBugState{Status: pre2}
 	var testCases = []struct {
 		name          string
 		parent, child JiraBranchOptions
@@ -129,6 +131,12 @@ func TestResolveJiraOptions(t *testing.T) {
 			expected: JiraBranchOptions{IsOpen: &open, TargetVersion: &one, ValidStates: &[]JiraBugState{modifiedState}, StateAfterValidation: &preState},
 		},
 		{
+			name:     "child overrides parent on premerge state after validation",
+			parent:   JiraBranchOptions{IsOpen: &open, TargetVersion: &one, ValidStates: &[]JiraBugState{modifiedState}, StateAfterValidation: &postState, PreMergeStateAfterValidation: &post2State},
+			child:    JiraBranchOptions{StateAfterValidation: &preState, PreMergeStateAfterValidation: &pre2State},
+			expected: JiraBranchOptions{IsOpen: &open, TargetVersion: &one, ValidStates: &[]JiraBugState{modifiedState}, StateAfterValidation: &preState, PreMergeStateAfterValidation: &pre2State},
+		},
+		{
 			name:     "child overrides parent on validation by default",
 			parent:   JiraBranchOptions{IsOpen: &open, TargetVersion: &one, ValidStates: &[]JiraBugState{modifiedState}, StateAfterValidation: &postState},
 			child:    JiraBranchOptions{ValidateByDefault: &yes},
@@ -162,6 +170,46 @@ func TestResolveJiraOptions(t *testing.T) {
 				ValidStates:          &[]JiraBugState{modifiedState},
 				StateAfterValidation: &postState,
 				StateAfterMerge:      &preState,
+			},
+		},
+		{
+			name:   "child overrides parent on premerge state after merge",
+			parent: JiraBranchOptions{IsOpen: &open, TargetVersion: &one, ValidStates: &[]JiraBugState{modifiedState}, StateAfterValidation: &postState, StateAfterMerge: &postState, PreMergeStateAfterMerge: &postState},
+			child:  JiraBranchOptions{StateAfterMerge: &preState, PreMergeStateAfterMerge: &pre2State},
+			expected: JiraBranchOptions{
+				IsOpen:                  &open,
+				TargetVersion:           &one,
+				ValidStates:             &[]JiraBugState{modifiedState},
+				StateAfterValidation:    &postState,
+				StateAfterMerge:         &preState,
+				PreMergeStateAfterMerge: &pre2State,
+			},
+		},
+		{
+			name:   "child overrides parent on state after close",
+			parent: JiraBranchOptions{IsOpen: &open, TargetVersion: &one, ValidStates: &[]JiraBugState{modifiedState}, StateAfterValidation: &postState, StateAfterMerge: &postState, StateAfterClose: &postState},
+			child:  JiraBranchOptions{StateAfterClose: &preState},
+			expected: JiraBranchOptions{
+				IsOpen:               &open,
+				TargetVersion:        &one,
+				ValidStates:          &[]JiraBugState{modifiedState},
+				StateAfterValidation: &postState,
+				StateAfterMerge:      &postState,
+				StateAfterClose:      &preState,
+			},
+		},
+		{
+			name:   "child overrides parent on premerge state after close",
+			parent: JiraBranchOptions{IsOpen: &open, TargetVersion: &one, ValidStates: &[]JiraBugState{modifiedState}, StateAfterValidation: &postState, StateAfterMerge: &postState, StateAfterClose: &postState, PreMergeStateAfterClose: &post2State},
+			child:  JiraBranchOptions{StateAfterClose: &preState, PreMergeStateAfterClose: &pre2State},
+			expected: JiraBranchOptions{
+				IsOpen:                  &open,
+				TargetVersion:           &one,
+				ValidStates:             &[]JiraBugState{modifiedState},
+				StateAfterValidation:    &postState,
+				StateAfterMerge:         &postState,
+				StateAfterClose:         &preState,
+				PreMergeStateAfterClose: &pre2State,
 			},
 		},
 		{

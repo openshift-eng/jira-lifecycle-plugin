@@ -90,15 +90,28 @@ type JiraBranchOptions struct {
 	// deemed valid and linked to a PR. Will implicitly be considered a part of `ValidStates`
 	// if others are set.
 	StateAfterValidation *JiraBugState `json:"state_after_validation,omitempty"`
+	// PreMergeStateAfterValidation is the state to which the bug will be moved after being
+	// deemed valid and linked to a PR if the PR is marked as `qe-approved` and the bug's
+	// AffectVersion and FixVersion are set to `premerge`. Will implicitly be considered a
+	// part of `ValidStates` if others are set.
+	PreMergeStateAfterValidation *JiraBugState `json:"premerge_state_after_validation,omitempty"`
 	// AddExternalLink determines whether the pull request will be added to the Jira
 	// bug using the ExternalBug tracker API after being validated
 	AddExternalLink *bool `json:"add_external_link,omitempty"`
 	// StateAfterMerge is the state to which the bug will be moved after all pull requests
 	// in the external bug tracker have been merged.
 	StateAfterMerge *JiraBugState `json:"state_after_merge,omitempty"`
+	// PreMergeStateAfterMerge is the state to which the bug will be moved after all pull requests
+	// in the external bug tracker have been merged if the PR has the `qe-approved` label and both
+	// the FixVersion and AffectsVersion fields of the bug are set to `premerge`.
+	PreMergeStateAfterMerge *JiraBugState `json:"premerge_state_after_merge,omitempty"`
 	// StateAfterClose is the state to which the bug will be moved if all pull requests
 	// in the external bug tracker have been closed.
 	StateAfterClose *JiraBugState `json:"state_after_close,omitempty"`
+	// PreMergeStateAfterClose is the state to which the bug will be moved if all pull requests
+	// in the external bug tracker have been close if the PR has the `qe-approved` label and both
+	// the FixVersion and AffectsVersion fields of the bug are set to `premerge`.
+	PreMergeStateAfterClose *JiraBugState `json:"premerge_state_after_close,omitempty"`
 
 	// AllowedSecurityLevels is a list of the name of jira issue security levels that the jira plugin can
 	// link to in PRs. If an issue has a security level that is not in this list, the jira
@@ -163,7 +176,9 @@ func (o JiraBranchOptions) matches(other JiraBranchOptions) bool {
 		(o.AddExternalLink != nil && other.AddExternalLink != nil && *o.AddExternalLink == *other.AddExternalLink)
 	statesAfterMergeMatch := o.StateAfterMerge == nil && other.StateAfterMerge == nil ||
 		(o.StateAfterMerge != nil && other.StateAfterMerge != nil && *o.StateAfterMerge == *other.StateAfterMerge)
-	return validateByDefaultMatch && isOpenMatch && targetReleaseMatch && bugStatesMatch && dependentBugStatesMatch && statesAfterValidationMatch && addExternalLinkMatch && statesAfterMergeMatch
+	preMergestatesAfterMergeMatch := o.PreMergeStateAfterMerge == nil && other.PreMergeStateAfterMerge == nil ||
+		(o.PreMergeStateAfterMerge != nil && other.PreMergeStateAfterMerge != nil && *o.PreMergeStateAfterMerge == *other.PreMergeStateAfterMerge)
+	return validateByDefaultMatch && isOpenMatch && targetReleaseMatch && bugStatesMatch && dependentBugStatesMatch && statesAfterValidationMatch && addExternalLinkMatch && statesAfterMergeMatch && preMergestatesAfterMergeMatch
 }
 
 const JiraOptionsWildcard = `*`
@@ -207,14 +222,23 @@ func ResolveJiraOptions(parent, child JiraBranchOptions) JiraBranchOptions {
 		if parent.StateAfterValidation != nil {
 			output.StateAfterValidation = parent.StateAfterValidation
 		}
+		if parent.PreMergeStateAfterValidation != nil {
+			output.PreMergeStateAfterValidation = parent.PreMergeStateAfterValidation
+		}
 		if parent.AddExternalLink != nil {
 			output.AddExternalLink = parent.AddExternalLink
 		}
 		if parent.StateAfterMerge != nil {
 			output.StateAfterMerge = parent.StateAfterMerge
 		}
+		if parent.PreMergeStateAfterMerge != nil {
+			output.PreMergeStateAfterMerge = parent.PreMergeStateAfterMerge
+		}
 		if parent.StateAfterClose != nil {
 			output.StateAfterClose = parent.StateAfterClose
+		}
+		if parent.PreMergeStateAfterClose != nil {
+			output.PreMergeStateAfterClose = parent.PreMergeStateAfterClose
 		}
 		if parent.AllowedSecurityLevels != nil {
 			output.AllowedSecurityLevels = sets.NewString(output.AllowedSecurityLevels...).Insert(parent.AllowedSecurityLevels...).List()
@@ -248,14 +272,23 @@ func ResolveJiraOptions(parent, child JiraBranchOptions) JiraBranchOptions {
 	if child.StateAfterValidation != nil {
 		output.StateAfterValidation = child.StateAfterValidation
 	}
+	if child.PreMergeStateAfterValidation != nil {
+		output.PreMergeStateAfterValidation = child.PreMergeStateAfterValidation
+	}
 	if child.AddExternalLink != nil {
 		output.AddExternalLink = child.AddExternalLink
 	}
 	if child.StateAfterMerge != nil {
 		output.StateAfterMerge = child.StateAfterMerge
 	}
+	if child.PreMergeStateAfterMerge != nil {
+		output.PreMergeStateAfterMerge = child.PreMergeStateAfterMerge
+	}
 	if child.StateAfterClose != nil {
 		output.StateAfterClose = child.StateAfterClose
+	}
+	if child.PreMergeStateAfterClose != nil {
+		output.PreMergeStateAfterClose = child.PreMergeStateAfterClose
 	}
 	if child.AllowedSecurityLevels != nil {
 		output.AllowedSecurityLevels = sets.NewString(output.AllowedSecurityLevels...).Insert(child.AllowedSecurityLevels...).List()
