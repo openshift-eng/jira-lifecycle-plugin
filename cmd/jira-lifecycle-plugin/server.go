@@ -997,7 +997,8 @@ func digestPR(log *logrus.Entry, pre github.PullRequestEvent, validateByDefault 
 		pre.Action != github.PullRequestActionReopened &&
 		pre.Action != github.PullRequestActionEdited &&
 		pre.Action != github.PullRequestActionClosed &&
-		pre.Action != github.PullRequestActionLabeled {
+		pre.Action != github.PullRequestActionLabeled &&
+		pre.Action != github.PullRequestActionUnlabeled {
 		return nil, nil
 	}
 
@@ -1946,7 +1947,7 @@ func handleClose(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 								}
 							}
 						}
-						response += fmt.Sprintf(" All external bug links have been closed. The bug has been moved to the %s state.", &updatedState)
+						response += fmt.Sprintf(" All external bug links have been closed. The bug has been moved to the %s state.", PrettyStatus(updatedState.Status, updatedState.Resolution))
 						jiraComment := &jira.Comment{Body: fmt.Sprintf("Bug status changed to %s as previous linked PR https://github.com/%s/%s/pull/%d has been closed", options.StateAfterClose.Status, e.org, e.repo, e.number), Visibility: PrivateVisibility}
 						if _, err := jc.AddComment(bug.ID, jiraComment); err != nil {
 							response += "\nWarning: Failed to comment on Jira bug with reason for changed state."
