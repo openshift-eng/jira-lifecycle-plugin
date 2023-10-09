@@ -3521,6 +3521,120 @@ func TestDigestPR(t *testing.T) {
 				Changes: []byte(`{"oops":{"doops":"payload"}}`),
 			},
 		},
+		{
+			name: "qe-approved labeling gets event",
+			pre: github.PullRequestEvent{
+				Action: github.PullRequestActionLabeled,
+				PullRequest: github.PullRequest{
+					Base: github.PullRequestBranch{
+						Repo: github.Repo{
+							Owner: github.User{
+								Login: "org",
+							},
+							Name: "repo",
+						},
+						Ref: "branch",
+					},
+					Number:  1,
+					Title:   "OCPBUGS-123: fixed it!",
+					State:   "open",
+					HTMLURL: "http.com",
+					User: github.User{
+						Login: "user",
+					},
+				},
+				Label: github.Label{
+					Name: labels.QEApproved,
+				},
+			},
+			expected: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: false, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}}, title: "OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
+			},
+		},
+		{
+			name: "qe-approved unlabeling gets event",
+			pre: github.PullRequestEvent{
+				Action: github.PullRequestActionUnlabeled,
+				PullRequest: github.PullRequest{
+					Base: github.PullRequestBranch{
+						Repo: github.Repo{
+							Owner: github.User{
+								Login: "org",
+							},
+							Name: "repo",
+						},
+						Ref: "branch",
+					},
+					Number:  1,
+					Title:   "OCPBUGS-123: fixed it!",
+					State:   "open",
+					HTMLURL: "http.com",
+					User: github.User{
+						Login: "user",
+					},
+				},
+				Label: github.Label{
+					Name: labels.QEApproved,
+				},
+			},
+			expected: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: false, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}}, title: "OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
+			},
+		},
+		{
+			name: "non qe-approved labeling does not get event",
+			pre: github.PullRequestEvent{
+				Action: github.PullRequestActionLabeled,
+				PullRequest: github.PullRequest{
+					Base: github.PullRequestBranch{
+						Repo: github.Repo{
+							Owner: github.User{
+								Login: "org",
+							},
+							Name: "repo",
+						},
+						Ref: "branch",
+					},
+					Number:  1,
+					Title:   "OCPBUGS-123: fixed it!",
+					State:   "open",
+					HTMLURL: "http.com",
+					User: github.User{
+						Login: "user",
+					},
+				},
+				Label: github.Label{
+					Name: labels.JiraValidRef,
+				},
+			},
+		},
+		{
+			name: "qe-approved unlabeling does not get event",
+			pre: github.PullRequestEvent{
+				Action: github.PullRequestActionUnlabeled,
+				PullRequest: github.PullRequest{
+					Base: github.PullRequestBranch{
+						Repo: github.Repo{
+							Owner: github.User{
+								Login: "org",
+							},
+							Name: "repo",
+						},
+						Ref: "branch",
+					},
+					Number:  1,
+					Title:   "OCPBUGS-123: fixed it!",
+					State:   "open",
+					HTMLURL: "http.com",
+					User: github.User{
+						Login: "user",
+					},
+				},
+				Label: github.Label{
+					Name: labels.JiraValidRef,
+				},
+			},
+		},
 	}
 
 	for _, testCase := range testCases {

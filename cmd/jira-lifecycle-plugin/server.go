@@ -1002,6 +1002,10 @@ func digestPR(log *logrus.Entry, pre github.PullRequestEvent, validateByDefault 
 		return nil, nil
 	}
 
+	if (pre.Action == github.PullRequestActionLabeled || pre.Action == github.PullRequestActionUnlabeled) && pre.Label.Name != labels.QEApproved {
+		return nil, nil
+	}
+
 	var (
 		org     = pre.PullRequest.Base.Repo.Owner.Login
 		repo    = pre.PullRequest.Base.Repo.Name
