@@ -98,7 +98,9 @@ func (s *server) helpProvider(enabledRepos []config.OrgRepo) (*pluginhelp.Plugin
 				}
 			}
 			if opts[branch].TargetVersion != nil {
-				conditions = append(conditions, fmt.Sprintf("target the %q version", *opts[branch].TargetVersion))
+				if opts[branch].SkipTargetVersionCheck == nil || (opts[branch].SkipTargetVersionCheck != nil && !*opts[branch].SkipTargetVersionCheck) {
+					conditions = append(conditions, fmt.Sprintf("target the %q version", *opts[branch].TargetVersion))
+				}
 			}
 			if opts[branch].ValidStates != nil && len(*opts[branch].ValidStates) > 0 {
 				pretty := strings.Join(prettyStates(*opts[branch].ValidStates), ", ")
@@ -442,7 +444,7 @@ func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, l
 						response += fmt.Sprintf(" The bug has been moved to the %s state.", PrettyStatus(options.PreMergeStateAfterValidation.Status, options.PreMergeStateAfterValidation.Resolution))
 					}
 					// We still want to notify if the pull request branch and bug target version mismatch
-					if options.TargetVersion != nil {
+					if checkTargetVersion(options) {
 						if err := validateTargetVersion(issue, *options.TargetVersion); err != nil {
 							response += fmt.Sprintf("\n\nWarning: The referenced jira issue has an invalid target version for the target branch this PR targets: %v.", err)
 						}
@@ -1993,4 +1995,15 @@ func isBugAllowed(issue *jira.Issue, allowedSecurityLevel []string) (bool, error
 		}
 	}
 	return found, nil
+}
+
+func checkTargetVersion(options JiraBranchOptions) bool {
+	switch {
+	case options.SkipTargetVersionCheck != nil && *options.SkipTargetVersionCheck:
+		return false
+	case options.TargetVersion != nil:
+		return true
+	default:
+		return false
+	}
 }

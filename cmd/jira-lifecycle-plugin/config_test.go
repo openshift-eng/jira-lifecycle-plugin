@@ -119,6 +119,12 @@ func TestResolveJiraOptions(t *testing.T) {
 			expected: JiraBranchOptions{IsOpen: &open, TargetVersion: &two, ValidStates: &[]JiraBugState{modifiedState}, StateAfterValidation: &postState},
 		},
 		{
+			name:     "child overrides parent on skip target release check",
+			parent:   JiraBranchOptions{IsOpen: &open, SkipTargetVersionCheck: &yes, ValidStates: &[]JiraBugState{modifiedState}, StateAfterValidation: &postState},
+			child:    JiraBranchOptions{SkipTargetVersionCheck: &no, TargetVersion: &two},
+			expected: JiraBranchOptions{IsOpen: &open, SkipTargetVersionCheck: &no, TargetVersion: &two, ValidStates: &[]JiraBugState{modifiedState}, StateAfterValidation: &postState},
+		},
+		{
 			name:     "child overrides parent on states",
 			parent:   JiraBranchOptions{IsOpen: &open, TargetVersion: &one, ValidStates: &[]JiraBugState{modifiedState}, StateAfterValidation: &postState},
 			child:    JiraBranchOptions{ValidStates: &[]JiraBugState{verifiedState}},
@@ -214,11 +220,12 @@ func TestResolveJiraOptions(t *testing.T) {
 		},
 		{
 			name:   "child overrides parent on all fields",
-			parent: JiraBranchOptions{ValidateByDefault: &yes, IsOpen: &open, TargetVersion: &one, ValidStates: &[]JiraBugState{verifiedState}, DependentBugStates: &[]JiraBugState{verifiedState}, DependentBugTargetVersions: &[]string{one}, StateAfterValidation: &postState, StateAfterMerge: &postState},
-			child:  JiraBranchOptions{ValidateByDefault: &no, IsOpen: &closed, TargetVersion: &two, ValidStates: &[]JiraBugState{modifiedState}, DependentBugStates: &[]JiraBugState{modifiedState}, DependentBugTargetVersions: &[]string{two}, StateAfterValidation: &preState, StateAfterMerge: &preState},
+			parent: JiraBranchOptions{ValidateByDefault: &yes, IsOpen: &open, SkipTargetVersionCheck: &yes, TargetVersion: &one, ValidStates: &[]JiraBugState{verifiedState}, DependentBugStates: &[]JiraBugState{verifiedState}, DependentBugTargetVersions: &[]string{one}, StateAfterValidation: &postState, StateAfterMerge: &postState},
+			child:  JiraBranchOptions{ValidateByDefault: &no, IsOpen: &closed, SkipTargetVersionCheck: &no, TargetVersion: &two, ValidStates: &[]JiraBugState{modifiedState}, DependentBugStates: &[]JiraBugState{modifiedState}, DependentBugTargetVersions: &[]string{two}, StateAfterValidation: &preState, StateAfterMerge: &preState},
 			expected: JiraBranchOptions{
 				ValidateByDefault:          &no,
 				IsOpen:                     &closed,
+				SkipTargetVersionCheck:     &no,
 				TargetVersion:              &two,
 				ValidStates:                &[]JiraBugState{modifiedState},
 				DependentBugStates:         &[]JiraBugState{modifiedState},

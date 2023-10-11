@@ -73,6 +73,8 @@ type JiraBranchOptions struct {
 
 	// IsOpen determines whether a bug needs to be open to be valid
 	IsOpen *bool `json:"is_open,omitempty"`
+	// SkipTargetVersionCheck exclude branch from the TargetVersion check
+	SkipTargetVersionCheck *bool `json:"skip_target_version_check,omitempty"`
 	// TargetVersion determines which release a bug needs to target to be valid
 	TargetVersion *string `json:"target_version,omitempty"`
 	// ValidStates determine states in which the bug may be to be valid
@@ -166,6 +168,8 @@ func (o JiraBranchOptions) matches(other JiraBranchOptions) bool {
 		(o.IsOpen != nil && other.IsOpen != nil && *o.IsOpen == *other.IsOpen)
 	targetReleaseMatch := o.TargetVersion == nil && other.TargetVersion == nil ||
 		(o.TargetVersion != nil && other.TargetVersion != nil && *o.TargetVersion == *other.TargetVersion)
+	skipTargetVersionCheckMatch := o.SkipTargetVersionCheck == nil && other.SkipTargetVersionCheck == nil ||
+		(o.SkipTargetVersionCheck != nil && other.SkipTargetVersionCheck != nil && *o.SkipTargetVersionCheck == *other.SkipTargetVersionCheck)
 	bugStatesMatch := o.ValidStates == nil && other.ValidStates == nil ||
 		(o.ValidStates != nil && other.ValidStates != nil && jiraStatesMatch(*o.ValidStates, *other.ValidStates))
 	dependentBugStatesMatch := o.DependentBugStates == nil && other.DependentBugStates == nil ||
@@ -178,7 +182,7 @@ func (o JiraBranchOptions) matches(other JiraBranchOptions) bool {
 		(o.StateAfterMerge != nil && other.StateAfterMerge != nil && *o.StateAfterMerge == *other.StateAfterMerge)
 	preMergestatesAfterMergeMatch := o.PreMergeStateAfterMerge == nil && other.PreMergeStateAfterMerge == nil ||
 		(o.PreMergeStateAfterMerge != nil && other.PreMergeStateAfterMerge != nil && *o.PreMergeStateAfterMerge == *other.PreMergeStateAfterMerge)
-	return validateByDefaultMatch && isOpenMatch && targetReleaseMatch && bugStatesMatch && dependentBugStatesMatch && statesAfterValidationMatch && addExternalLinkMatch && statesAfterMergeMatch && preMergestatesAfterMergeMatch
+	return validateByDefaultMatch && isOpenMatch && targetReleaseMatch && skipTargetVersionCheckMatch && bugStatesMatch && dependentBugStatesMatch && statesAfterValidationMatch && addExternalLinkMatch && statesAfterMergeMatch && preMergestatesAfterMergeMatch
 }
 
 const JiraOptionsWildcard = `*`
@@ -209,6 +213,9 @@ func ResolveJiraOptions(parent, child JiraBranchOptions) JiraBranchOptions {
 		}
 		if parent.TargetVersion != nil {
 			output.TargetVersion = parent.TargetVersion
+		}
+		if parent.SkipTargetVersionCheck != nil {
+			output.SkipTargetVersionCheck = parent.SkipTargetVersionCheck
 		}
 		if parent.ValidStates != nil {
 			output.ValidStates = parent.ValidStates
@@ -257,6 +264,9 @@ func ResolveJiraOptions(parent, child JiraBranchOptions) JiraBranchOptions {
 	}
 	if child.TargetVersion != nil {
 		output.TargetVersion = child.TargetVersion
+	}
+	if child.SkipTargetVersionCheck != nil {
+		output.SkipTargetVersionCheck = child.SkipTargetVersionCheck
 	}
 
 	if child.ValidStates != nil {
