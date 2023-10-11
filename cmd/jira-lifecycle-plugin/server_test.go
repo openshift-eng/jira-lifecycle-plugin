@@ -4670,3 +4670,111 @@ func TestIsBugAllowed(t *testing.T) {
 		}
 	}
 }
+
+func TestCheckTargetVersion(t *testing.T) {
+	v1str := "1"
+	yes, no := true, false
+	var testCases = []struct {
+		title    string
+		options  JiraBranchOptions
+		expected bool
+	}{
+		{
+			title: "target version nil",
+			options: JiraBranchOptions{
+				TargetVersion: nil,
+			},
+			expected: false,
+		},
+		{
+			title:    "default options",
+			options:  JiraBranchOptions{},
+			expected: false,
+		},
+		{
+			title: "target version set",
+			options: JiraBranchOptions{
+				TargetVersion: &v1str,
+			},
+			expected: true,
+		},
+		{
+			title: "nil target version, skipTargetVersionCheck nil",
+			options: JiraBranchOptions{
+				SkipTargetVersionCheck: nil,
+				TargetVersion:          nil,
+			},
+			expected: false,
+		},
+		{
+			title: "default target version, skipTargetVersionCheck nil",
+			options: JiraBranchOptions{
+				SkipTargetVersionCheck: nil,
+			},
+			expected: false,
+		},
+		{
+			title: "target version, skipTargetVersionCheck nil",
+			options: JiraBranchOptions{
+				SkipTargetVersionCheck: nil,
+				TargetVersion:          &v1str,
+			},
+			expected: true,
+		},
+		{
+			title: "nil target version, skipTargetVersionCheck no",
+			options: JiraBranchOptions{
+				SkipTargetVersionCheck: &no,
+				TargetVersion:          nil,
+			},
+			expected: false,
+		},
+		{
+			title: "default target version, skipTargetVersionCheck no",
+			options: JiraBranchOptions{
+				SkipTargetVersionCheck: &no,
+			},
+			expected: false,
+		},
+		{
+			title: "target version, skipTargetVersionCheck no",
+			options: JiraBranchOptions{
+				SkipTargetVersionCheck: &no,
+				TargetVersion:          &v1str,
+			},
+			expected: true,
+		},
+		{
+			title: "nil target version, skipTargetVersionCheck yes",
+			options: JiraBranchOptions{
+				SkipTargetVersionCheck: &yes,
+				TargetVersion:          nil,
+			},
+			expected: false,
+		},
+		{
+			title: "default target version, skipTargetVersionCheck yes",
+			options: JiraBranchOptions{
+				SkipTargetVersionCheck: &yes,
+			},
+			expected: false,
+		},
+		{
+			title: "target version, skipTargetVersionCheck yes",
+			options: JiraBranchOptions{
+				SkipTargetVersionCheck: &yes,
+				TargetVersion:          &v1str,
+			},
+			expected: false,
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.title, func(t *testing.T) {
+			got := checkTargetVersion(testCase.options)
+
+			if testCase.expected != got {
+				t.Errorf("%s: expected %v, but got %v", testCase.title, testCase.expected, got)
+			}
+		})
+	}
+}
