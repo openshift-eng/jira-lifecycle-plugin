@@ -4174,9 +4174,10 @@ func TestBugKeyFromTitle(t *testing.T) {
 
 func TestValidateBug(t *testing.T) {
 	open, closed := true, false
-	oneStr, twoStr := "v1", "v2"
+	oneStr, twoStr, threeStr := "v1", "v2", "v3"
 	one := []*jira.Version{{Name: "v1"}}
 	two := []*jira.Version{{Name: "v2"}}
+	three := []*jira.Version{{Name: "openshift-v3"}}
 	verified := JiraBugState{Status: "VERIFIED"}
 	modified := JiraBugState{Status: "MODIFIED"}
 	updated := JiraBugState{Status: "UPDATED"}
@@ -4235,6 +4236,17 @@ func TestValidateBug(t *testing.T) {
 			validations: []string{"bug target version (v1) matches configured target version for branch (v1)"},
 		},
 		{
+			name: "matching prefixed target version requirement means a valid bug",
+			issue: &jira.Issue{Fields: &jira.IssueFields{
+				Unknowns: tcontainer.MarshalMap{
+					helpers.TargetVersionField: &three,
+				},
+			}},
+			options:     JiraBranchOptions{TargetVersion: &threeStr},
+			valid:       true,
+			validations: []string{"bug target version (v3) matches configured target version for branch (v3)"},
+		},
+		{
 			name: "not matching target version requirement means an invalid bug",
 			issue: &jira.Issue{Fields: &jira.IssueFields{
 				Type: jira.IssueType{
@@ -4246,7 +4258,7 @@ func TestValidateBug(t *testing.T) {
 			}},
 			options: JiraBranchOptions{TargetVersion: &oneStr},
 			valid:   false,
-			why:     []string{"expected the bug to target the \"v1\" version, but it targets \"v2\" instead"},
+			why:     []string{"expected the bug to target either version \"v1\" or \"openshift-v1\", but it targets \"v2\" instead"},
 		},
 		{
 			name: "not setting target version requirement means an invalid bug",
@@ -4355,7 +4367,7 @@ func TestValidateBug(t *testing.T) {
 			valid:       false,
 			validations: []string{"bug has dependents"},
 			why: []string{"expected the bug to be open, but it isn't",
-				"expected the bug to target the \"v2\" version, but it targets \"v1\" instead",
+				"expected the bug to target either version \"v2\" or \"openshift-v2\", but it targets \"v1\" instead",
 				"expected the bug to be in one of the following states: VERIFIED, but it is CLOSED instead",
 				"expected dependent [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) to be in one of the following states: VERIFIED, but it is MODIFIED instead",
 			},
