@@ -1416,8 +1416,9 @@ func validateTargetVersion(issue *jira.Issue, requiredTargetVersion string) erro
 	if len(targetVersion) > 1 {
 		return fmt.Errorf("expected the %s to target only the %q version, but multiple target versions were set", issueType, requiredTargetVersion)
 	}
-	if requiredTargetVersion != targetVersion[0].Name {
-		return fmt.Errorf("expected the %s to target the %q version, but it targets %q instead", issueType, requiredTargetVersion, targetVersion[0].Name)
+	prefixedRequiredTargetVersion := fmt.Sprintf("openshift-%s", requiredTargetVersion)
+	if requiredTargetVersion != targetVersion[0].Name && prefixedRequiredTargetVersion != targetVersion[0].Name {
+		return fmt.Errorf("expected the %s to target either version %q or %q, but it targets %q instead", issueType, requiredTargetVersion, prefixedRequiredTargetVersion, targetVersion[0].Name)
 	}
 	return nil
 }
