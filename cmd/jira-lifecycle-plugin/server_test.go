@@ -4258,7 +4258,7 @@ func TestValidateBug(t *testing.T) {
 			}},
 			options: JiraBranchOptions{TargetVersion: &oneStr},
 			valid:   false,
-			why:     []string{"expected the bug to target either version \"v1\" or \"openshift-v1\", but it targets \"v2\" instead"},
+			why:     []string{"expected the bug to target either version \"v1.*\" or \"openshift-v1.*\", but it targets \"v2\" instead"},
 		},
 		{
 			name: "not setting target version requirement means an invalid bug",
@@ -4367,7 +4367,7 @@ func TestValidateBug(t *testing.T) {
 			valid:       false,
 			validations: []string{"bug has dependents"},
 			why: []string{"expected the bug to be open, but it isn't",
-				"expected the bug to target either version \"v2\" or \"openshift-v2\", but it targets \"v1\" instead",
+				"expected the bug to target either version \"v2.*\" or \"openshift-v2.*\", but it targets \"v1\" instead",
 				"expected the bug to be in one of the following states: VERIFIED, but it is CLOSED instead",
 				"expected dependent [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) to be in one of the following states: VERIFIED, but it is MODIFIED instead",
 			},
