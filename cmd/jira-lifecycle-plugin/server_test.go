@@ -4173,7 +4173,7 @@ func TestBugKeyFromTitle(t *testing.T) {
 }
 
 func TestValidateBug(t *testing.T) {
-	open, closed := true, false
+	yes, no := true, false
 	oneStr, twoStr, threeStr := "v1", "v2", "v3"
 	one := []*jira.Version{{Name: "v1"}}
 	two := []*jira.Version{{Name: "v2"}}
@@ -4199,30 +4199,59 @@ func TestValidateBug(t *testing.T) {
 		{
 			name:        "matching open requirement means a valid bug",
 			issue:       &jira.Issue{Fields: &jira.IssueFields{Status: &jira.Status{Name: "NEW"}}},
-			options:     JiraBranchOptions{IsOpen: &open},
+			options:     JiraBranchOptions{IsOpen: &yes},
 			valid:       true,
 			validations: []string{"bug is open, matching expected state (open)"},
 		},
 		{
 			name:        "matching closed requirement means a valid bug",
 			issue:       &jira.Issue{Fields: &jira.IssueFields{Status: &jira.Status{Name: "CLOSED"}}},
-			options:     JiraBranchOptions{IsOpen: &closed},
+			options:     JiraBranchOptions{IsOpen: &no},
 			valid:       true,
 			validations: []string{"bug isn't open, matching expected state (not open)"},
 		},
 		{
 			name:    "not matching open requirement means an invalid bug",
 			issue:   &jira.Issue{Fields: &jira.IssueFields{Status: &jira.Status{Name: "CLOSED"}}},
-			options: JiraBranchOptions{IsOpen: &open},
+			options: JiraBranchOptions{IsOpen: &yes},
 			valid:   false,
 			why:     []string{"expected the bug to be open, but it isn't"},
 		},
 		{
 			name:    "not matching closed requirement means an invalid bug",
 			issue:   &jira.Issue{Fields: &jira.IssueFields{Status: &jira.Status{Name: "NEW"}}},
-			options: JiraBranchOptions{IsOpen: &closed},
+			options: JiraBranchOptions{IsOpen: &no},
 			valid:   false,
 			why:     []string{"expected the bug to not be open, but it is"},
+		},
+		{
+			name: "matching release notes requirement means a valid bug",
+			issue: &jira.Issue{Fields: &jira.IssueFields{
+				Unknowns: tcontainer.MarshalMap{
+					helpers.ReleaseNotesTextField: "These are release notes",
+				},
+			}},
+			options:     JiraBranchOptions{RequireReleaseNotes: &yes, ReleaseNotesDefaultText: &oneStr},
+			valid:       true,
+			validations: []string{"release notes are set"},
+		},
+		{
+			name:    "no release notes with release notes requirement means an invalid bug",
+			issue:   &jira.Issue{Fields: &jira.IssueFields{}},
+			options: JiraBranchOptions{RequireReleaseNotes: &yes, ReleaseNotesDefaultText: &oneStr},
+			valid:   false,
+			why:     []string{"release notes must be set and not match default text"},
+		},
+		{
+			name: "release notes matching default text means an invalid bug",
+			issue: &jira.Issue{Fields: &jira.IssueFields{
+				Unknowns: tcontainer.MarshalMap{
+					helpers.ReleaseNotesTextField: oneStr,
+				},
+			}},
+			options: JiraBranchOptions{RequireReleaseNotes: &yes, ReleaseNotesDefaultText: &oneStr},
+			valid:   false,
+			why:     []string{"release notes must be set and not match default text"},
 		},
 		{
 			name: "matching target version requirement means a valid bug",
@@ -4342,7 +4371,7 @@ func TestValidateBug(t *testing.T) {
 				},
 			}},
 			dependents: []dependent{{key: "OCPBUGS-124", bugState: JiraBugState{Status: "MODIFIED"}, targetVersion: &twoStr}},
-			options:    JiraBranchOptions{IsOpen: &open, TargetVersion: &oneStr, ValidStates: &[]JiraBugState{modified}, DependentBugStates: &[]JiraBugState{modified}, DependentBugTargetVersions: &[]string{twoStr}},
+			options:    JiraBranchOptions{IsOpen: &yes, TargetVersion: &oneStr, ValidStates: &[]JiraBugState{modified}, DependentBugStates: &[]JiraBugState{modified}, DependentBugTargetVersions: &[]string{twoStr}},
 			validations: []string{`bug is open, matching expected state (open)`,
 				`bug target version (v1) matches configured target version for branch (v1)`,
 				"bug is in the state MODIFIED, which is one of the valid states (MODIFIED)",
@@ -4363,7 +4392,7 @@ func TestValidateBug(t *testing.T) {
 				},
 			}},
 			dependents:  []dependent{{key: "OCPBUGS-124", bugState: JiraBugState{Status: "MODIFIED"}, targetVersion: &twoStr}},
-			options:     JiraBranchOptions{IsOpen: &open, TargetVersion: &twoStr, ValidStates: &[]JiraBugState{verified}, DependentBugStates: &[]JiraBugState{verified}},
+			options:     JiraBranchOptions{IsOpen: &yes, TargetVersion: &twoStr, ValidStates: &[]JiraBugState{verified}, DependentBugStates: &[]JiraBugState{verified}},
 			valid:       false,
 			validations: []string{"bug has dependents"},
 			why: []string{"expected the bug to be open, but it isn't",

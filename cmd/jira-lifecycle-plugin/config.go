@@ -119,6 +119,12 @@ type JiraBranchOptions struct {
 	// link to in PRs. If an issue has a security level that is not in this list, the jira
 	// plugin will not link the issue to the PR.
 	AllowedSecurityLevels []string `json:"allowed_security_levels,omitempty"`
+
+	// RequireReleaseNotes indicates whether a jira bug requires the release notes to be filled in and not
+	// equal to ReleaseNotesDefaultText for the bug to be considered valid.
+	RequireReleaseNotes *bool `json:"require_release_notes,omitempty"`
+	// ReleaseNotesDefaultText is the default text set by Jira for new bugs.
+	ReleaseNotesDefaultText *string `json:"release_notes_default_text,omitempty"`
 }
 
 type JiraBugStateSet map[JiraBugState]interface{}
@@ -182,7 +188,13 @@ func (o JiraBranchOptions) matches(other JiraBranchOptions) bool {
 		(o.StateAfterMerge != nil && other.StateAfterMerge != nil && *o.StateAfterMerge == *other.StateAfterMerge)
 	preMergestatesAfterMergeMatch := o.PreMergeStateAfterMerge == nil && other.PreMergeStateAfterMerge == nil ||
 		(o.PreMergeStateAfterMerge != nil && other.PreMergeStateAfterMerge != nil && *o.PreMergeStateAfterMerge == *other.PreMergeStateAfterMerge)
-	return validateByDefaultMatch && isOpenMatch && targetReleaseMatch && skipTargetVersionCheckMatch && bugStatesMatch && dependentBugStatesMatch && statesAfterValidationMatch && addExternalLinkMatch && statesAfterMergeMatch && preMergestatesAfterMergeMatch
+	releaseNotesMatch := o.RequireReleaseNotes == nil && other.RequireReleaseNotes == nil ||
+		(o.RequireReleaseNotes != nil && other.RequireReleaseNotes != nil && *o.RequireReleaseNotes == *other.RequireReleaseNotes)
+	releaseNotesTextMatch := o.ReleaseNotesDefaultText == nil && other.ReleaseNotesDefaultText == nil ||
+		(o.ReleaseNotesDefaultText != nil && other.ReleaseNotesDefaultText != nil && *o.ReleaseNotesDefaultText == *other.ReleaseNotesDefaultText)
+	return validateByDefaultMatch && isOpenMatch && targetReleaseMatch && skipTargetVersionCheckMatch && bugStatesMatch && dependentBugStatesMatch &&
+		statesAfterValidationMatch && addExternalLinkMatch && statesAfterMergeMatch && preMergestatesAfterMergeMatch &&
+		releaseNotesMatch && releaseNotesTextMatch
 }
 
 const JiraOptionsWildcard = `*`
@@ -250,6 +262,12 @@ func ResolveJiraOptions(parent, child JiraBranchOptions) JiraBranchOptions {
 		if parent.AllowedSecurityLevels != nil {
 			output.AllowedSecurityLevels = sets.NewString(output.AllowedSecurityLevels...).Insert(parent.AllowedSecurityLevels...).List()
 		}
+		if parent.RequireReleaseNotes != nil {
+			output.RequireReleaseNotes = parent.RequireReleaseNotes
+		}
+		if parent.ReleaseNotesDefaultText != nil {
+			output.ReleaseNotesDefaultText = parent.ReleaseNotesDefaultText
+		}
 	}
 
 	// override with the child
@@ -302,6 +320,12 @@ func ResolveJiraOptions(parent, child JiraBranchOptions) JiraBranchOptions {
 	}
 	if child.AllowedSecurityLevels != nil {
 		output.AllowedSecurityLevels = sets.NewString(output.AllowedSecurityLevels...).Insert(child.AllowedSecurityLevels...).List()
+	}
+	if child.RequireReleaseNotes != nil {
+		output.RequireReleaseNotes = child.RequireReleaseNotes
+	}
+	if child.ReleaseNotesDefaultText != nil {
+		output.ReleaseNotesDefaultText = child.ReleaseNotesDefaultText
 	}
 
 	return output

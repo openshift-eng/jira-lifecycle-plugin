@@ -13,6 +13,7 @@ const (
 	TargetVersionFieldOld = "customfield_12319940"
 	TargetVersionField    = "customfield_12323140"
 	ReleaseBlockerField   = "customfield_12319743"
+	ReleaseNotesTextField = "customfield_12317313"
 )
 
 // GetUnknownField will attempt to get the specified field from the Unknowns struct and unmarshal
@@ -111,4 +112,17 @@ type CustomField struct {
 	ID       string `json:"id"`
 	Value    string `json:"value"`
 	Disabled bool   `json:"disabled"`
+}
+
+func GetIssueReleaseNotesText(issue *jira.Issue) (*string, error) {
+	var obj *string
+	isSet, err := GetUnknownField(ReleaseNotesTextField, issue, func() interface{} {
+		var field string
+		obj = &field
+		return obj
+	})
+	if !isSet {
+		return nil, err
+	}
+	return obj, err
 }

@@ -1333,6 +1333,21 @@ func validateBug(bug *jira.Issue, dependents []dependent, options JiraBranchOpti
 		}
 	}
 
+	if options.RequireReleaseNotes != nil && *options.RequireReleaseNotes {
+		releaseNotes, err := helpers.GetIssueReleaseNotesText(bug)
+		if err != nil {
+			errors = append(errors, err.Error())
+			valid = false
+		} else {
+			if releaseNotes == nil || *releaseNotes == "" || (options.ReleaseNotesDefaultText != nil && *options.ReleaseNotesDefaultText == *releaseNotes) {
+				valid = false
+				errors = append(errors, "release notes must be set and not match default text")
+			} else {
+				validations = append(validations, "release notes are set")
+			}
+		}
+	}
+
 	if options.DependentBugStates != nil {
 		for _, bug := range dependents {
 			if !strings.HasPrefix(bug.key, "OCPBUGS-") {
