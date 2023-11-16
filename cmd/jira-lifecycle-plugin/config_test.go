@@ -113,6 +113,18 @@ func TestResolveJiraOptions(t *testing.T) {
 			expected: JiraBranchOptions{IsOpen: &closed, TargetVersion: &one, ValidStates: &[]JiraBugState{modifiedState}, StateAfterValidation: &postState},
 		},
 		{
+			name:     "child overrides parent on RequireReleaseNotes",
+			parent:   JiraBranchOptions{RequireReleaseNotes: &open, TargetVersion: &one, ValidStates: &[]JiraBugState{modifiedState}, StateAfterValidation: &postState},
+			child:    JiraBranchOptions{RequireReleaseNotes: &closed},
+			expected: JiraBranchOptions{RequireReleaseNotes: &closed, TargetVersion: &one, ValidStates: &[]JiraBugState{modifiedState}, StateAfterValidation: &postState},
+		},
+		{
+			name:     "child overrides parent on ReleaseNotesDefaultText",
+			parent:   JiraBranchOptions{ReleaseNotesDefaultText: &one, TargetVersion: &one, ValidStates: &[]JiraBugState{modifiedState}, StateAfterValidation: &postState},
+			child:    JiraBranchOptions{ReleaseNotesDefaultText: &two},
+			expected: JiraBranchOptions{ReleaseNotesDefaultText: &two, TargetVersion: &one, ValidStates: &[]JiraBugState{modifiedState}, StateAfterValidation: &postState},
+		},
+		{
 			name:     "child overrides parent on target release",
 			parent:   JiraBranchOptions{IsOpen: &open, TargetVersion: &one, ValidStates: &[]JiraBugState{modifiedState}, StateAfterValidation: &postState},
 			child:    JiraBranchOptions{TargetVersion: &two},
