@@ -10,8 +10,8 @@ import (
 const (
 	QAContactField        = "customfield_12315948"
 	SeverityField         = "customfield_12316142"
-	TargetVersionFieldOld = "customfield_12319940"
-	TargetVersionField    = "customfield_12323140"
+	TargetVersionField    = "customfield_12319940"
+	TargetVersionFieldOld = "customfield_12323140"
 	ReleaseBlockerField   = "customfield_12319743"
 	ReleaseNotesTextField = "customfield_12317313"
 )
