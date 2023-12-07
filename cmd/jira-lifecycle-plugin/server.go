@@ -1762,10 +1762,14 @@ refBugLoop:
 		update := jira.Issue{
 			Key: clone.Key,
 			Fields: &jira.IssueFields{
+				Assignee: bug.Fields.Assignee,
 				Unknowns: tcontainer.MarshalMap{
 					helpers.TargetVersionField: []*jira.Version{{Name: targetVersion}},
 				},
 			},
+		}
+		if sprint := helpers.GetSprintField(bug); sprint != nil {
+			update.Fields.Unknowns[helpers.SprintField] = sprint
 		}
 		_, err = jc.UpdateIssue(&update)
 		if err != nil {

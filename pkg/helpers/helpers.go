@@ -14,6 +14,7 @@ const (
 	TargetVersionFieldOld = "customfield_12323140"
 	ReleaseBlockerField   = "customfield_12319743"
 	ReleaseNotesTextField = "customfield_12317313"
+	SprintField           = "customfield_12310940"
 )
 
 // GetUnknownField will attempt to get the specified field from the Unknowns struct and unmarshal
@@ -36,7 +37,19 @@ func GetUnknownField(field string, issue *jira.Issue, fn func() interface{}) (bo
 		return true, fmt.Errorf("failed to unmarshal the json to struct for %s. Error: %v", field, err)
 	}
 	return true, nil
+}
 
+// GetSprintField returns a raw interface for the Sprint value of an issue if it exists. Currently, the value
+// is only used during cloning, so no struct is currently needed for us to parse data from the interface.
+func GetSprintField(issue *jira.Issue) interface{} {
+	if issue.Fields == nil || issue.Fields.Unknowns == nil {
+		return nil
+	}
+	sprintObject, ok := issue.Fields.Unknowns[SprintField]
+	if !ok {
+		return nil
+	}
+	return sprintObject
 }
 
 // GetIssueSecurityLevel returns the security level of an issue. If no security level
