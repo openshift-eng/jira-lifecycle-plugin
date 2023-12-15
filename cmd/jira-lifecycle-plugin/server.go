@@ -1734,6 +1734,14 @@ refBugLoop:
 				continue refBugLoop
 			}
 		}
+		// TODO: these fields can cause the clone to fail if not manually removed. It may be better to
+		// perform some recursion when cloning issues, as these only error when everything else is correct...
+		delete(bug.Fields.Unknowns, "environment")
+		delete(bug.Fields.Unknowns, "customfield_12318341")
+		// This is the sprint field; sprints are handled by a custom plugin, and the data given to us via
+		// GetIssue is invalid on Create or Update.
+		// TODO: investigate how to handle the Sprint field
+		delete(bug.Fields.Unknowns, "customfield_12310940")
 		clone, err := jc.CloneIssue(bug)
 		if err != nil {
 			log.WithError(err).Debugf("Failed to clone bug %+v", bugs)
@@ -1768,9 +1776,12 @@ refBugLoop:
 				},
 			},
 		}
-		if sprint := helpers.GetSprintField(bug); sprint != nil {
-			update.Fields.Unknowns[helpers.SprintField] = sprint
-		}
+		// TODO: investigate how to handle the Sprint field
+		/*
+			if sprint := helpers.GetSprintField(bug); sprint != nil {
+				update.Fields.Unknowns[helpers.SprintField] = sprint
+			}
+		*/
 		_, err = jc.UpdateIssue(&update)
 		if err != nil {
 			response += fmt.Sprintf(`

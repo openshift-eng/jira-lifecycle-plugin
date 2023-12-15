@@ -1921,7 +1921,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
 					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
-					helpers.SprintField:        map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/low.svg" width="16" height="16"> Low`},
+					//helpers.SprintField:        map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/low.svg" width="16" height="16"> Low`},
 				},
 			}},
 		},
