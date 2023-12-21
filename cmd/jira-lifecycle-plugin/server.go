@@ -1681,9 +1681,9 @@ func identifyClones(issue *jira.Issue) []*jira.Issue {
 
 func handleCherrypick(e event, gc githubClient, jc jiraclient.Client, options JiraBranchOptions, log *logrus.Entry) error {
 	comment := e.comment(gc)
-	var bugs []referencedIssue
+	var issues []referencedIssue
 	if e.cherrypickCmd {
-		bugs = e.issues
+		issues = e.issues
 	} else {
 		// get the info for the PR being cherrypicked from
 		pr, err := gc.GetPullRequest(e.org, e.repo, e.cherrypickFromPRNum)
@@ -1692,8 +1692,8 @@ func handleCherrypick(e event, gc githubClient, jc jiraclient.Client, options Ji
 			return comment(fmt.Sprintf("Error creating a cherry-pick bug in Jira: failed to check the state of cherrypicked pull request at https://github.com/%s/%s/pull/%d: %v.\nPlease contact an administrator to resolve this issue, then request a bug refresh with <code>/jira refresh</code>.", e.org, e.repo, e.cherrypickFromPRNum, err))
 		}
 		// Attempt to identify bug from PR title
-		bugs, _, _ = jiraKeyFromTitle(pr.Title)
-		if len(bugs) == 0 {
+		issues, _, _ = jiraKeyFromTitle(pr.Title)
+		if len(issues) == 0 {
 			log.Debugf("Parent PR %d doesn't have associated bug; not creating cherrypicked bug", pr.Number)
 			// if there is no jira bug, we should simply ignore this PR
 			return nil
@@ -1704,6 +1704,23 @@ func handleCherrypick(e event, gc githubClient, jc jiraclient.Client, options Ji
 		return comment(fmt.Sprintf("Failed to create a cherry-pick bug in Jira: %s", body))
 	}
 	msg := ""
+	var bugs []referencedIssue
+	var other []referencedIssue
+	for i := range issues {
+		if issues[i].IsBug {
+			bugs = append(bugs, issues[i])
+		} else {
+			other = append(other, issues[i])
+		}
+	}
+	if len(other) != 0 {
+		var titles []string
+		for _, issue := range other {
+			titles = append(titles, issue.Key())
+		}
+		msg += fmt.Sprintf("Ignoring requests to cherry-pick non-bug issues: %v\n ", strings.Join(titles, ", "))
+	}
+
 	retitleList := make(map[string]string)
 refIssueLoop:
 	for _, refIssue := range bugs {

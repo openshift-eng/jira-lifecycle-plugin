@@ -2264,6 +2264,58 @@ Instructions for interacting with me using PR comments are available [here](http
 			}},
 		},
 		{
+			name: "Cherrypick comment for multiple bugs results in cloned bug creation and comment about non-bug issue",
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Status: &jira.Status{Name: "CLOSED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      severityCritical,
+					helpers.TargetVersionField: &v2,
+				},
+			}}},
+			replaceReferencedBugs: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "OTHER", ID: "124", IsBug: false}},
+			prs:                   []github.PullRequest{{Number: 2, Body: "This is a manually created cherrypick of #1.\n\n/assign user", Title: "[v1] fixing stuff"}},
+			overrideEvent: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 2, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "OTHER", ID: "124", IsBug: false}}, body: "/jira cherrypick OCPBUGS-123,OTHER-124", title: "fixed it!", htmlUrl: "https://github.com/org/repo/pull/1", login: "user", cherrypick: true, cherrypickCmd: true, missing: true,
+			},
+			cherrypick: true,
+			missing:    true,
+			options:    JiraBranchOptions{TargetVersion: &v1Str},
+			expectedComment: `org/repo#2:@user: Ignoring requests to cherry-pick non-bug issues: OTHER-124
+ [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). Will retitle bug to link to clone.
+/retitle OCPBUGS-124: fixed it!
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>/jira cherrypick OCPBUGS-123,OTHER-124
+
+
+Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+</details>`,
+			expectedIssue: &jira.Issue{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
+				Status:      &jira.Status{Name: "CLOSED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				IssueLinks: []*jira.IssueLink{&cloneLinkTo123JustID, &blocksLinkTo123JustID},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
+					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
+				},
+			}},
+		},
+		{
 			name: "parent PR of cherrypick not existing results in error",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "CLOSED"},
@@ -4041,7 +4093,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 		},
 		{
-			name: "cherrypick comment event for multiple bugs has cherrypick bools set to true and correct bug keys set",
+			name: "cherrypick comment event has cherrypick bools set to true and correct bug key set even for non-bug issue and dash",
 			e: github.IssueCommentEvent{
 				Action: github.IssueCommentActionCreated,
 				Issue: github.Issue{
@@ -4049,7 +4101,7 @@ Instructions for interacting with me using PR comments are available [here](http
 					PullRequest: &struct{}{},
 				},
 				Comment: github.IssueComment{
-					Body: "/jira cherrypick OCPBUGS-1234,OCPBUGS-1235",
+					Body: "/jira cherry-pick OTHER-1234",
 					User: github.User{
 						Login: "user",
 					},
@@ -4064,7 +4116,34 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			title: "oopsie doopsie",
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "1234", IsBug: true}, {Project: "OCPBUGS", ID: "1235", IsBug: true}}, body: "/jira cherrypick OCPBUGS-1234,OCPBUGS-1235", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: true, cherrypick: true,
+				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OTHER", ID: "1234", IsBug: false}}, body: "/jira cherry-pick OTHER-1234", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: true, cherrypick: true,
+			},
+		},
+		{
+			name: "cherrypick comment event for multiple bugs has cherrypick bools set to true and correct bug keys set",
+			e: github.IssueCommentEvent{
+				Action: github.IssueCommentActionCreated,
+				Issue: github.Issue{
+					Number:      1,
+					PullRequest: &struct{}{},
+				},
+				Comment: github.IssueComment{
+					Body: "/jira cherrypick OCPBUGS-1234,OTHER-1235",
+					User: github.User{
+						Login: "user",
+					},
+					HTMLURL: "www.com",
+				},
+				Repo: github.Repo{
+					Owner: github.User{
+						Login: "org",
+					},
+					Name: "repo",
+				},
+			},
+			title: "oopsie doopsie",
+			expected: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "1234", IsBug: true}, {Project: "OTHER", ID: "1235", IsBug: false}}, body: "/jira cherrypick OCPBUGS-1234,OTHER-1235", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: true, cherrypick: true,
 			},
 		},
 		{
