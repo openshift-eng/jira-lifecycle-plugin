@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -1118,7 +1119,7 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 	// We don't support linking issues to OCPBUGS
 	if !ice.Issue.IsPullRequest() {
 		log.Debug("Jira bug command requested on an issue, ignoring")
-		return nil, gc.CreateComment(org, repo, number, plugins.FormatResponseRaw(ice.Comment.Body, ice.Comment.HTMLURL, ice.Comment.User.Login, `Jira bug referencing is only supported for Pull Requests, not issues.`))
+		return nil, gc.CreateComment(org, repo, number, formatResponseRaw(ice.Comment.Body, ice.Comment.HTMLURL, ice.Comment.User.Login, `Jira bug referencing is only supported for Pull Requests, not issues.`, fmt.Sprintf("%s/%s", ice.Repo.Owner.Login, ice.Repo.Name)))
 	}
 
 	// Make sure the PR title is referencing a bug
@@ -1180,8 +1181,44 @@ type event struct {
 
 func (e *event) comment(gc githubClient) func(body string) error {
 	return func(body string) error {
-		return gc.CreateComment(e.org, e.repo, e.number, plugins.FormatResponseRaw(e.body, e.htmlUrl, e.login, body))
+		return gc.CreateComment(e.org, e.repo, e.number, formatResponseRaw(e.body, e.htmlUrl, e.login, body, fmt.Sprintf("%s/%s", e.org, e.repo)))
 	}
+}
+
+// formatResponseRaw nicely formats a response for one does not have an issue comment
+func formatResponseRaw(body, bodyURL, login, reply, orgRepo string) string {
+	format := `In response to [this](%s):
+
+%s
+`
+	// Quote the user's comment by prepending ">" to each line.
+	var quoted []string
+	for _, l := range strings.Split(body, "\n") {
+		quoted = append(quoted, ">"+l)
+	}
+	return formatResponse(login, reply, fmt.Sprintf(format, bodyURL, strings.Join(quoted, "\n")), orgRepo)
+}
+
+// formatResponse nicely formats a response to a generic reason.
+func formatResponse(to, message, reason, orgRepo string) string {
+	helpURL := url.URL{
+		Scheme: "https",
+		Host:   "prow.ci.openshift.org",
+		Path:   "command-help",
+	}
+	query := helpURL.Query()
+	query.Add("repo", orgRepo)
+	helpURL.RawQuery = query.Encode()
+	format := `@%s: %s
+
+<details>
+
+%s
+
+Instructions for interacting with me using PR comments are available [here](%s).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`
+
+	return fmt.Sprintf(format, to, message, reason, helpURL.String())
 }
 
 type queryUser struct {
