@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"regexp"
 	"sort"
@@ -39,16 +38,22 @@ const (
 )
 
 var (
-	titleMatchJiraIssue    = regexp.MustCompile(`(?i)([[:alpha:]]+-\d+,)*(NO-JIRA|NO-ISSUE|[[:alpha:]]+-\d+)+:`)
-	refreshCommandMatch    = regexp.MustCompile(`(?mi)^/jira refresh\s*$`)
-	qaReviewCommandMatch   = regexp.MustCompile(`(?mi)^/jira cc-qa\s*$`)
-	cherrypickCommandMatch = regexp.MustCompile(`(?mi)^/jira cherrypick (OCPBUGS-(\d+),)*(OCPBUGS-(\d+))+\s*$`)
-	cherrypickPRMatch      = regexp.MustCompile(`This is an automated cherry-pick of #([0-9]+)`)
+	titleMatchJiraIssue     = regexp.MustCompile(`(?i)([a-zA-Z]+-\d+,)*(NO-JIRA|NO-ISSUE|[a-zA-Z]+-\d+)+:`)
+	refreshCommandMatch     = regexp.MustCompile(`(?mi)^/jira refresh\s*$`)
+	qaReviewCommandMatch    = regexp.MustCompile(`(?mi)^/jira cc-qa\s*$`)
+	cherrypickCommandMatch  = regexp.MustCompile(`(?mi)^/jira cherry-?pick (([a-zA-Z]+)-(\d+),)*(([a-zA-Z]+)-(\d+))+\s*$`)
+	cherrypickPRMatch       = regexp.MustCompile(`This is an automated cherry-pick of #([0-9]+)`)
+	jiraIssueReferenceMatch = regexp.MustCompile(`([a-zA-Z]+)-([0-9]+)`)
 )
 
-type referencedBug struct {
-	Key   string
-	IsBug bool
+type referencedIssue struct {
+	Project string
+	ID      string
+	IsBug   bool
+}
+
+func (i referencedIssue) Key() string {
+	return fmt.Sprintf("%s-%s", i.Project, i.ID)
 }
 
 type dependent struct {
@@ -341,9 +346,9 @@ func (s *server) handleIssueComment(l *logrus.Entry, e github.IssueCommentEvent)
 func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, log *logrus.Entry, e event, allRepos sets.String) error {
 	comment := e.comment(ghc)
 	if !e.missing {
-		for _, refBug := range e.bugs {
-			if refBug.IsBug && refBug.Key != "" {
-				issue, err := getJira(jc, refBug.Key, log, comment)
+		for _, refIssue := range e.issues {
+			if refIssue.IsBug && refIssue.Key() != "" {
+				issue, err := getJira(jc, refIssue.Key(), log, comment)
 				if err != nil || issue == nil {
 					return err
 				}
@@ -354,7 +359,7 @@ func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, l
 				if !bugAllowed {
 					// ignore bugs that are in non-allowed security levels for this repo
 					if e.opened || e.refresh {
-						response := fmt.Sprintf(issueLink+" is in a security level that is not in the allowed security levels for this repo.", refBug.Key, jc.JiraURL(), refBug.Key)
+						response := fmt.Sprintf(issueLink+" is in a security level that is not in the allowed security levels for this repo.", refIssue.Key(), jc.JiraURL(), refIssue.Key())
 						if len(options.AllowedSecurityLevels) > 0 {
 							response += "\nAllowed security levels for this repo are:"
 							for _, group := range options.AllowedSecurityLevels {
@@ -387,7 +392,7 @@ func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, l
 	var response, severityLabel string
 	var invalidIssues []string
 	if !e.noJira {
-		for _, refBug := range e.bugs {
+		for _, refIssue := range e.issues {
 			// separate responses for different bugs
 			if response != "" {
 				response += "\n\n"
@@ -395,19 +400,19 @@ func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, l
 			var issue *jira.Issue
 			var err error
 			if !e.missing {
-				issue, err = getJira(jc, refBug.Key, log, comment)
+				issue, err = getJira(jc, refIssue.Key(), log, comment)
 				if err != nil {
 					return err
 				}
 			}
 
 			if issue == nil {
-				invalidIssues = append(invalidIssues, refBug.Key)
+				invalidIssues = append(invalidIssues, refIssue.Key())
 			} else {
 				needsJiraValidRefLabel = true
 				premergeUpdated := false
 				// check labels for premerge verification
-				if refBug.IsBug {
+				if refIssue.IsBug {
 					if labels, err := ghc.GetIssueLabels(e.org, e.repo, e.number); err != nil {
 						log.WithError(err).Warn("Could not list labels on PR")
 					} else {
@@ -416,7 +421,7 @@ func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, l
 							if options.PreMergeStateAfterValidation.Status != "" && (issue.Fields.Status == nil || !strings.EqualFold(issue.Fields.Status.Name, options.PreMergeStateAfterValidation.Status)) {
 								if err := jc.UpdateStatus(issue.Key, options.PreMergeStateAfterValidation.Status); err != nil {
 									log.WithError(err).Warn("Unexpected error updating jira issue.")
-									response += formatError(fmt.Sprintf("updating to the %s state", options.PreMergeStateAfterValidation.Status), jc.JiraURL(), refBug.Key, err)
+									response += formatError(fmt.Sprintf("updating to the %s state", options.PreMergeStateAfterValidation.Status), jc.JiraURL(), refIssue.Key(), err)
 									continue
 								}
 								premergeUpdated = true
@@ -425,21 +430,21 @@ func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, l
 								updateIssue := jira.Issue{Key: issue.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.PreMergeStateAfterValidation.Resolution}}}
 								if _, err := jc.UpdateIssue(&updateIssue); err != nil {
 									log.WithError(err).Warn("Unexpected error updating jira issue.")
-									response += formatError(fmt.Sprintf("updating to the %s resolution", options.PreMergeStateAfterMerge.Resolution), jc.JiraURL(), refBug.Key, err)
+									response += formatError(fmt.Sprintf("updating to the %s resolution", options.PreMergeStateAfterMerge.Resolution), jc.JiraURL(), refIssue.Key(), err)
 									continue
 								}
 								premergeUpdated = true
 							}
 						}
 						// if this is a premerge verified issue, we don't want to run the usual verification on it; just treat it as a reference instead
-						refBug.IsBug = !premergeVerified
+						refIssue.IsBug = !premergeVerified
 					}
 				}
-				if !refBug.IsBug {
+				if !refIssue.IsBug {
 					// don't linkify the jira ref in this case because the prow-jira plugin will do so and we don't want it to
 					// end up double-linkified.  The prow-jira plugin is configured to not linkify OCPBUGS refs, but it will
 					// linkify refs to other projects.
-					response += fmt.Sprintf("This pull request references %s which is a valid jira issue.", refBug.Key)
+					response += fmt.Sprintf("This pull request references %s which is a valid jira issue.", refIssue.Key())
 					if premergeUpdated {
 						response += fmt.Sprintf(" The bug has been moved to the %s state.", PrettyStatus(options.PreMergeStateAfterValidation.Status, options.PreMergeStateAfterValidation.Resolution))
 					}
@@ -451,8 +456,8 @@ func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, l
 					}
 				}
 			}
-			if refBug.IsBug && issue != nil {
-				log = log.WithField("refKey", refBug.Key)
+			if refIssue.IsBug && issue != nil {
+				log = log.WithField("refKey", refIssue.Key())
 
 				severity, err := getSimplifiedSeverity(issue)
 				if err != nil {
@@ -490,11 +495,11 @@ func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, l
 						// the issue in the link is very trimmed down; get full link for dependentIssue list
 						dependentIssue, err := jc.GetIssue(linkIssue.Key)
 						if err != nil {
-							return comment(formatError(fmt.Sprintf("searching for dependent bug %s", linkIssue.Key), jc.JiraURL(), refBug.Key, err))
+							return comment(formatError(fmt.Sprintf("searching for dependent bug %s", linkIssue.Key), jc.JiraURL(), refIssue.Key(), err))
 						}
 						targetVersion, err := helpers.GetIssueTargetVersion(dependentIssue)
 						if err != nil {
-							return comment(formatError(fmt.Sprintf("failed to get target version for %s", dependentIssue.Key), jc.JiraURL(), refBug.Key, err))
+							return comment(formatError(fmt.Sprintf("failed to get target version for %s", dependentIssue.Key), jc.JiraURL(), refIssue.Key(), err))
 						}
 						var targetVersionString *string
 						if len(targetVersion) != 0 {
@@ -522,19 +527,19 @@ func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, l
 				}
 				if valid {
 					log.Debug("Valid bug found.")
-					response += fmt.Sprintf(`This pull request references `+issueLink+`, which is valid.`, refBug.Key, jc.JiraURL(), refBug.Key)
+					response += fmt.Sprintf(`This pull request references `+issueLink+`, which is valid.`, refIssue.Key(), jc.JiraURL(), refIssue.Key())
 					// if configured, move the bug to the new state
 					if options.StateAfterValidation != nil {
 						if options.StateAfterValidation.Status != "" && (issue.Fields.Status == nil || !strings.EqualFold(options.StateAfterValidation.Status, issue.Fields.Status.Name)) {
 							if err := jc.UpdateStatus(issue.ID, options.StateAfterValidation.Status); err != nil {
 								log.WithError(err).Warn("Unexpected error updating jira issue.")
-								return comment(formatError(fmt.Sprintf("updating to the %s state", options.StateAfterValidation.Status), jc.JiraURL(), refBug.Key, err))
+								return comment(formatError(fmt.Sprintf("updating to the %s state", options.StateAfterValidation.Status), jc.JiraURL(), refIssue.Key(), err))
 							}
 							if options.StateAfterValidation.Resolution != "" && (issue.Fields.Resolution == nil || !strings.EqualFold(options.StateAfterValidation.Resolution, issue.Fields.Resolution.Name)) {
 								updateIssue := jira.Issue{Key: issue.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterValidation.Resolution}}}
 								if _, err := jc.UpdateIssue(&updateIssue); err != nil {
 									log.WithError(err).Warn("Unexpected error updating jira issue.")
-									return comment(formatError(fmt.Sprintf("updating to the %s resolution", options.StateAfterValidation.Resolution), jc.JiraURL(), refBug.Key, err))
+									return comment(formatError(fmt.Sprintf("updating to the %s resolution", options.StateAfterValidation.Resolution), jc.JiraURL(), refIssue.Key(), err))
 								}
 							}
 							response += fmt.Sprintf(" The bug has been moved to the %s state.", options.StateAfterValidation)
@@ -554,15 +559,15 @@ func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, l
 
 					qaContactDetail, err := helpers.GetIssueQaContact(issue)
 					if err != nil {
-						return comment(formatError("processing qa contact information for the bug", jc.JiraURL(), refBug.Key, err))
+						return comment(formatError("processing qa contact information for the bug", jc.JiraURL(), refIssue.Key(), err))
 					}
 					if qaContactDetail == nil {
 						if e.cc {
-							response += fmt.Sprintf(issueLink+" does not have a QA contact, skipping assignment", refBug.Key, jc.JiraURL(), refBug.Key)
+							response += fmt.Sprintf(issueLink+" does not have a QA contact, skipping assignment", refIssue.Key(), jc.JiraURL(), refIssue.Key())
 						}
 					} else if qaContactDetail.EmailAddress == "" {
 						if e.cc {
-							response += fmt.Sprintf("QA contact for "+issueLink+" does not have a listed email, skipping assignment", refBug.Key, jc.JiraURL(), refBug.Key)
+							response += fmt.Sprintf("QA contact for "+issueLink+" does not have a listed email, skipping assignment", refIssue.Key(), jc.JiraURL(), refIssue.Key())
 						}
 					} else {
 						query := &emailToLoginQuery{}
@@ -573,7 +578,7 @@ func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, l
 						err := ghc.QueryWithGitHubAppsSupport(context.Background(), query, queryVars, e.org)
 						if err != nil {
 							log.WithError(err).Error("Failed to run graphql github query")
-							return comment(formatError(fmt.Sprintf("querying GitHub for users with public email (%s)", email), jc.JiraURL(), refBug.Key, err))
+							return comment(formatError(fmt.Sprintf("querying GitHub for users with public email (%s)", email), jc.JiraURL(), refIssue.Key(), err))
 						}
 						response += fmt.Sprint("\n\n", processQuery(query, email, log))
 					}
@@ -585,14 +590,14 @@ func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, l
 					}
 					response += fmt.Sprintf(`This pull request references `+issueLink+`, which is invalid:
 %s
-Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jira bug are made, or edit the title of this pull request to link to a different bug.`, refBug.Key, jc.JiraURL(), refBug.Key, formattedReasons)
+Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jira bug are made, or edit the title of this pull request to link to a different bug.`, refIssue.Key(), jc.JiraURL(), refIssue.Key(), formattedReasons)
 				}
 
 				if options.AddExternalLink != nil && *options.AddExternalLink {
 					changed, err := upsertGitHubLinkToIssue(log, issue.ID, jc, e)
 					if err != nil {
 						log.WithError(err).Warn("Unexpected error adding external tracker bug to Jira bug.")
-						return comment(formatError("adding this pull request to the external tracker bugs", jc.JiraURL(), refBug.Key, err))
+						return comment(formatError("adding this pull request to the external tracker bugs", jc.JiraURL(), refIssue.Key(), err))
 					}
 					if changed {
 						response += "\n\nThe bug has been updated to refer to the pull request using the external bug tracker."
@@ -1020,7 +1025,7 @@ func digestPR(log *logrus.Entry, pre github.PullRequestEvent, validateByDefault 
 	e := &event{org: org, repo: repo, baseRef: baseRef, number: number, merged: pre.PullRequest.Merged, closed: pre.Action == github.PullRequestActionClosed, opened: pre.Action == github.PullRequestActionOpened, state: pre.PullRequest.State, body: body, title: title, htmlUrl: pre.PullRequest.HTMLURL, login: pre.PullRequest.User.Login}
 	// Make sure the PR title is referencing a bug
 	var err error
-	e.bugs, e.missing, e.noJira = jiraKeyFromTitle(title)
+	e.issues, e.missing, e.noJira = jiraKeyFromTitle(title)
 
 	// Check if PR is a cherrypick
 	cherrypick, cherrypickFromPRNum, err := getCherryPickMatch(pre)
@@ -1067,16 +1072,16 @@ func digestPR(log *logrus.Entry, pre github.PullRequestEvent, validateByDefault 
 	}
 
 	// if the referenced bug has not changed in the update, ignore it
-	if len(prevIds) == len(e.bugs) {
+	if len(prevIds) == len(e.issues) {
 		var changed bool
 		for index, prevBug := range prevIds {
-			if e.bugs[index].Key != prevBug.Key {
+			if e.issues[index].Key() != prevBug.Key() {
 				changed = true
 				break
 			}
 		}
 		if !changed {
-			logrus.Debugf("Referenced Jira issue(s) (%+v) has not changed, not handling event.", e.bugs)
+			logrus.Debugf("Referenced Jira issue(s) (%+v) has not changed, not handling event.", e.issues)
 			return nil, nil
 		}
 	}
@@ -1124,22 +1129,13 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 
 	e := &event{org: org, repo: repo, baseRef: pr.Base.Ref, number: number, merged: pr.Merged, state: pr.State, body: ice.Comment.Body, title: ice.Issue.Title, htmlUrl: ice.Comment.HTMLURL, login: ice.Comment.User.Login, refresh: refresh, cc: cc}
 
-	e.bugs, e.missing, e.noJira = jiraKeyFromTitle(pr.Title)
+	e.issues, e.missing, e.noJira = jiraKeyFromTitle(pr.Title)
 
 	if cherrypick {
-		mat := cherrypickCommandMatch.FindStringSubmatch(ice.Comment.Body)
-		if len(mat) == 0 {
-			// this shouldn't be possible due to earlier cherrypick check
-			return nil, errors.New("failed to get cherrypick string match")
-		}
-		keys := strings.TrimPrefix(strings.TrimRight(mat[0], "\r\n "), "/jira cherrypick ")
-		splitKeys := strings.Split(keys, ",")
-		e.bugs = []referencedBug{} // reset bugs list to only include cherrypick comment specified bugs
-		for _, key := range splitKeys {
-			e.bugs = append(e.bugs, referencedBug{
-				Key:   key,
-				IsBug: strings.Contains(key, "OCPBUGS-"),
-			})
+		var matchError error
+		e.issues, matchError = cherryPickCommandMatches(ice.Comment.Body)
+		if matchError != nil {
+			return nil, matchError
 		}
 		e.cherrypick = true
 		e.cherrypickCmd = true
@@ -1148,10 +1144,31 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 	return e, nil
 }
 
+func cherryPickCommandMatches(body string) ([]referencedIssue, error) {
+	commandMatches := cherrypickCommandMatch.FindStringSubmatch(body)
+	if len(commandMatches) == 0 {
+		return nil, fmt.Errorf("body %q did not match cherry-pick regex, programmer error", body)
+	}
+	return referencedIssues(commandMatches[0]), nil
+}
+
+func referencedIssues(matchingText string) []referencedIssue {
+	matches := jiraIssueReferenceMatch.FindAllStringSubmatch(matchingText, -1)
+	var issues []referencedIssue
+	for _, match := range matches {
+		issues = append(issues, referencedIssue{
+			Project: match[1],
+			ID:      match[2],
+			IsBug:   match[1] == "OCPBUGS",
+		})
+	}
+	return issues
+}
+
 type event struct {
 	org, repo, baseRef              string
 	number                          int
-	bugs                            []referencedBug
+	issues                          []referencedIssue
 	noJira                          bool
 	missing, merged, closed, opened bool
 	state                           string
@@ -1464,14 +1481,14 @@ func handleMerge(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 	comment := e.comment(gc)
 
 	msg := ""
-	for _, refBug := range e.bugs {
-		if !refBug.IsBug {
+	for _, refIssue := range e.issues {
+		if !refIssue.IsBug {
 			continue
 		}
 		if msg != "" {
 			msg += "\n\n"
 		}
-		bug, err := getJira(jc, refBug.Key, log, comment)
+		bug, err := getJira(jc, refIssue.Key(), log, comment)
 		if err != nil || bug == nil {
 			return err
 		}
@@ -1490,7 +1507,7 @@ func handleMerge(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 				allowed = append(allowed, *options.StateAfterValidation)
 			}
 			if !bugMatchesStates(bug, allowed) {
-				msg += fmt.Sprintf(issueLink+" is in an unrecognized state (%s) and will not be moved to the %s state.", refBug.Key, jc.JiraURL(), refBug.Key, bug.Fields.Status.Name, options.StateAfterMerge)
+				msg += fmt.Sprintf(issueLink+" is in an unrecognized state (%s) and will not be moved to the %s state.", refIssue.Key(), jc.JiraURL(), refIssue.Key(), bug.Fields.Status.Name, options.StateAfterMerge)
 				continue
 			}
 		}
@@ -1498,7 +1515,7 @@ func handleMerge(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 		links, err := jc.GetRemoteLinks(bug.ID)
 		if err != nil {
 			log.WithError(err).Warn("Unexpected error listing external tracker bugs for Jira bug.")
-			msg += formatError("searching for external tracker bugs", jc.JiraURL(), refBug.Key, err)
+			msg += formatError("searching for external tracker bugs", jc.JiraURL(), refIssue.Key(), err)
 			continue
 		}
 		shouldMigrate := true
@@ -1513,13 +1530,13 @@ func handleMerge(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 			}
 			if len(parts) != 4 && !(len(parts) == 5 && (parts[4] == "" || parts[4] == "files")) && !(len(parts) == 6 && ((parts[4] == "files" && parts[5] == "") || parts[4] == "commits")) {
 				log.WithError(err).Warn("Unexpected error splitting github URL for Jira external link.")
-				msg += formatError(fmt.Sprintf("invalid pull identifier with %d parts: %q", len(parts), identifier), jc.JiraURL(), refBug.Key, err)
+				msg += formatError(fmt.Sprintf("invalid pull identifier with %d parts: %q", len(parts), identifier), jc.JiraURL(), refIssue.Key(), err)
 				continue
 			}
 			number, err := strconv.Atoi(parts[3])
 			if err != nil {
 				log.WithError(err).Warn("Unexpected error splitting github URL for Jira external link.")
-				msg += formatError(fmt.Sprintf("invalid pull identifier: could not parse %s as number", parts[3]), jc.JiraURL(), refBug.Key, err)
+				msg += formatError(fmt.Sprintf("invalid pull identifier: could not parse %s as number", parts[3]), jc.JiraURL(), refIssue.Key(), err)
 				continue
 			}
 			item := prParts{
@@ -1542,7 +1559,7 @@ func handleMerge(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 				pr, err := gc.GetPullRequest(item.Org, item.Repo, item.Num)
 				if err != nil {
 					log.WithError(err).Warn("Unexpected error checking merge state of related pull request.")
-					msg += formatError(fmt.Sprintf("checking the state of a related pull request at https://github.com/%s/%s/pull/%d", item.Org, item.Repo, item.Num), jc.JiraURL(), refBug.Key, err)
+					msg += formatError(fmt.Sprintf("checking the state of a related pull request at https://github.com/%s/%s/pull/%d", item.Org, item.Repo, item.Num), jc.JiraURL(), refIssue.Key(), err)
 					continue
 				}
 				merged = pr.Merged
@@ -1590,7 +1607,7 @@ These pull request must merge or be unlinked from the Jira bug in order for it t
 `, strings.Join(statements, "\n"))
 
 		outcomeMessage := func(action string) string {
-			return fmt.Sprintf(issueLink+" has %sbeen moved to the %s state.", refBug.Key, jc.JiraURL(), refBug.Key, action, options.StateAfterMerge)
+			return fmt.Sprintf(issueLink+" has %sbeen moved to the %s state.", refIssue.Key(), jc.JiraURL(), refIssue.Key(), action, options.StateAfterMerge)
 		}
 
 		if shouldMigrate {
@@ -1600,13 +1617,13 @@ These pull request must merge or be unlinked from the Jira bug in order for it t
 			}
 			if isPreMergeVerified(bug, labels) {
 				outcomeMessage = func(action string) string {
-					return fmt.Sprintf(issueLink+" has %sbeen moved to the %s state.", refBug.Key, jc.JiraURL(), refBug.Key, action, options.PreMergeStateAfterMerge)
+					return fmt.Sprintf(issueLink+" has %sbeen moved to the %s state.", refIssue.Key(), jc.JiraURL(), refIssue.Key(), action, options.PreMergeStateAfterMerge)
 				}
 				if options.PreMergeStateAfterMerge != nil {
 					if options.PreMergeStateAfterMerge.Status != "" && (bug.Fields.Status == nil || !strings.EqualFold(bug.Fields.Status.Name, options.PreMergeStateAfterMerge.Status)) {
 						if err := jc.UpdateStatus(bug.Key, options.PreMergeStateAfterMerge.Status); err != nil {
 							log.WithError(err).Warn("Unexpected error updating jira bug.")
-							msg += formatError(fmt.Sprintf("updating to the %s state", options.PreMergeStateAfterMerge.Status), jc.JiraURL(), refBug.Key, err)
+							msg += formatError(fmt.Sprintf("updating to the %s state", options.PreMergeStateAfterMerge.Status), jc.JiraURL(), refIssue.Key(), err)
 							continue
 						}
 					}
@@ -1614,7 +1631,7 @@ These pull request must merge or be unlinked from the Jira bug in order for it t
 						updatebug := jira.Issue{Key: bug.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.PreMergeStateAfterMerge.Resolution}}}
 						if _, err := jc.UpdateIssue(&updatebug); err != nil {
 							log.WithError(err).Warn("Unexpected error updating jira bug.")
-							msg += formatError(fmt.Sprintf("updating to the %s resolution", options.PreMergeStateAfterMerge.Resolution), jc.JiraURL(), refBug.Key, err)
+							msg += formatError(fmt.Sprintf("updating to the %s resolution", options.PreMergeStateAfterMerge.Resolution), jc.JiraURL(), refIssue.Key(), err)
 							continue
 						}
 					}
@@ -1622,26 +1639,26 @@ These pull request must merge or be unlinked from the Jira bug in order for it t
 			} else {
 				if options.StateAfterMerge != nil {
 					if options.StateAfterMerge.Status != "" && (bug.Fields.Status == nil || !strings.EqualFold(options.StateAfterMerge.Status, bug.Fields.Status.Name)) {
-						if err := jc.UpdateStatus(refBug.Key, options.StateAfterMerge.Status); err != nil {
+						if err := jc.UpdateStatus(refIssue.Key(), options.StateAfterMerge.Status); err != nil {
 							log.WithError(err).Warn("Unexpected error updating jira issue.")
-							msg += formatError(fmt.Sprintf("updating to the %s state", options.StateAfterMerge.Status), jc.JiraURL(), refBug.Key, err)
+							msg += formatError(fmt.Sprintf("updating to the %s state", options.StateAfterMerge.Status), jc.JiraURL(), refIssue.Key(), err)
 							continue
 						}
 						if options.StateAfterMerge.Resolution != "" && (bug.Fields.Resolution == nil || !strings.EqualFold(options.StateAfterMerge.Resolution, bug.Fields.Resolution.Name)) {
 							updateIssue := jira.Issue{Key: bug.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterMerge.Resolution}}}
 							if _, err := jc.UpdateIssue(&updateIssue); err != nil {
 								log.WithError(err).Warn("Unexpected error updating jira issue.")
-								msg += formatError(fmt.Sprintf("updating to the %s resolution", options.StateAfterMerge.Resolution), jc.JiraURL(), refBug.Key, err)
+								msg += formatError(fmt.Sprintf("updating to the %s resolution", options.StateAfterMerge.Resolution), jc.JiraURL(), refIssue.Key(), err)
 								continue
 							}
 						}
 					}
 				}
 			}
-			msg += fmt.Sprintf(issueLink+": %s%s", refBug.Key, jc.JiraURL(), refBug.Key, mergedMessage("All"), outcomeMessage(""))
+			msg += fmt.Sprintf(issueLink+": %s%s", refIssue.Key(), jc.JiraURL(), refIssue.Key(), mergedMessage("All"), outcomeMessage(""))
 			continue
 		}
-		msg += fmt.Sprintf(issueLink+": %s%s%s", refBug.Key, jc.JiraURL(), refBug.Key, mergedMessage("Some"), unmergedMessage, outcomeMessage("not "))
+		msg += fmt.Sprintf(issueLink+": %s%s%s", refIssue.Key(), jc.JiraURL(), refIssue.Key(), mergedMessage("Some"), unmergedMessage, outcomeMessage("not "))
 	}
 	if msg == "" {
 		return nil
@@ -1664,9 +1681,9 @@ func identifyClones(issue *jira.Issue) []*jira.Issue {
 
 func handleCherrypick(e event, gc githubClient, jc jiraclient.Client, options JiraBranchOptions, log *logrus.Entry) error {
 	comment := e.comment(gc)
-	var bugs []referencedBug
+	var bugs []referencedIssue
 	if e.cherrypickCmd {
-		bugs = e.bugs
+		bugs = e.issues
 	} else {
 		// get the info for the PR being cherrypicked from
 		pr, err := gc.GetPullRequest(e.org, e.repo, e.cherrypickFromPRNum)
@@ -1688,9 +1705,9 @@ func handleCherrypick(e event, gc githubClient, jc jiraclient.Client, options Ji
 	}
 	msg := ""
 	retitleList := make(map[string]string)
-refBugLoop:
-	for _, refBug := range bugs {
-		bug, err := getJira(jc, refBug.Key, log, commentWithPrefix)
+refIssueLoop:
+	for _, refIssue := range bugs {
+		bug, err := getJira(jc, refIssue.Key(), log, commentWithPrefix)
 		if err != nil || bug == nil {
 			return err
 		}
@@ -1711,7 +1728,7 @@ refBugLoop:
 			continue
 		}
 		clones := identifyClones(bug)
-		oldLink := fmt.Sprintf(issueLink, refBug.Key, jc.JiraURL(), refBug.Key)
+		oldLink := fmt.Sprintf(issueLink, refIssue.Key(), jc.JiraURL(), refIssue.Key())
 		if options.TargetVersion == nil {
 			msg += fmt.Sprintf("Could not make automatic cherrypick of %s for this PR as the target version is not set for this branch in the jira plugin config. Running refresh:\n/jira refresh", oldLink) + "\n\n"
 			continue
@@ -1726,12 +1743,12 @@ refBugLoop:
 			cloneVersion, err := helpers.GetIssueTargetVersion(clone)
 			if err != nil {
 				msg += formatError(fmt.Sprintf("getting the target version for clone %s", clone.Key), jc.JiraURL(), bug.Key, err) + "\n\n"
-				continue refBugLoop
+				continue refIssueLoop
 			}
 			if len(cloneVersion) == 1 && cloneVersion[0].Name == targetVersion {
 				msg += fmt.Sprintf("Detected clone of %s with correct target version. Will retitle the PR to link to the clone.", oldLink) + "\n\n"
 				retitleList[bug.Key] = clone.Key
-				continue refBugLoop
+				continue refIssueLoop
 			}
 		}
 		// TODO: these fields can cause the clone to fail if not manually removed. It may be better to
@@ -1825,45 +1842,19 @@ WARNING: Failed to update the target version for the clone. Please update the ta
 }
 
 // return values:
-// 1: issues as an array of referencedBug, if exists
+// 1: issues as an array of referencedIssue, if exists
 // 2: missing: true/false based on whether the title is missing a jira ref
 // 3: noJira: true/false based on whether the title contains jira excluding term (i.e. "NO-JIRA" or "NO-ISSUE")
-func jiraKeyFromTitle(title string) ([]referencedBug, bool, bool) {
-	/*
-		// we only match stuff before a ":"
-		splitTitle := strings.Split(title, ":")
-		if len(splitTitle) < 2 {
-			return nil, true, false
-		}
-		trimmedTitle := splitTitle[0]
-		// if there is a space before the `:`,  we ignore this, as the title is improperly formatted
-		if string(trimmedTitle[len(trimmedTitle)-1]) == " " {
-			return nil, true, false
-		}
-		// if there are square brackets, remove them and everything between them
-		leftBracket := strings.Index(title, "[")
-		rightBracket := strings.Index(title, "]")
-		if rightBracket-leftBracket != 0 {
-			trimmedTitle = trimmedTitle[0:leftBracket] + trimmedTitle[rightBracket+1:]
-		}
-	*/
-	matches := titleMatchJiraIssue.FindString(title)
-	if len(matches) == 0 {
+func jiraKeyFromTitle(title string) ([]referencedIssue, bool, bool) {
+	titleMatches := titleMatchJiraIssue.FindStringSubmatch(title)
+	if len(titleMatches) == 0 || len(titleMatches) < 3 {
 		return nil, true, false
 	}
-	bugs := []referencedBug{}
-	splitMatch := strings.Split(matches, ",")
-	for _, match := range splitMatch {
-		match = strings.TrimSuffix(match, ":")
-		if strings.EqualFold(match, "NO-ISSUE") || strings.EqualFold(match, "NO-JIRA") {
-			return nil, false, true
-		}
-		bugs = append(bugs, referencedBug{
-			Key:   match,
-			IsBug: strings.Contains(match, "OCPBUGS-"),
-		})
+	if strings.EqualFold(titleMatches[2], "NO-ISSUE") || strings.EqualFold(titleMatches[2], "NO-JIRA") {
+		return nil, false, true
 	}
-	return bugs, false, false
+
+	return referencedIssues(titleMatches[0]), false, false
 }
 
 func getJira(jc jiraclient.Client, jiraKey string, log *logrus.Entry, comment func(string) error) (*jira.Issue, error) {
@@ -1921,34 +1912,34 @@ func handleClose(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 		return nil
 	}
 	msg := ""
-	for _, refBug := range e.bugs {
-		if !refBug.IsBug {
+	for _, refIssue := range e.issues {
+		if !refIssue.IsBug {
 			return nil
 		}
 		if options.AddExternalLink != nil && *options.AddExternalLink {
-			response := fmt.Sprintf(`This pull request references `+issueLink+`. The bug has been updated to no longer refer to the pull request using the external bug tracker.`, refBug.Key, jc.JiraURL(), refBug.Key)
-			changed, err := jc.DeleteRemoteLinkViaURL(refBug.Key, prURLFromCommentURL(e.htmlUrl))
+			response := fmt.Sprintf(`This pull request references `+issueLink+`. The bug has been updated to no longer refer to the pull request using the external bug tracker.`, refIssue.Key(), jc.JiraURL(), refIssue.Key())
+			changed, err := jc.DeleteRemoteLinkViaURL(refIssue.Key(), prURLFromCommentURL(e.htmlUrl))
 			if err != nil && !strings.HasPrefix(err.Error(), "could not find remote link on issue with URL") {
 				log.WithError(err).Warn("Unexpected error removing external tracker bug from Jira bug.")
-				msg += formatError("removing this pull request from the external tracker bugs", jc.JiraURL(), refBug.Key, err) + "\n\n"
+				msg += formatError("removing this pull request from the external tracker bugs", jc.JiraURL(), refIssue.Key(), err) + "\n\n"
 				continue
 			}
 			if options.StateAfterClose != nil || options.PreMergeStateAfterClose != nil {
-				issue, err := jc.GetIssue(refBug.Key)
+				issue, err := jc.GetIssue(refIssue.Key())
 				if err != nil {
 					log.WithError(err).Warn("Unexpected error getting Jira issue.")
-					msg += formatError("getting issue", jc.JiraURL(), refBug.Key, err) + "\n\n"
+					msg += formatError("getting issue", jc.JiraURL(), refIssue.Key(), err) + "\n\n"
 					continue
 				}
 				if !strings.EqualFold(issue.Fields.Status.Name, status.Closed) {
 					links, err := jc.GetRemoteLinks(issue.ID)
 					if err != nil {
 						log.WithError(err).Warn("Unexpected error getting remote links for Jira issue.")
-						msg += formatError("getting remote links", jc.JiraURL(), refBug.Key, err) + "\n\n"
+						msg += formatError("getting remote links", jc.JiraURL(), refIssue.Key(), err) + "\n\n"
 						continue
 					}
 					if len(links) == 0 {
-						bug, err := getJira(jc, refBug.Key, log, comment)
+						bug, err := getJira(jc, refIssue.Key(), log, comment)
 						if err != nil || bug == nil {
 							return err
 						}
@@ -1964,14 +1955,14 @@ func handleClose(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 							if options.PreMergeStateAfterClose.Status != "" && (bug.Fields.Status == nil || !strings.EqualFold(options.PreMergeStateAfterClose.Status, bug.Fields.Status.Name)) {
 								if err := jc.UpdateStatus(issue.ID, options.PreMergeStateAfterClose.Status); err != nil {
 									log.WithError(err).Warn("Unexpected error updating jira issue.")
-									msg += formatError(fmt.Sprintf("updating to the %s state", options.PreMergeStateAfterClose.Status), jc.JiraURL(), refBug.Key, err) + "\n\n"
+									msg += formatError(fmt.Sprintf("updating to the %s state", options.PreMergeStateAfterClose.Status), jc.JiraURL(), refIssue.Key(), err) + "\n\n"
 									continue
 								}
 								if options.PreMergeStateAfterClose.Resolution != "" && (bug.Fields.Resolution == nil || !strings.EqualFold(options.PreMergeStateAfterClose.Resolution, bug.Fields.Resolution.Name)) {
 									updateIssue := jira.Issue{Key: bug.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.PreMergeStateAfterClose.Resolution}}}
 									if _, err := jc.UpdateIssue(&updateIssue); err != nil {
 										log.WithError(err).Warn("Unexpected error updating jira issue.")
-										msg += formatError(fmt.Sprintf("updating to the %s resolution", options.PreMergeStateAfterClose.Resolution), jc.JiraURL(), refBug.Key, err) + "\n\n"
+										msg += formatError(fmt.Sprintf("updating to the %s resolution", options.PreMergeStateAfterClose.Resolution), jc.JiraURL(), refIssue.Key(), err) + "\n\n"
 										continue
 									}
 								}
@@ -1981,14 +1972,14 @@ func handleClose(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 							if options.StateAfterClose.Status != "" && (bug.Fields.Status == nil || !strings.EqualFold(options.StateAfterClose.Status, bug.Fields.Status.Name)) {
 								if err := jc.UpdateStatus(issue.ID, options.StateAfterClose.Status); err != nil {
 									log.WithError(err).Warn("Unexpected error updating jira issue.")
-									msg += formatError(fmt.Sprintf("updating to the %s state", options.StateAfterClose.Status), jc.JiraURL(), refBug.Key, err) + "\n\n"
+									msg += formatError(fmt.Sprintf("updating to the %s state", options.StateAfterClose.Status), jc.JiraURL(), refIssue.Key(), err) + "\n\n"
 									continue
 								}
 								if options.StateAfterClose.Resolution != "" && (bug.Fields.Resolution == nil || !strings.EqualFold(options.StateAfterClose.Resolution, bug.Fields.Resolution.Name)) {
 									updateIssue := jira.Issue{Key: bug.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterClose.Resolution}}}
 									if _, err := jc.UpdateIssue(&updateIssue); err != nil {
 										log.WithError(err).Warn("Unexpected error updating jira issue.")
-										msg += formatError(fmt.Sprintf("updating to the %s resolution", options.StateAfterClose.Resolution), jc.JiraURL(), refBug.Key, err) + "\n\n"
+										msg += formatError(fmt.Sprintf("updating to the %s resolution", options.StateAfterClose.Resolution), jc.JiraURL(), refIssue.Key(), err) + "\n\n"
 										continue
 									}
 								}
