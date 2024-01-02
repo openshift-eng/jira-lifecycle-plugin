@@ -181,7 +181,7 @@ func TestHandle(t *testing.T) {
 	}
 
 	base := &event{
-		org: "org", repo: "repo", baseRef: "branch", number: 1, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}}, body: "This PR fixes OCPBUGS-123", title: "OCPBUGS-123: fixed it!", htmlUrl: "https://github.com/org/repo/pull/1", login: "user",
+		org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "This PR fixes OCPBUGS-123", title: "OCPBUGS-123: fixed it!", htmlUrl: "https://github.com/org/repo/pull/1", login: "user",
 	}
 	var testCases = []struct {
 		name                       string
@@ -196,7 +196,7 @@ func TestHandle(t *testing.T) {
 		cherryPickFromPRNum        int
 		body                       string
 		title                      string
-		replaceReferencedBugs      []referencedBug
+		replaceReferencedBugs      []referencedIssue
 		noJira                     bool
 		remoteLinks                map[string][]jira.RemoteLink
 		prs                        []github.PullRequest
@@ -226,7 +226,7 @@ func TestHandle(t *testing.T) {
 			overrideEvent: &event{
 				org: "org", repo: "repo", baseRef: "branch",
 				number:  1,
-				bugs:    nil,
+				issues:  nil,
 				htmlUrl: "https://github.com/org/repo/pull/1", login: "user",
 			},
 		},
@@ -252,7 +252,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >/jira refresh
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
 		{
@@ -267,7 +267,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
 		{
@@ -292,7 +292,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
 		{
@@ -312,7 +312,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
 		{
@@ -333,7 +333,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
 		{
@@ -350,7 +350,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`, User: github.User{Login: fakegithub.Bot}}}},
 			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityImportant}}}},
 			options:        JiraBranchOptions{IsOpen: &open},
@@ -368,7 +368,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
 		{
@@ -385,7 +385,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`, User: github.User{Login: fakegithub.Bot}}}},
 			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityImportant}}}},
 			options:        JiraBranchOptions{IsOpen: &open},
@@ -398,7 +398,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
 				{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
 			},
-			replaceReferencedBugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "OCPBUGS-124", IsBug: true}},
+			replaceReferencedBugs: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "OCPBUGS", ID: "124", IsBug: true}},
 			options:               JiraBranchOptions{IsOpen: &open},
 			labels:                []string{},
 			expectedLabels:        []string{labels.JiraValidRef, labels.JiraInvalidBug, labels.SeverityCritical},
@@ -420,7 +420,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
 		{
@@ -429,7 +429,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
 				{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
 			},
-			replaceReferencedBugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "OCPBUGS-124", IsBug: true}},
+			replaceReferencedBugs: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "OCPBUGS", ID: "124", IsBug: true}},
 			options:               JiraBranchOptions{IsOpen: &open},
 			labels:                []string{},
 			expectedLabels:        []string{labels.JiraValidRef, labels.JiraInvalidBug, labels.SeverityCritical},
@@ -451,7 +451,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
 		{
@@ -460,7 +460,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
 				{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
 			},
-			replaceReferencedBugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "OCPBUGS-124", IsBug: true}},
+			replaceReferencedBugs: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "OCPBUGS", ID: "124", IsBug: true}},
 			options:               JiraBranchOptions{IsOpen: &open},
 			labels:                []string{},
 			expectedLabels:        []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
@@ -483,7 +483,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
 		{
@@ -492,7 +492,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
 				{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityImportant}}},
 			},
-			replaceReferencedBugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "OCPBUGS-124", IsBug: true}},
+			replaceReferencedBugs: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "OCPBUGS", ID: "124", IsBug: true}},
 			options:               JiraBranchOptions{IsOpen: &open},
 			labels:                []string{},
 			expectedLabels:        []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
@@ -515,7 +515,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
 		{
@@ -539,7 +539,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
 		{
@@ -556,7 +556,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
 		{
@@ -587,7 +587,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status:          &jira.Status{Name: "UPDATED2"},
@@ -622,7 +622,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status:   &jira.Status{Name: "UPDATED"},
@@ -631,7 +631,7 @@ Instructions for interacting with me using PR comments are available [here](http
 		},
 		{
 			name:                  "valid jira removes invalid label, adds valid label, comments",
-			replaceReferencedBugs: []referencedBug{{Key: "JIRA-123", IsBug: false}},
+			replaceReferencedBugs: []referencedIssue{{Project: "JIRA", ID: "123", IsBug: false}},
 			issues:                []jira.Issue{{ID: "1", Key: "JIRA-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityModerate}}}},
 			labels:                []string{labels.JiraInvalidBug},
 			expectedLabels:        []string{labels.JiraValidRef},
@@ -644,12 +644,12 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
 		{
 			name:                  "valid jira with incorrect version removes invalid label, adds valid label,comments",
-			replaceReferencedBugs: []referencedBug{{Key: "JIRA-123", IsBug: false}},
+			replaceReferencedBugs: []referencedIssue{{Project: "JIRA", ID: "123", IsBug: false}},
 			issues:                []jira.Issue{{ID: "1", Key: "JIRA-123", Fields: &jira.IssueFields{Type: jira.IssueType{Name: "Issue"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityModerate}}}},
 			labels:                []string{labels.JiraInvalidBug},
 			expectedLabels:        []string{labels.JiraValidRef},
@@ -665,7 +665,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
 		{
@@ -674,7 +674,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
 				{ID: "2", Key: "JIRA-123", Fields: &jira.IssueFields{}},
 			},
-			replaceReferencedBugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "JIRA-123", IsBug: false}},
+			replaceReferencedBugs: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "JIRA", ID: "123", IsBug: false}},
 			options:               JiraBranchOptions{IsOpen: &open},
 			labels:                []string{},
 			expectedLabels:        []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
@@ -693,12 +693,12 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
 		{
 			name:                  "invalid jira with status update removes valid label, comments",
-			replaceReferencedBugs: []referencedBug{{Key: "JIRA-123", IsBug: false}},
+			replaceReferencedBugs: []referencedIssue{{Project: "JIRA", ID: "123", IsBug: false}},
 			labels:                []string{labels.JiraValidRef},
 			expectedLabels:        []string{},
 			expectedComment: `org/repo#1:@user: No Jira issue with key JIRA-123 exists in the tracker at https://my-jira.com.
@@ -711,7 +711,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
 		{
@@ -728,7 +728,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
 		{
@@ -746,7 +746,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
 		{
@@ -760,7 +760,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`, User: github.User{Login: fakegithub.Bot}}, {Body: "different comment", User: github.User{Login: fakegithub.Bot}}}},
 			noJira:         true,
 			labels:         []string{labels.JiraValidRef},
@@ -774,7 +774,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
 		{
@@ -788,7 +788,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`, User: github.User{Login: fakegithub.Bot}}}},
 			noJira:         true,
 			labels:         []string{labels.JiraValidRef},
@@ -811,7 +811,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{
@@ -842,7 +842,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: "UPDATED"}}},
 		},
@@ -865,7 +865,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123"},
 			expectedNewRemoteLinks: []jira.RemoteLink{{Object: &jira.RemoteLinkObject{
@@ -904,7 +904,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123"},
 		},
@@ -914,7 +914,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				IssueLinks: []*jira.IssueLink{&cloneLinkTo123, &blocksLinkTo123},
 			}}},
 			overrideEvent: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 2, bugs: []referencedBug{{Key: "OCPBUGS-124", IsBug: true}}, body: "This PR fixes OCPBUGS-124", title: "OCPBUGS-124: fixed it!", htmlUrl: "https://github.com/org/repo/pull/2", login: "user",
+				org: "org", repo: "repo", baseRef: "branch", number: 2, issues: []referencedIssue{{Project: "OCPBUGS", ID: "124", IsBug: true}}, body: "This PR fixes OCPBUGS-124", title: "OCPBUGS-124: fixed it!", htmlUrl: "https://github.com/org/repo/pull/2", login: "user",
 			},
 			existingIssueLinks: []*jira.IssueLink{&cloneBetween123to124, &blocksBetween123to124},
 			issueGetErrors:     map[string]error{"OCPBUGS-123": errors.New("injected error getting bug")},
@@ -938,7 +938,7 @@ In response to [this](https://github.com/org/repo/pull/2):
 >This PR fixes OCPBUGS-124
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
 		{
@@ -958,7 +958,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			}}},
 			overrideEvent: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 2, bugs: []referencedBug{{Key: "OCPBUGS-124", IsBug: true}}, body: "This PR fixes OCPBUGS-124", title: "OCPBUGS-124: fixed it!", htmlUrl: "https://github.com/org/repo/pull/2", login: "user",
+				org: "org", repo: "repo", baseRef: "branch", number: 2, issues: []referencedIssue{{Project: "OCPBUGS", ID: "124", IsBug: true}}, body: "This PR fixes OCPBUGS-124", title: "OCPBUGS-124: fixed it!", htmlUrl: "https://github.com/org/repo/pull/2", login: "user",
 			},
 			existingIssueLinks: []*jira.IssueLink{&cloneBetween123to124, &blocksBetween123to124},
 			options:            JiraBranchOptions{IsOpen: &yes, TargetVersion: &v1Str, DependentBugStates: &verified, DependentBugTargetVersions: &[]string{v2Str}},
@@ -981,7 +981,7 @@ In response to [this](https://github.com/org/repo/pull/2):
 >This PR fixes OCPBUGS-124
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
 		{
@@ -1013,7 +1013,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status:     &jira.Status{Name: "CLOSED"},
@@ -1054,7 +1054,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status:          &jira.Status{Name: "UPDATED2"},
@@ -1071,7 +1071,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Modified}}},
 				{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Modified}}},
 			},
-			replaceReferencedBugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "OCPBUGS-124", IsBug: true}},
+			replaceReferencedBugs: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "OCPBUGS", ID: "124", IsBug: true}},
 			remoteLinks: map[string][]jira.RemoteLink{"OCPBUGS-123": {{ID: 1, Object: &jira.RemoteLinkObject{
 				URL:   "https://github.com/org/repo/pull/1",
 				Title: "org/repo#1: OCPBUGS-123,OCPBUGS-124: fixed it!",
@@ -1107,7 +1107,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status:     &jira.Status{Name: "CLOSED"},
@@ -1147,7 +1147,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: "MODIFIED"}}},
 		},
@@ -1203,7 +1203,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: "MODIFIED"}}},
 		},
@@ -1253,7 +1253,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
 		{
@@ -1263,7 +1263,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Modified}}},
 				{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Modified}}},
 			},
-			replaceReferencedBugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "OCPBUGS-124", IsBug: true}},
+			replaceReferencedBugs: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "OCPBUGS", ID: "124", IsBug: true}},
 			remoteLinks: map[string][]jira.RemoteLink{"OCPBUGS-123": {{
 				ID: 1, Object: &jira.RemoteLinkObject{
 					URL:   "https://github.com/org/repo/pull/1",
@@ -1317,7 +1317,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "MODIFIED"},
@@ -1356,7 +1356,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
 		{
@@ -1429,7 +1429,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123"},
 		},
@@ -1462,7 +1462,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
@@ -1502,7 +1502,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "CLOSED"},
@@ -1572,7 +1572,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "NEW"},
@@ -1633,7 +1633,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "NEW2"},
@@ -1663,7 +1663,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			name:                  "closed PR for multiple bugs removes links, changes bug states, and comments",
 			merged:                false,
 			closed:                true,
-			replaceReferencedBugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "OCPBUGS-124", IsBug: true}},
+			replaceReferencedBugs: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "OCPBUGS", ID: "124", IsBug: true}},
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
 					Body: "This is a bug",
@@ -1711,7 +1711,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "NEW"},
@@ -1804,7 +1804,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "POST"},
@@ -1853,7 +1853,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
@@ -1905,7 +1905,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
@@ -1952,7 +1952,7 @@ Instructions for interacting with me using PR comments are available [here](http
 					helpers.TargetVersionField: &v2,
 				},
 			}}},
-			replaceReferencedBugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "OCPBUGS-124", IsBug: true}},
+			replaceReferencedBugs: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "OCPBUGS", ID: "124", IsBug: true}},
 			prs:                   []github.PullRequest{{Number: base.number, Body: base.body, Title: "OCPBUGS-123,OCPBUGS-124: fixed it!"}, {Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] OCPBUGS-123,OCPBUGS-124: fixed it!"}},
 			title:                 "[v1] OCPBUGS-123,OCPBUGS-124: fixed it!",
 			cherrypick:            true,
@@ -1970,7 +1970,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
@@ -2044,7 +2044,7 @@ Instructions for interacting with me using PR comments are available [here](http
 					helpers.TargetVersionField: &v2,
 				},
 			}}},
-			replaceReferencedBugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "OCPBUGS-124", IsBug: true}},
+			replaceReferencedBugs: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "OCPBUGS", ID: "124", IsBug: true}},
 			issueUpdateErrors:     map[string]error{"OCPBUGS-125": errors.New("injected error updating bug OCPBUGS-125")},
 			prs:                   []github.PullRequest{{Number: base.number, Body: base.body, Title: "OCPBUGS-123,OCPBUGS-124: fixed it!"}, {Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] OCPBUGS-123,OCPBUGS-124: fixed it!"}},
 			title:                 "[v1] OCPBUGS-123,OCPBUGS-124: fixed it!",
@@ -2072,7 +2072,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
@@ -2136,7 +2136,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			}}},
 			prs: []github.PullRequest{{Number: 2, Body: "This is a manually created cherrypick of #1.\n\n/assign user", Title: "[v1] " + base.title}},
 			overrideEvent: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 2, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}}, body: "/jira cherrypick OCPBUGS-123", title: "fixed it!", htmlUrl: "https://github.com/org/repo/pull/1", login: "user", cherrypick: true, cherrypickCmd: true, missing: true,
+				org: "org", repo: "repo", baseRef: "branch", number: 2, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/jira cherrypick OCPBUGS-123", title: "fixed it!", htmlUrl: "https://github.com/org/repo/pull/1", login: "user", cherrypick: true, cherrypickCmd: true, missing: true,
 			},
 			cherrypick: true,
 			missing:    true,
@@ -2151,7 +2151,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >/jira cherrypick OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
@@ -2196,10 +2196,10 @@ Instructions for interacting with me using PR comments are available [here](http
 					helpers.TargetVersionField: &v2,
 				},
 			}}},
-			replaceReferencedBugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "OCPBUGS-124", IsBug: true}},
+			replaceReferencedBugs: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "OCPBUGS", ID: "124", IsBug: true}},
 			prs:                   []github.PullRequest{{Number: 2, Body: "This is a manually created cherrypick of #1.\n\n/assign user", Title: "[v1] fixing stuff"}},
 			overrideEvent: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 2, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "OCPBUGS-124", IsBug: true}}, body: "/jira cherrypick OCPBUGS-123,OCPBUGS-124", title: "fixed it!", htmlUrl: "https://github.com/org/repo/pull/1", login: "user", cherrypick: true, cherrypickCmd: true, missing: true,
+				org: "org", repo: "repo", baseRef: "branch", number: 2, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "OCPBUGS", ID: "124", IsBug: true}}, body: "/jira cherrypick OCPBUGS-123,OCPBUGS-124", title: "fixed it!", htmlUrl: "https://github.com/org/repo/pull/1", login: "user", cherrypick: true, cherrypickCmd: true, missing: true,
 			},
 			cherrypick: true,
 			missing:    true,
@@ -2216,7 +2216,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >/jira cherrypick OCPBUGS-123,OCPBUGS-124
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
@@ -2264,6 +2264,58 @@ Instructions for interacting with me using PR comments are available [here](http
 			}},
 		},
 		{
+			name: "Cherrypick comment for multiple bugs results in cloned bug creation and comment about non-bug issue",
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Status: &jira.Status{Name: "CLOSED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      severityCritical,
+					helpers.TargetVersionField: &v2,
+				},
+			}}},
+			replaceReferencedBugs: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "OTHER", ID: "124", IsBug: false}},
+			prs:                   []github.PullRequest{{Number: 2, Body: "This is a manually created cherrypick of #1.\n\n/assign user", Title: "[v1] fixing stuff"}},
+			overrideEvent: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 2, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "OTHER", ID: "124", IsBug: false}}, body: "/jira cherrypick OCPBUGS-123,OTHER-124", title: "fixed it!", htmlUrl: "https://github.com/org/repo/pull/1", login: "user", cherrypick: true, cherrypickCmd: true, missing: true,
+			},
+			cherrypick: true,
+			missing:    true,
+			options:    JiraBranchOptions{TargetVersion: &v1Str},
+			expectedComment: `org/repo#2:@user: Ignoring requests to cherry-pick non-bug issues: OTHER-124
+ [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). Will retitle bug to link to clone.
+/retitle OCPBUGS-124: fixed it!
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>/jira cherrypick OCPBUGS-123,OTHER-124
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+			expectedIssue: &jira.Issue{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
+				Status:      &jira.Status{Name: "CLOSED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				IssueLinks: []*jira.IssueLink{&cloneLinkTo123JustID, &blocksLinkTo123JustID},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
+					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
+				},
+			}},
+		},
+		{
 			name: "parent PR of cherrypick not existing results in error",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "CLOSED"},
@@ -2290,7 +2342,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
 		{
@@ -2330,7 +2382,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		}, {
 			name: "failure to update bug retitles the PR and prints a warning in the comment",
@@ -2372,7 +2424,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		}, {
 			name: "If bug clone with correct target version already exists, just retitle PR",
@@ -2410,7 +2462,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		}, {
 			name: "If clone with correct target version already exists in multibug PR, retitle PR for correct clone and create clone for other bug",
@@ -2459,7 +2511,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "4", Key: "OCPBUGS-126", Fields: &jira.IssueFields{
 				Description: "This is a clone of issue OCPBUGS-125. The following is the description of the original issue: \n---\n",
@@ -2524,7 +2576,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
@@ -2565,7 +2617,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >/jira refresh
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		}, {
 			name: "Bug matching previous bot comment still comments on /jira refresh with no changes",
@@ -2580,7 +2632,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >/jira refresh
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`, User: github.User{Login: fakegithub.Bot}}}},
 			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{"security": jiraclient.SecurityLevel{Name: "security"}}}}},
 			prs:            []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}},
@@ -2599,7 +2651,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >/jira refresh
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		}, {
 			name:    "Bug with non-allowed security level results in comment on /jira refresh",
@@ -2619,7 +2671,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >/jira refresh
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		}, {
 			name:    "Bug with non-allowed security level results in comment on PR creation",
@@ -2638,7 +2690,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		}, {
 			name: "Bug with allowed group is properly handled",
@@ -2660,7 +2712,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 >This PR fixes OCPBUGS-123
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Unknowns: tcontainer.MarshalMap{
@@ -2692,7 +2744,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			}}},
 			overrideEvent: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 2, bugs: []referencedBug{{Key: "OCPBUGS-124", IsBug: true}}, body: "This PR fixes OCPBUGS-124", title: "OCPBUGS-124: fixed it!", htmlUrl: "https://github.com/org/repo/pull/2", login: "user",
+				org: "org", repo: "repo", baseRef: "branch", number: 2, issues: []referencedIssue{{Project: "OCPBUGS", ID: "124", IsBug: true}}, body: "This PR fixes OCPBUGS-124", title: "OCPBUGS-124: fixed it!", htmlUrl: "https://github.com/org/repo/pull/2", login: "user",
 			},
 			existingIssueLinks: []*jira.IssueLink{{
 				Type: jira.IssueLinkType{
@@ -2721,7 +2773,7 @@ In response to [this](https://github.com/org/repo/pull/2):
 >This PR fixes OCPBUGS-124
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
 	}
@@ -2753,12 +2805,12 @@ Instructions for interacting with me using PR comments are available [here](http
 			testEvent.opened = tc.opened
 			if tc.replaceReferencedBugs != nil {
 				newEvent := testEvent
-				newEvent.bugs = []referencedBug{}
-				testEvent.bugs = tc.replaceReferencedBugs
+				newEvent.issues = []referencedIssue{}
+				testEvent.issues = tc.replaceReferencedBugs
 			}
 			if tc.noJira {
 				testEvent.noJira = true
-				testEvent.bugs = nil
+				testEvent.issues = nil
 			}
 			testEvent.cherrypick = tc.cherrypick
 			testEvent.cherrypickFromPRNum = tc.cherryPickFromPRNum
@@ -3169,7 +3221,7 @@ func TestDigestPR(t *testing.T) {
 			},
 			validateByDefault: &yes,
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", missing: true, opened: true, bugs: nil, title: "fixing a typo", htmlUrl: "http.com", login: "user",
+				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", missing: true, opened: true, issues: nil, title: "fixing a typo", htmlUrl: "http.com", login: "user",
 			},
 		},
 		{
@@ -3196,7 +3248,7 @@ func TestDigestPR(t *testing.T) {
 				},
 			},
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: true, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}}, title: "OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
+				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: true, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, title: "OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
 			},
 		},
 		{
@@ -3223,7 +3275,7 @@ func TestDigestPR(t *testing.T) {
 				},
 			},
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: true, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "OCPBUGS-124", IsBug: true}}, title: "OCPBUGS-123,OCPBUGS-124: fixed it!", htmlUrl: "http.com", login: "user",
+				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: true, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "OCPBUGS", ID: "124", IsBug: true}}, title: "OCPBUGS-123,OCPBUGS-124: fixed it!", htmlUrl: "http.com", login: "user",
 			},
 		},
 		{
@@ -3250,7 +3302,7 @@ func TestDigestPR(t *testing.T) {
 				},
 			},
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: true, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "JIRA-123", IsBug: false}}, title: "OCPBUGS-123,JIRA-123: fixed it!", htmlUrl: "http.com", login: "user",
+				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: true, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "JIRA", ID: "123", IsBug: false}}, title: "OCPBUGS-123,JIRA-123: fixed it!", htmlUrl: "http.com", login: "user",
 			},
 		},
 		{
@@ -3277,7 +3329,7 @@ func TestDigestPR(t *testing.T) {
 				},
 			},
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: true, bugs: []referencedBug{{Key: "SOMEJIRA-123", IsBug: false}}, title: "SOMEJIRA-123: implement feature!", htmlUrl: "http.com", login: "user",
+				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: true, issues: []referencedIssue{{Project: "SOMEJIRA", ID: "123", IsBug: false}}, title: "SOMEJIRA-123: implement feature!", htmlUrl: "http.com", login: "user",
 			},
 		},
 		{
@@ -3304,7 +3356,7 @@ func TestDigestPR(t *testing.T) {
 				},
 			},
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: true, bugs: nil, noJira: true, title: "NO-ISSUE: typo fixup", htmlUrl: "http.com", login: "user",
+				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: true, issues: nil, noJira: true, title: "NO-ISSUE: typo fixup", htmlUrl: "http.com", login: "user",
 			},
 		},
 		{
@@ -3331,7 +3383,7 @@ func TestDigestPR(t *testing.T) {
 				},
 			},
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: true, bugs: nil, noJira: true, title: "NO-JIRA: typo fixup", htmlUrl: "http.com", login: "user",
+				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: true, issues: nil, noJira: true, title: "NO-JIRA: typo fixup", htmlUrl: "http.com", login: "user",
 			},
 		},
 		{
@@ -3358,7 +3410,7 @@ func TestDigestPR(t *testing.T) {
 				},
 			},
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, merged: true, closed: true, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}}, title: "OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
+				org: "org", repo: "repo", baseRef: "branch", number: 1, merged: true, closed: true, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, title: "OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
 			},
 		},
 		{
@@ -3384,7 +3436,7 @@ func TestDigestPR(t *testing.T) {
 				},
 			},
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, merged: false, closed: true, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}}, title: "OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
+				org: "org", repo: "repo", baseRef: "branch", number: 1, merged: false, closed: true, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, title: "OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
 			},
 		},
 		{
@@ -3442,7 +3494,7 @@ func TestDigestPR(t *testing.T) {
 				},
 			},
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "release-4.4", number: 3, opened: true, body: "This is an automated cherry-pick of #2\n\n/assign user", title: "[release-4.4] OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user", cherrypick: true, cherrypickFromPRNum: 2, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}},
+				org: "org", repo: "repo", baseRef: "release-4.4", number: 3, opened: true, body: "This is an automated cherry-pick of #2\n\n/assign user", title: "[release-4.4] OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user", cherrypick: true, cherrypickFromPRNum: 2, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}},
 			},
 		},
 		{
@@ -3471,7 +3523,7 @@ func TestDigestPR(t *testing.T) {
 				},
 			},
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "release-4.4", number: 3, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}}, body: "This is an automated cherry-pick of #2\n\n/assign user", title: "[release-4.4] OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
+				org: "org", repo: "repo", baseRef: "release-4.4", number: 3, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "This is an automated cherry-pick of #2\n\n/assign user", title: "[release-4.4] OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
 			},
 		},
 		{
@@ -3522,7 +3574,7 @@ func TestDigestPR(t *testing.T) {
 				Changes: []byte(`{"title":{"from":"fixed it! (WIP)"}}`),
 			},
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, opened: true, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}}, title: "OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
+				org: "org", repo: "repo", baseRef: "branch", number: 1, opened: true, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, title: "OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
 			},
 		},
 		{
@@ -3603,7 +3655,7 @@ func TestDigestPR(t *testing.T) {
 				},
 			},
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: false, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}}, title: "OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
+				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: false, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, title: "OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
 			},
 		},
 		{
@@ -3633,7 +3685,7 @@ func TestDigestPR(t *testing.T) {
 				},
 			},
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: false, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}}, title: "OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
+				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: false, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, title: "OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
 			},
 		},
 		{
@@ -3793,7 +3845,7 @@ In response to [this]():
 >/jira refresh
 
 
-Instructions for interacting with me using PR comments are available [here](https://git.k8s.io/community/contributors/guide/pull-requests.md).  If you have questions or suggestions related to my behavior, please file an issue against the [kubernetes/test-infra](https://github.com/kubernetes/test-infra/issues/new?title=Prow%20issue:) repository.
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
 		{
@@ -3820,7 +3872,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
 			},
 		},
 		{
@@ -3847,7 +3899,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			title: "OCPBUGS-123,OCPBUGS-124: oopsie doopsie",
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "OCPBUGS-124", IsBug: true}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "OCPBUGS", ID: "124", IsBug: true}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
 			},
 		},
 		{
@@ -3874,7 +3926,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			title: "OCPBUGS-123,JIRA-123: oopsie doopsie",
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}, {Key: "JIRA-123", IsBug: false}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "JIRA", ID: "123", IsBug: false}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
 			},
 		},
 		{
@@ -3901,7 +3953,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			title: "SOMEJIRA-123: oopsie doopsie",
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, bugs: []referencedBug{{Key: "SOMEJIRA-123", IsBug: false}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "SOMEJIRA", ID: "123", IsBug: false}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
 			},
 		},
 		{
@@ -3928,7 +3980,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			title: "NO-JIRA: oopsie doopsie",
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, bugs: nil, noJira: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: nil, noJira: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
 			},
 		},
 		{
@@ -3955,7 +4007,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			title: "NO-ISSUE: oopsie doopsie",
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, bugs: nil, noJira: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: nil, noJira: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
 			},
 		},
 		{
@@ -3983,7 +4035,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			title:  "OCPBUGS-123: oopsie doopsie",
 			merged: true,
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}}, merged: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, merged: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
 			},
 		},
 		{
@@ -4010,7 +4062,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, bugs: []referencedBug{{Key: "OCPBUGS-123", IsBug: true}}, body: "/jira cc-qa", htmlUrl: "www.com", login: "user", cc: true,
+				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/jira cc-qa", htmlUrl: "www.com", login: "user", cc: true,
 			},
 		},
 		{
@@ -4037,11 +4089,11 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			title: "oopsie doopsie",
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, bugs: []referencedBug{{Key: "OCPBUGS-1234", IsBug: true}}, body: "/jira cherrypick OCPBUGS-1234", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: true, cherrypick: true,
+				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "1234", IsBug: true}}, body: "/jira cherrypick OCPBUGS-1234", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: true, cherrypick: true,
 			},
 		},
 		{
-			name: "cherrypick comment event for multiple bugs has cherrypick bools set to true and correct bug keys set",
+			name: "cherrypick comment event has cherrypick bools set to true and correct bug key set even for non-bug issue and dash",
 			e: github.IssueCommentEvent{
 				Action: github.IssueCommentActionCreated,
 				Issue: github.Issue{
@@ -4049,7 +4101,7 @@ Instructions for interacting with me using PR comments are available [here](http
 					PullRequest: &struct{}{},
 				},
 				Comment: github.IssueComment{
-					Body: "/jira cherrypick OCPBUGS-1234,OCPBUGS-1235",
+					Body: "/jira cherry-pick OTHER-1234",
 					User: github.User{
 						Login: "user",
 					},
@@ -4064,7 +4116,34 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			title: "oopsie doopsie",
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, bugs: []referencedBug{{Key: "OCPBUGS-1234", IsBug: true}, {Key: "OCPBUGS-1235", IsBug: true}}, body: "/jira cherrypick OCPBUGS-1234,OCPBUGS-1235", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: true, cherrypick: true,
+				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OTHER", ID: "1234", IsBug: false}}, body: "/jira cherry-pick OTHER-1234", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: true, cherrypick: true,
+			},
+		},
+		{
+			name: "cherrypick comment event for multiple bugs has cherrypick bools set to true and correct bug keys set",
+			e: github.IssueCommentEvent{
+				Action: github.IssueCommentActionCreated,
+				Issue: github.Issue{
+					Number:      1,
+					PullRequest: &struct{}{},
+				},
+				Comment: github.IssueComment{
+					Body: "/jira cherrypick OCPBUGS-1234,OTHER-1235",
+					User: github.User{
+						Login: "user",
+					},
+					HTMLURL: "www.com",
+				},
+				Repo: github.Repo{
+					Owner: github.User{
+						Login: "org",
+					},
+					Name: "repo",
+				},
+			},
+			title: "oopsie doopsie",
+			expected: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "1234", IsBug: true}, {Project: "OTHER", ID: "1235", IsBug: false}}, body: "/jira cherrypick OCPBUGS-1234,OTHER-1235", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: true, cherrypick: true,
 			},
 		},
 		{
@@ -4091,7 +4170,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
 			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, bugs: []referencedBug{{Key: "OCPBUGS-1234", IsBug: true}}, body: "/jira cherrypick OCPBUGS-1234\r\nThis is part of a\r\nmultiline comment", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: false, cherrypick: true,
+				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "1234", IsBug: true}}, body: "/jira cherrypick OCPBUGS-1234\r\nThis is part of a\r\nmultiline comment", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: false, cherrypick: true,
 			},
 		},
 	}
@@ -4123,7 +4202,7 @@ Instructions for interacting with me using PR comments are available [here](http
 func TestBugKeyFromTitle(t *testing.T) {
 	var testCases = []struct {
 		title            string
-		expectedRefBugs  []referencedBug
+		expectedRefBugs  []referencedIssue
 		expectedNotFound bool
 		expectedNoJira   bool
 	}{
@@ -4134,11 +4213,11 @@ func TestBugKeyFromTitle(t *testing.T) {
 		},
 		{
 			title:           "OCPBUGS-12: Canonical",
-			expectedRefBugs: []referencedBug{{Key: "OCPBUGS-12", IsBug: true}},
+			expectedRefBugs: []referencedIssue{{Project: "OCPBUGS", ID: "12", IsBug: true}},
 		},
 		{
 			title:           "OCPBUGS-12,OCPBUGS-13: Multiple Canonical",
-			expectedRefBugs: []referencedBug{{Key: "OCPBUGS-12", IsBug: true}, {Key: "OCPBUGS-13", IsBug: true}},
+			expectedRefBugs: []referencedIssue{{Project: "OCPBUGS", ID: "12", IsBug: true}, {Project: "OCPBUGS", ID: "13", IsBug: true}},
 		},
 		{
 			title:            "OCPBUGS-12 : Space before colon",
@@ -4147,47 +4226,47 @@ func TestBugKeyFromTitle(t *testing.T) {
 		},
 		{
 			title:           "[rebase release-1.0] OCPBUGS-12: Prefix",
-			expectedRefBugs: []referencedBug{{Key: "OCPBUGS-12", IsBug: true}},
+			expectedRefBugs: []referencedIssue{{Project: "OCPBUGS", ID: "12", IsBug: true}},
 		},
 		{
 			title:           "[rebase release-1.0] OCPBUGS-12,OCPBUGS-13: Multiple Prefix",
-			expectedRefBugs: []referencedBug{{Key: "OCPBUGS-12", IsBug: true}, {Key: "OCPBUGS-13", IsBug: true}},
+			expectedRefBugs: []referencedIssue{{Project: "OCPBUGS", ID: "12", IsBug: true}, {Project: "OCPBUGS", ID: "13", IsBug: true}},
 		},
 		{
 			title:           "Revert: \"OCPBUGS-12: Revert default\"",
-			expectedRefBugs: []referencedBug{{Key: "OCPBUGS-12", IsBug: true}},
+			expectedRefBugs: []referencedIssue{{Project: "OCPBUGS", ID: "12", IsBug: true}},
 		},
 		{
 			title:           "Revert: \"OCPBUGS-12,OCPBUGS-13: Multiple Revert default\"",
-			expectedRefBugs: []referencedBug{{Key: "OCPBUGS-12", IsBug: true}, {Key: "OCPBUGS-13", IsBug: true}},
+			expectedRefBugs: []referencedIssue{{Project: "OCPBUGS", ID: "12", IsBug: true}, {Project: "OCPBUGS", ID: "13", IsBug: true}},
 		},
 		{
 			title:           "OCPBUGS-34: Revert: \"OCPBUGS-12: Revert default\"",
-			expectedRefBugs: []referencedBug{{Key: "OCPBUGS-34", IsBug: true}},
+			expectedRefBugs: []referencedIssue{{Project: "OCPBUGS", ID: "34", IsBug: true}},
 		},
 		{
 			title:           "OCPBUGS-34,OCPBUGS-35: Revert: \"OCPBUGS-12: Revert default\"",
-			expectedRefBugs: []referencedBug{{Key: "OCPBUGS-34", IsBug: true}, {Key: "OCPBUGS-35", IsBug: true}},
+			expectedRefBugs: []referencedIssue{{Project: "OCPBUGS", ID: "34", IsBug: true}, {Project: "OCPBUGS", ID: "35", IsBug: true}},
 		},
 		{
 			title:           "[rebase release-1.0] JIRA-12: Prefix",
-			expectedRefBugs: []referencedBug{{Key: "JIRA-12", IsBug: false}},
+			expectedRefBugs: []referencedIssue{{Project: "JIRA", ID: "12", IsBug: false}},
 		},
 		{
 			title:           "[rebase release-1.0] OCPBUGS-13,JIRA-12: Prefix",
-			expectedRefBugs: []referencedBug{{Key: "OCPBUGS-13", IsBug: true}, {Key: "JIRA-12", IsBug: false}},
+			expectedRefBugs: []referencedIssue{{Project: "OCPBUGS", ID: "13", IsBug: true}, {Project: "JIRA", ID: "12", IsBug: false}},
 		},
 		{
 			title:           "JIRA-34: Revert: \"OCPBUGS-12: Revert default\"",
-			expectedRefBugs: []referencedBug{{Key: "JIRA-34", IsBug: false}},
+			expectedRefBugs: []referencedIssue{{Project: "JIRA", ID: "34", IsBug: false}},
 		},
 		{
 			title:           "OCPBUGS-12: Revert: \"JIRA-34: Revert default\"",
-			expectedRefBugs: []referencedBug{{Key: "OCPBUGS-12", IsBug: true}},
+			expectedRefBugs: []referencedIssue{{Project: "OCPBUGS", ID: "12", IsBug: true}},
 		},
 		{
 			title:           "JIRA-34,OCPBUGS-13: Revert: \"OCPBUGS-12: Revert default\"",
-			expectedRefBugs: []referencedBug{{Key: "JIRA-34", IsBug: false}, {Key: "OCPBUGS-13", IsBug: true}},
+			expectedRefBugs: []referencedIssue{{Project: "JIRA", ID: "34", IsBug: false}, {Project: "OCPBUGS", ID: "13", IsBug: true}},
 		},
 		{
 			title:           "No-issue: OCPBUGS-12: blah blah",
@@ -4196,7 +4275,7 @@ func TestBugKeyFromTitle(t *testing.T) {
 		},
 		{
 			title:           "OCPBUGS-12: NO-ISSUE: blah blah",
-			expectedRefBugs: []referencedBug{{Key: "OCPBUGS-12", IsBug: true}},
+			expectedRefBugs: []referencedIssue{{Project: "OCPBUGS", ID: "12", IsBug: true}},
 		},
 		{
 			title:           "No-jira: OCPBUGS-12: blah blah",
@@ -4207,15 +4286,8 @@ func TestBugKeyFromTitle(t *testing.T) {
 	for _, testCase := range testCases {
 		t.Run(testCase.title, func(t *testing.T) {
 			bugs, notFound, noJira := jiraKeyFromTitle(testCase.title)
-			if len(testCase.expectedRefBugs) != len(bugs) {
-				t.Errorf("%s: length of expected refbugs (%d) not equal to length of returned refbugs (%d): %+v", testCase.title, len(testCase.expectedRefBugs), len(bugs), bugs)
-			} else {
-				for index, bug := range bugs {
-					expectedBug := testCase.expectedRefBugs[index]
-					if expectedBug.Key != bug.Key || expectedBug.IsBug != bug.IsBug {
-						t.Errorf("%s: unexpected %+v != %+v", testCase.title, bug, expectedBug)
-					}
-				}
+			if diff := cmp.Diff(bugs, testCase.expectedRefBugs); diff != "" {
+				t.Errorf("%s: incorrect bugs: %v", testCase.title, diff)
 			}
 			if notFound != testCase.expectedNotFound {
 				t.Errorf("%s: unexpected %t != %t", testCase.title, notFound, testCase.expectedNotFound)
@@ -4870,6 +4942,57 @@ func TestCheckTargetVersion(t *testing.T) {
 
 			if testCase.expected != got {
 				t.Errorf("%s: expected %v, but got %v", testCase.title, testCase.expected, got)
+			}
+		})
+	}
+}
+
+func TestCherryPickCommandMatches(t *testing.T) {
+	for _, testCase := range []struct {
+		name        string
+		body        string
+		expected    []referencedIssue
+		expectedErr bool
+	}{
+		{
+			name:        "no match errors",
+			body:        "oops",
+			expectedErr: true,
+		},
+		{
+			name:     "one issue",
+			body:     `/jira cherrypick OCPBUGS-1234`,
+			expected: []referencedIssue{{Project: "OCPBUGS", ID: "1234", IsBug: true}},
+		},
+		{
+			name: "many issue",
+			body: `/jira cherrypick OCPBUGS-1234,WHATEVER-46345,OTHER-98474`,
+			expected: []referencedIssue{
+				{Project: "OCPBUGS", ID: "1234", IsBug: true},
+				{Project: "WHATEVER", ID: "46345"},
+				{Project: "OTHER", ID: "98474"},
+			},
+		},
+		{
+			name: "hyphen acceptable",
+			body: `/jira cherry-pick OCPBUGS-1234,WHATEVER-46345,OTHER-98474`,
+			expected: []referencedIssue{
+				{Project: "OCPBUGS", ID: "1234", IsBug: true},
+				{Project: "WHATEVER", ID: "46345"},
+				{Project: "OTHER", ID: "98474"},
+			},
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			got, err := cherryPickCommandMatches(testCase.body)
+			if err == nil && testCase.expectedErr {
+				t.Errorf("expected an error but got none")
+			}
+			if err != nil && !testCase.expectedErr {
+				t.Errorf("expected no error but got: %v", err)
+			}
+			if diff := cmp.Diff(got, testCase.expected); diff != "" {
+				t.Errorf("invalid bug matches: %v", diff)
 			}
 		})
 	}
