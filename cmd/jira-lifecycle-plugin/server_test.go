@@ -49,6 +49,8 @@ func TestHandle(t *testing.T) {
 	updated2 := JiraBugState{Status: "UPDATED2"}
 	modified := JiraBugState{Status: "MODIFIED"}
 	verified := []JiraBugState{{Status: "VERIFIED"}}
+	active1 := "com.atlassian.greenhopper.service.sprint.Sprint@11b54434[id=57955,rapidViewId=14885,state=ACTIVE,name=uShift Sprint 248,startDate=2024-01-15T09:00:00.000Z,endDate=2024-02-05T09:00:00.000Z,completeDate=<null>,activatedDate=2024-01-15T08:17:37.677Z,sequence=57955,goal=,autoStartStop=false,synced=false]"
+	closed1 := "com.atlassian.greenhopper.service.sprint.Sprint@57a3e8ba[id=57484,rapidViewId=14885,state=CLOSED,name=uShift Sprint 247,startDate=2023-12-25T17:07:00.000Z,endDate=2024-01-15T17:07:00.000Z,completeDate=2024-01-15T08:15:40.614Z,activatedDate=2023-12-25T14:11:56.948Z,sequence=57484,goal=,autoStartStop=false,synced=false]"
 	jiraTransitions := []jira.Transition{
 		{
 			ID:   "1",
@@ -1887,7 +1889,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      severityCritical,
 					helpers.TargetVersionField: &v2,
-					helpers.SprintField:        severityLow, // the sprint field is just an interface{}, so any pointer value can be used
+					helpers.SprintField:        []interface{}{active1, closed1},
 				},
 			}}},
 			prs:                 []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}, {Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] " + base.title}},
@@ -1921,7 +1923,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
 					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
-					//helpers.SprintField:        map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/low.svg" width="16" height="16"> Low`},
+					helpers.SprintField:        float64(57955),
 				},
 			}},
 		},

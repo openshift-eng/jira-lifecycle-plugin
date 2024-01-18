@@ -1810,9 +1810,9 @@ refIssueLoop:
 		delete(bug.Fields.Unknowns, "environment")
 		delete(bug.Fields.Unknowns, "customfield_12318341")
 		// This is the sprint field; sprints are handled by a custom plugin, and the data given to us via
-		// GetIssue is invalid on Create or Update.
-		// TODO: investigate how to handle the Sprint field
-		delete(bug.Fields.Unknowns, "customfield_12310940")
+		// GetIssue is invalid for setting the field ourselves
+		sprintField := bug.Fields.Unknowns[helpers.SprintField]
+		delete(bug.Fields.Unknowns, helpers.SprintField)
 		clone, err := jc.CloneIssue(bug)
 		if err != nil {
 			log.WithError(err).Debugf("Failed to clone bug %+v", bugs)
@@ -1847,12 +1847,6 @@ refIssueLoop:
 				},
 			},
 		}
-		// TODO: investigate how to handle the Sprint field
-		/*
-			if sprint := helpers.GetSprintField(bug); sprint != nil {
-				update.Fields.Unknowns[helpers.SprintField] = sprint
-			}
-		*/
 		_, err = jc.UpdateIssue(&update)
 		if err != nil {
 			response += fmt.Sprintf(`
@@ -1865,6 +1859,38 @@ WARNING: Failed to update the target version for the clone. Please update the ta
 </code>
 
 </details>`, err)
+		}
+		sprintID, err := helpers.GetActiveSprintID(sprintField)
+		if err != nil {
+			response += fmt.Sprintf(`
+
+WARNING: Failed to update the sprint for the clone. Please update the sprint manually. Full error below:
+<details><summary>Full error message.</summary>
+
+<code>
+%v
+</code>
+
+</details>`, err)
+		} else if sprintID != -1 {
+			sprintUpdate := jira.Issue{Key: clone.Key, Fields: &jira.IssueFields{
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SprintField: sprintID,
+				},
+			}}
+			_, err = jc.UpdateIssue(&sprintUpdate)
+			if err != nil {
+				response += fmt.Sprintf(`
+
+WARNING: Failed to update the sprint for the clone. Please update the sprint manually. Full error below:
+<details><summary>Full error message.</summary>
+
+<code>
+%v
+</code>
+
+</details>`, err)
+			}
 		}
 		msg += response + "\n\n"
 	}
