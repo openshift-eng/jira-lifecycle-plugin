@@ -2,7 +2,10 @@ package helpers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"regexp"
+	"strconv"
 
 	"github.com/andygrunwald/go-jira"
 )
@@ -138,4 +141,31 @@ func GetIssueReleaseNotesText(issue *jira.Issue) (*string, error) {
 		return nil, err
 	}
 	return obj, err
+}
+
+var activeSprintReg = regexp.MustCompile(",state=ACTIVE,")
+var sprintIDReg = regexp.MustCompile("id=([0-9]+)")
+
+func GetActiveSprintID(sprintField interface{}) (int, error) {
+	if sprintField == nil {
+		return -1, nil
+	}
+	sprintFieldSlice, ok := sprintField.([]interface{})
+	if !ok {
+		return -1, errors.New("failed to convert sprint field to slice of interfaces")
+	}
+	for _, sprint := range sprintFieldSlice {
+		sprintString := sprint.(string)
+		if activeSprintReg.MatchString(sprintString) {
+			if submatch := sprintIDReg.FindStringSubmatch(sprintString); submatch != nil {
+				sprintID, err := strconv.Atoi(submatch[1])
+				if err != nil {
+					// should be impossible based on the regex
+					return -1, fmt.Errorf("Failed to parse sprint ID. Err: %w", err)
+				}
+				return sprintID, nil
+			}
+		}
+	}
+	return -1, nil
 }
