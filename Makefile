@@ -5,6 +5,7 @@ include $(addprefix ./vendor/github.com/openshift/build-machinery-go/make/, \
 )
 
 # Build configuration
+
 git_commit=$(shell git describe --tags --always --dirty)
 build_date=$(shell date -u '+%Y%m%d')
 version=v${build_date}-${git_commit}
