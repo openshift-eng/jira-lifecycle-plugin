@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/andygrunwald/go-jira"
 	githubql "github.com/shurcooL/githubv4"
@@ -1837,6 +1838,13 @@ refIssueLoop:
 		}
 		response := fmt.Sprintf("%s has been cloned as %s. Will retitle bug to link to clone.", oldLink, cloneLink)
 		retitleList[bug.Key] = clone.Key
+		// jira has automation to set the assignee to a default based on component; we wait up to 1 minute to avoid a race
+		for i := 0; i < 10; i++ {
+			if issue, err := jc.GetIssue(clone.Key); err == nil && issue.Fields.Assignee != nil && issue.Fields.Assignee.Name != "" {
+				break
+			}
+			time.Sleep(time.Second * 6)
+		}
 		// Update the version of the bug to the target release
 		update := jira.Issue{
 			Key: clone.Key,
@@ -1846,19 +1854,6 @@ refIssueLoop:
 					helpers.TargetVersionField: []*jira.Version{{Name: targetVersion}},
 				},
 			},
-		}
-		_, err = jc.UpdateIssue(&update)
-		if err != nil {
-			response += fmt.Sprintf(`
-
-WARNING: Failed to update the target version for the clone. Please update the target version manually. Full error below:
-<details><summary>Full error message.</summary>
-
-<code>
-%v
-</code>
-
-</details>`, err)
 		}
 		sprintID, err := helpers.GetActiveSprintID(sprintField)
 		if err != nil {
@@ -1873,16 +1868,13 @@ WARNING: Failed to update the sprint for the clone. Please update the sprint man
 
 </details>`, err)
 		} else if sprintID != -1 {
-			sprintUpdate := jira.Issue{Key: clone.Key, Fields: &jira.IssueFields{
-				Unknowns: tcontainer.MarshalMap{
-					helpers.SprintField: sprintID,
-				},
-			}}
-			_, err = jc.UpdateIssue(&sprintUpdate)
-			if err != nil {
-				response += fmt.Sprintf(`
+			update.Fields.Unknowns[helpers.SprintField] = sprintID
+		}
+		_, err = jc.UpdateIssue(&update)
+		if err != nil {
+			response += fmt.Sprintf(`
 
-WARNING: Failed to update the sprint for the clone. Please update the sprint manually. Full error below:
+WARNING: Failed to update the target version, assignee, and sprint for the clone. Please update these fields manually. Full error below:
 <details><summary>Full error message.</summary>
 
 <code>
@@ -1890,7 +1882,6 @@ WARNING: Failed to update the sprint for the clone. Please update the sprint man
 </code>
 
 </details>`, err)
-			}
 		}
 		msg += response + "\n\n"
 	}

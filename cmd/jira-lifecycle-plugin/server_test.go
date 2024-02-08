@@ -1930,7 +1930,8 @@ Instructions for interacting with me using PR comments are available [here](http
 		{
 			name: "Cherrypick PR for multiple bugs results in multiple cloned bug creation",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
-				Status: &jira.Status{Name: "CLOSED"},
+				Assignee: &jira.User{Name: "testUser"},
+				Status:   &jira.Status{Name: "CLOSED"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
 					Body: "This is a bug",
 				}}},
@@ -1942,7 +1943,8 @@ Instructions for interacting with me using PR comments are available [here](http
 					helpers.TargetVersionField: &v2,
 				},
 			}}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
-				Status: &jira.Status{Name: "CLOSED"},
+				Assignee: &jira.User{Name: "testUser"},
+				Status:   &jira.Status{Name: "CLOSED"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
 					Body: "This is a bug",
 				}}},
@@ -1975,6 +1977,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
+				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
@@ -1990,6 +1993,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			}},
 			expectedIssue2: &jira.Issue{ID: "4", Key: "OCPBUGS-126", Fields: &jira.IssueFields{
+				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-124. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
@@ -2022,7 +2026,8 @@ Instructions for interacting with me using PR comments are available [here](http
 		{
 			name: "Cherrypick PR for multiple bugs with 1 failure still comments for both bugs",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
-				Status: &jira.Status{Name: "CLOSED"},
+				Assignee: &jira.User{Name: "testUser"},
+				Status:   &jira.Status{Name: "CLOSED"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
 					Body: "This is a bug",
 				}}},
@@ -2034,7 +2039,8 @@ Instructions for interacting with me using PR comments are available [here](http
 					helpers.TargetVersionField: &v2,
 				},
 			}}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
-				Status: &jira.Status{Name: "CLOSED"},
+				Assignee: &jira.User{Name: "testUser"},
+				Status:   &jira.Status{Name: "CLOSED"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
 					Body: "This is a bug",
 				}}},
@@ -2055,7 +2061,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:               JiraBranchOptions{TargetVersion: &v1Str},
 			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-125](https://my-jira.com/browse/OCPBUGS-125). Will retitle bug to link to clone.
 
-WARNING: Failed to update the target version for the clone. Please update the target version manually. Full error below:
+WARNING: Failed to update the target version, assignee, and sprint for the clone. Please update these fields manually. Full error below:
 <details><summary>Full error message.</summary>
 
 <code>
@@ -2077,6 +2083,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
+				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
@@ -2092,6 +2099,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			}},
 			expectedIssue2: &jira.Issue{ID: "4", Key: "OCPBUGS-126", Fields: &jira.IssueFields{
+				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-124. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
@@ -2124,7 +2132,8 @@ Instructions for interacting with me using PR comments are available [here](http
 		{
 			name: "Cherrypick comment results in cloned bug creation",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
-				Status: &jira.Status{Name: "CLOSED"},
+				Assignee: &jira.User{Name: "testUser"},
+				Status:   &jira.Status{Name: "CLOSED"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
 					Body: "This is a bug",
 				}}},
@@ -2156,6 +2165,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
@@ -2174,7 +2184,8 @@ Instructions for interacting with me using PR comments are available [here](http
 		{
 			name: "Cherrypick comment for multiple bugs results in multiple cloned bug creation",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
-				Status: &jira.Status{Name: "CLOSED"},
+				Assignee: &jira.User{Name: "testUser"},
+				Status:   &jira.Status{Name: "CLOSED"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
 					Body: "This is a bug",
 				}}},
@@ -2186,7 +2197,8 @@ Instructions for interacting with me using PR comments are available [here](http
 					helpers.TargetVersionField: &v2,
 				},
 			}}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
-				Status: &jira.Status{Name: "CLOSED"},
+				Assignee: &jira.User{Name: "testUser"},
+				Status:   &jira.Status{Name: "CLOSED"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
 					Body: "This is a bug",
 				}}},
@@ -2221,6 +2233,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
+				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
@@ -2236,6 +2249,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			}},
 			expectedIssue2: &jira.Issue{ID: "4", Key: "OCPBUGS-126", Fields: &jira.IssueFields{
+				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-124. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
@@ -2268,7 +2282,8 @@ Instructions for interacting with me using PR comments are available [here](http
 		{
 			name: "Cherrypick comment for multiple bugs results in cloned bug creation and comment about non-bug issue",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
-				Status: &jira.Status{Name: "CLOSED"},
+				Assignee: &jira.User{Name: "testUser"},
+				Status:   &jira.Status{Name: "CLOSED"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
 					Body: "This is a bug",
 				}}},
@@ -2302,6 +2317,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
@@ -2389,7 +2405,8 @@ Instructions for interacting with me using PR comments are available [here](http
 		}, {
 			name: "failure to update bug retitles the PR and prints a warning in the comment",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
-				Status: &jira.Status{Name: "CLOSED"},
+				Assignee: &jira.User{Name: "testUser"},
+				Status:   &jira.Status{Name: "CLOSED"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
 					Body: "This is a bug",
 				}}},
@@ -2409,7 +2426,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
 			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). Will retitle bug to link to clone.
 
-WARNING: Failed to update the target version for the clone. Please update the target version manually. Full error below:
+WARNING: Failed to update the target version, assignee, and sprint for the clone. Please update these fields manually. Full error below:
 <details><summary>Full error message.</summary>
 
 <code>
@@ -2469,6 +2486,7 @@ Instructions for interacting with me using PR comments are available [here](http
 		}, {
 			name: "If clone with correct target version already exists in multibug PR, retitle PR for correct clone and create clone for other bug",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Assignee:   &jira.User{Name: "testUser"},
 				IssueLinks: []*jira.IssueLink{&cloneLinkTo124, &blocksLinkTo124},
 				Status:     &jira.Status{Name: "CLOSED"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
@@ -2479,6 +2497,7 @@ Instructions for interacting with me using PR comments are available [here](http
 					helpers.TargetVersionField: &v2,
 				},
 			}}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+				Assignee:   &jira.User{Name: "testUser"},
 				IssueLinks: []*jira.IssueLink{&cloneLinkTo123, &blocksLinkTo123},
 				Status:     &jira.Status{Name: "NEW"},
 				Unknowns: tcontainer.MarshalMap{
@@ -2486,7 +2505,8 @@ Instructions for interacting with me using PR comments are available [here](http
 					helpers.TargetVersionField: &v1,
 				},
 			}}, {ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
-				Status: &jira.Status{Name: "CLOSED"},
+				Assignee: &jira.User{Name: "testUser"},
+				Status:   &jira.Status{Name: "CLOSED"},
 				Project: jira.Project{
 					Name: "OCPBUGS",
 				},
@@ -2516,6 +2536,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "4", Key: "OCPBUGS-126", Fields: &jira.IssueFields{
+				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-125. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"},
 				Project: jira.Project{
@@ -2544,7 +2565,8 @@ Instructions for interacting with me using PR comments are available [here](http
 		}, {
 			name: "Clone for different version does not block creation of new clone",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
-				Status: &jira.Status{Name: "CLOSED"},
+				Assignee: &jira.User{Name: "testUser"},
+				Status:   &jira.Status{Name: "CLOSED"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
 					Body: "This is a bug",
 				}}},
@@ -2556,7 +2578,8 @@ Instructions for interacting with me using PR comments are available [here](http
 					helpers.TargetVersionField: &v2,
 				},
 			}}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
-				Status: &jira.Status{Name: "NEW"},
+				Assignee: &jira.User{Name: "testUser"},
+				Status:   &jira.Status{Name: "NEW"},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      severityCritical,
 					helpers.TargetVersionField: &v3,
@@ -2581,6 +2604,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssue: &jira.Issue{ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
+				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"}, // during a clone on a real jira server, this field would get unset/reset; the fake client copies
 				IssueLinks:  []*jira.IssueLink{&cloneLinkTo123JustID, &blocksLinkTo123JustID},
