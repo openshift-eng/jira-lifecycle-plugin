@@ -1396,9 +1396,9 @@ func validateBug(bug *jira.Issue, dependents []dependent, options JiraBranchOpti
 		} else {
 			if releaseNotes == nil || *releaseNotes == "" || (options.ReleaseNotesDefaultText != nil && *options.ReleaseNotesDefaultText == *releaseNotes) {
 				valid = false
-				errors = append(errors, "release notes must be set and not match default text")
+				errors = append(errors, "release note type must be set and release note text must not match the template")
 			} else {
-				validations = append(validations, "release notes are set")
+				validations = append(validations, "release note type is set and release note text does not match the template")
 			}
 		}
 	}

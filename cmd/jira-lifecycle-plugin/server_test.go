@@ -4386,14 +4386,14 @@ func TestValidateBug(t *testing.T) {
 			}},
 			options:     JiraBranchOptions{RequireReleaseNotes: &yes, ReleaseNotesDefaultText: &oneStr},
 			valid:       true,
-			validations: []string{"release notes are set"},
+			validations: []string{"release note type is set and release note text does not match the template"},
 		},
 		{
 			name:    "no release notes with release notes requirement means an invalid bug",
 			issue:   &jira.Issue{Fields: &jira.IssueFields{}},
 			options: JiraBranchOptions{RequireReleaseNotes: &yes, ReleaseNotesDefaultText: &oneStr},
 			valid:   false,
-			why:     []string{"release notes must be set and not match default text"},
+			why:     []string{"release note type must be set and release note text must not match the template"},
 		},
 		{
 			name: "release notes matching default text means an invalid bug",
@@ -4404,7 +4404,7 @@ func TestValidateBug(t *testing.T) {
 			}},
 			options: JiraBranchOptions{RequireReleaseNotes: &yes, ReleaseNotesDefaultText: &oneStr},
 			valid:   false,
-			why:     []string{"release notes must be set and not match default text"},
+			why:     []string{"release note type must be set and release note text must not match the template"},
 		},
 		{
 			name: "matching target version requirement means a valid bug",
