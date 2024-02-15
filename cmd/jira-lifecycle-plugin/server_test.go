@@ -3278,6 +3278,33 @@ func TestDigestPR(t *testing.T) {
 			},
 		},
 		{
+			name: "title referencing issue with alphanumeric project name gets an event",
+			pre: github.PullRequestEvent{
+				Action: github.PullRequestActionOpened,
+				PullRequest: github.PullRequest{
+					Base: github.PullRequestBranch{
+						Repo: github.Repo{
+							Owner: github.User{
+								Login: "org",
+							},
+							Name: "repo",
+						},
+						Ref: "branch",
+					},
+					Number:  1,
+					Title:   "OCP123BUGS-456: fixed it!",
+					State:   "open",
+					HTMLURL: "http.com",
+					User: github.User{
+						Login: "user",
+					},
+				},
+			},
+			expected: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: true, issues: []referencedIssue{{Project: "OCP123BUGS", ID: "456"}}, title: "OCP123BUGS-456: fixed it!", htmlUrl: "http.com", login: "user",
+			},
+		},
+		{
 			name: "title referencing multiple bugs gets an event",
 			pre: github.PullRequestEvent{
 				Action: github.PullRequestActionOpened,
