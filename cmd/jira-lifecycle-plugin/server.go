@@ -40,12 +40,13 @@ const (
 )
 
 var (
-	titleMatchJiraIssue     = regexp.MustCompile(`(?i)([a-zA-Z]+-\d+,)*(NO-JIRA|NO-ISSUE|[a-zA-Z]+-\d+)+:`)
+	jiraIssueRegexPart      = `[[:alnum:]]+-[[:digit:]]+`
+	titleMatchJiraIssue     = regexp.MustCompile(`(?i)(` + jiraIssueRegexPart + `,)*(NO-JIRA|NO-ISSUE|` + jiraIssueRegexPart + `)+:`)
 	refreshCommandMatch     = regexp.MustCompile(`(?mi)^/jira refresh\s*$`)
 	qaReviewCommandMatch    = regexp.MustCompile(`(?mi)^/jira cc-qa\s*$`)
-	cherrypickCommandMatch  = regexp.MustCompile(`(?mi)^/jira cherry-?pick (([a-zA-Z]+)-(\d+),)*(([a-zA-Z]+)-(\d+))+\s*$`)
+	cherrypickCommandMatch  = regexp.MustCompile(`(?mi)^/jira cherry-?pick (` + jiraIssueRegexPart + `,)*(` + jiraIssueRegexPart + `)+\s*$`)
 	cherrypickPRMatch       = regexp.MustCompile(`This is an automated cherry-pick of #([0-9]+)`)
-	jiraIssueReferenceMatch = regexp.MustCompile(`([a-zA-Z]+)-([0-9]+)`)
+	jiraIssueReferenceMatch = regexp.MustCompile(`([[:alnum:]]+)-([[:digit:]]+)`)
 )
 
 type referencedIssue struct {
