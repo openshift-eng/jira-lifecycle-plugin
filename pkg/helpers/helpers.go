@@ -23,6 +23,7 @@ const (
 // GetUnknownField will attempt to get the specified field from the Unknowns struct and unmarshal
 // the value into the provided function. If the field is not set, the first return value of this
 // function will return false.
+// Test
 func GetUnknownField(field string, issue *jira.Issue, fn func() interface{}) (bool, error) {
 	obj := fn()
 	if issue.Fields == nil || issue.Fields.Unknowns == nil {
