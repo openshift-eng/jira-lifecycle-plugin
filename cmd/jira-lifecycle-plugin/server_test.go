@@ -17,13 +17,13 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/yaml"
 
-	prowconfig "k8s.io/test-infra/prow/config"
-	cherrypicker "k8s.io/test-infra/prow/external-plugins/cherrypicker/lib"
-	"k8s.io/test-infra/prow/github"
-	"k8s.io/test-infra/prow/github/fakegithub"
-	jiraclient "k8s.io/test-infra/prow/jira"
-	"k8s.io/test-infra/prow/jira/fakejira"
-	"k8s.io/test-infra/prow/pluginhelp"
+	prowconfig "sigs.k8s.io/prow/prow/config"
+	cherrypicker "sigs.k8s.io/prow/prow/external-plugins/cherrypicker/lib"
+	"sigs.k8s.io/prow/prow/github"
+	"sigs.k8s.io/prow/prow/github/fakegithub"
+	jiraclient "sigs.k8s.io/prow/prow/jira"
+	"sigs.k8s.io/prow/prow/jira/fakejira"
+	"sigs.k8s.io/prow/prow/pluginhelp"
 )
 
 var allowEventAndDate = cmp.AllowUnexported(event{}, jira.Date{})
@@ -2866,7 +2866,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			// client with a custom one that has an empty Query function
 			// TODO: implement a basic fake query function in test-infra fakegithub library and start unit testing the query path
 			fakeClient := fakeGHClient{gc}
-			if err := handle(jiraClient, fakeClient, tc.options, logrus.WithField("testCase", tc.name), testEvent, sets.NewString("org/repo")); err != nil {
+			if err := handle(jiraClient, fakeClient, tc.options, logrus.WithField("testCase", tc.name), testEvent, sets.New[string]("org/repo")); err != nil {
 				t.Fatalf("handle failed: %v", err)
 			}
 

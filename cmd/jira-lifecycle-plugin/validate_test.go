@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/openshift-eng/jira-lifecycle-plugin/pkg/status"
-	jc "k8s.io/test-infra/prow/jira"
+	jc "sigs.k8s.io/prow/prow/jira"
 )
 
 func TestValidateConfig(t *testing.T) {

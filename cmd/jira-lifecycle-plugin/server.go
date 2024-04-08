@@ -17,12 +17,12 @@ import (
 	"github.com/trivago/tgo/tcontainer"
 
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/test-infra/prow/config"
-	prowconfig "k8s.io/test-infra/prow/config"
-	"k8s.io/test-infra/prow/github"
-	jiraclient "k8s.io/test-infra/prow/jira"
-	"k8s.io/test-infra/prow/pluginhelp"
-	"k8s.io/test-infra/prow/plugins"
+	"sigs.k8s.io/prow/prow/config"
+	prowconfig "sigs.k8s.io/prow/prow/config"
+	"sigs.k8s.io/prow/prow/github"
+	jiraclient "sigs.k8s.io/prow/prow/jira"
+	"sigs.k8s.io/prow/prow/pluginhelp"
+	"sigs.k8s.io/prow/prow/plugins"
 
 	"github.com/openshift-eng/jira-lifecycle-plugin/pkg/helpers"
 	"github.com/openshift-eng/jira-lifecycle-plugin/pkg/labels"
@@ -346,7 +346,7 @@ func (s *server) handleIssueComment(l *logrus.Entry, e github.IssueCommentEvent)
 	}
 }
 
-func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, log *logrus.Entry, e event, allRepos sets.String) error {
+func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, log *logrus.Entry, e event, allRepos sets.Set[string]) error {
 	comment := e.comment(ghc)
 	if !e.missing {
 		for _, refIssue := range e.issues {
@@ -1510,7 +1510,7 @@ type prParts struct {
 	Num  int
 }
 
-func handleMerge(e event, gc githubClient, jc jiraclient.Client, options JiraBranchOptions, log *logrus.Entry, allRepos sets.String) error {
+func handleMerge(e event, gc githubClient, jc jiraclient.Client, options JiraBranchOptions, log *logrus.Entry, allRepos sets.Set[string]) error {
 	if options.StateAfterMerge == nil {
 		return nil
 	}
