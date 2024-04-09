@@ -1390,16 +1390,27 @@ func validateBug(bug *jira.Issue, dependents []dependent, options JiraBranchOpti
 	}
 
 	if options.RequireReleaseNotes != nil && *options.RequireReleaseNotes {
-		releaseNotes, err := helpers.GetIssueReleaseNotesText(bug)
+		releaseNoteType, err := helpers.GetIssueReleaseNoteType(bug)
+		if err != nil {
+			errors = append(errors, err.Error())
+		}
+		releaseNotes, err := helpers.GetIssueReleaseNoteText(bug)
 		if err != nil {
 			errors = append(errors, err.Error())
 			valid = false
 		} else {
-			if releaseNotes == nil || *releaseNotes == "" || (options.ReleaseNotesDefaultText != nil && *options.ReleaseNotesDefaultText == *releaseNotes) {
+			if (releaseNotes == nil || *releaseNotes == "" || (options.ReleaseNotesDefaultText != nil && *options.ReleaseNotesDefaultText == *releaseNotes)) && (releaseNoteType == nil || releaseNoteType.Value != "Release Note Not Required") {
 				valid = false
-				errors = append(errors, "release note type must be set and release note text must not match the template")
+				errors = append(errors, "release note text must be set and not match the template OR release note type must be set to \"Release Note Not Required\"")
 			} else {
-				validations = append(validations, "release note type is set and release note text does not match the template")
+				if releaseNotes != nil && *releaseNotes != "" {
+					validations = append(validations, "release note text is set and does not match the template")
+				} else if releaseNoteType != nil && releaseNoteType.Value == "Release Note Not Required" {
+					validations = append(validations, "release note type set to \"Release Note Not Required\"")
+				} else {
+					// this else shouldn't be triggered, but it should still set the validation in case something was missed or changes above
+					validations = append(validations, "release notes fields are valid")
+				}
 			}
 		}
 	}

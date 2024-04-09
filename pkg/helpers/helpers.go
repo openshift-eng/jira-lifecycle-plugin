@@ -16,8 +16,9 @@ const (
 	TargetVersionField    = "customfield_12319940"
 	TargetVersionFieldOld = "customfield_12323140"
 	ReleaseBlockerField   = "customfield_12319743"
-	ReleaseNotesTextField = "customfield_12317313"
+	ReleaseNoteTextField  = "customfield_12317313"
 	SprintField           = "customfield_12310940"
+	ReleaseNoteTypeField  = "customfield_12320850"
 )
 
 // GetUnknownField will attempt to get the specified field from the Unknowns struct and unmarshal
@@ -130,11 +131,23 @@ type CustomField struct {
 	Disabled bool   `json:"disabled"`
 }
 
-func GetIssueReleaseNotesText(issue *jira.Issue) (*string, error) {
+func GetIssueReleaseNoteText(issue *jira.Issue) (*string, error) {
 	var obj *string
-	isSet, err := GetUnknownField(ReleaseNotesTextField, issue, func() interface{} {
+	isSet, err := GetUnknownField(ReleaseNoteTextField, issue, func() interface{} {
 		var field string
 		obj = &field
+		return obj
+	})
+	if !isSet {
+		return nil, err
+	}
+	return obj, err
+}
+
+func GetIssueReleaseNoteType(issue *jira.Issue) (*CustomField, error) {
+	var obj *CustomField
+	isSet, err := GetUnknownField(ReleaseNoteTypeField, issue, func() interface{} {
+		obj = &CustomField{}
 		return obj
 	})
 	if !isSet {
