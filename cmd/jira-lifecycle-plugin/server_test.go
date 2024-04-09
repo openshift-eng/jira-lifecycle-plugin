@@ -4408,30 +4408,37 @@ func TestValidateBug(t *testing.T) {
 			name: "matching release notes requirement means a valid bug",
 			issue: &jira.Issue{Fields: &jira.IssueFields{
 				Unknowns: tcontainer.MarshalMap{
-					helpers.ReleaseNotesTextField: "These are release notes",
+					helpers.ReleaseNoteTextField: "These are release notes",
 				},
 			}},
 			options:     JiraBranchOptions{RequireReleaseNotes: &yes, ReleaseNotesDefaultText: &oneStr},
 			valid:       true,
-			validations: []string{"release note type is set and release note text does not match the template"},
+			validations: []string{"release note text is set and does not match the template"},
 		},
 		{
 			name:    "no release notes with release notes requirement means an invalid bug",
 			issue:   &jira.Issue{Fields: &jira.IssueFields{}},
 			options: JiraBranchOptions{RequireReleaseNotes: &yes, ReleaseNotesDefaultText: &oneStr},
 			valid:   false,
-			why:     []string{"release note type must be set and release note text must not match the template"},
+			why:     []string{"release note text must be set and not match the template OR release note type must be set to \"Release Note Not Required\""},
 		},
 		{
 			name: "release notes matching default text means an invalid bug",
 			issue: &jira.Issue{Fields: &jira.IssueFields{
 				Unknowns: tcontainer.MarshalMap{
-					helpers.ReleaseNotesTextField: oneStr,
+					helpers.ReleaseNoteTextField: oneStr,
 				},
 			}},
 			options: JiraBranchOptions{RequireReleaseNotes: &yes, ReleaseNotesDefaultText: &oneStr},
 			valid:   false,
-			why:     []string{"release note type must be set and release note text must not match the template"},
+			why:     []string{"release note text must be set and not match the template OR release note type must be set to \"Release Note Not Required\""},
+		},
+		{
+			name:        "no release notes with release notes requirement but release type set to not required means an valid bug",
+			issue:       &jira.Issue{Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.ReleaseNoteTypeField: helpers.CustomField{Value: "Release Note Not Required"}}}},
+			options:     JiraBranchOptions{RequireReleaseNotes: &yes, ReleaseNotesDefaultText: &oneStr},
+			valid:       true,
+			validations: []string{"release note type set to \"Release Note Not Required\""},
 		},
 		{
 			name: "matching target version requirement means a valid bug",
