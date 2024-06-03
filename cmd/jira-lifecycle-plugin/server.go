@@ -1826,6 +1826,8 @@ refIssueLoop:
 		// GetIssue is invalid for setting the field ourselves
 		sprintField := bug.Fields.Unknowns[helpers.SprintField]
 		delete(bug.Fields.Unknowns, helpers.SprintField)
+		releaseNoteType := bug.Fields.Unknowns[helpers.ReleaseNoteTypeField]
+		releaseNoteText := bug.Fields.Unknowns[helpers.ReleaseNoteTextField]
 		clone, err := jc.CloneIssue(bug)
 		if err != nil {
 			log.WithError(err).Debugf("Failed to clone bug %+v", bugs)
@@ -1866,6 +1868,12 @@ refIssueLoop:
 					helpers.TargetVersionField: []*jira.Version{{Name: targetVersion}},
 				},
 			},
+		}
+		if releaseNoteText != nil {
+			update.Fields.Unknowns[helpers.ReleaseNoteTextField] = releaseNoteText
+		}
+		if releaseNoteType != nil {
+			update.Fields.Unknowns[helpers.ReleaseNoteTypeField] = releaseNoteType
 		}
 		sprintID, err := helpers.GetActiveSprintID(sprintField)
 		if err != nil {
