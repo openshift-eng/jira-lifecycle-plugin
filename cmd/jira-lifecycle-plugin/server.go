@@ -41,10 +41,10 @@ const (
 
 var (
 	jiraIssueRegexPart      = `[[:alnum:]]+-[[:digit:]]+`
-	titleMatchJiraIssue     = regexp.MustCompile(`(?i)(` + jiraIssueRegexPart + `,)*(NO-JIRA|NO-ISSUE|` + jiraIssueRegexPart + `)+:`)
+	titleMatchJiraIssue     = regexp.MustCompile(`(?i)(` + jiraIssueRegexPart + `,?[[:space:]]*)*(NO-JIRA|NO-ISSUE|` + jiraIssueRegexPart + `)+:`)
 	refreshCommandMatch     = regexp.MustCompile(`(?mi)^/jira refresh\s*$`)
 	qaReviewCommandMatch    = regexp.MustCompile(`(?mi)^/jira cc-qa\s*$`)
-	cherrypickCommandMatch  = regexp.MustCompile(`(?mi)^/jira cherry-?pick (` + jiraIssueRegexPart + `,)*(` + jiraIssueRegexPart + `)+\s*$`)
+	cherrypickCommandMatch  = regexp.MustCompile(`(?mi)^/jira cherry-?pick (` + jiraIssueRegexPart + `,?[[:space:]]*)*(` + jiraIssueRegexPart + `)+\s*$`)
 	cherrypickPRMatch       = regexp.MustCompile(`This is an automated cherry-pick of #([0-9]+)`)
 	jiraIssueReferenceMatch = regexp.MustCompile(`([[:alnum:]]+)-([[:digit:]]+)`)
 )
