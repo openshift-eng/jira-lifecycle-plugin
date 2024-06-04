@@ -4273,6 +4273,10 @@ func TestBugKeyFromTitle(t *testing.T) {
 			expectedRefBugs: []referencedIssue{{Project: "OCPBUGS", ID: "12", IsBug: true}, {Project: "OCPBUGS", ID: "13", IsBug: true}},
 		},
 		{
+			title:           "OCPBUGS-12, OCPBUGS-13: Multiple Canonical with space",
+			expectedRefBugs: []referencedIssue{{Project: "OCPBUGS", ID: "12", IsBug: true}, {Project: "OCPBUGS", ID: "13", IsBug: true}},
+		},
+		{
 			title:            "OCPBUGS-12 : Space before colon",
 			expectedRefBugs:  nil,
 			expectedNotFound: true,
