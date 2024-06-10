@@ -72,6 +72,8 @@ func TestResolveJiraOptions(t *testing.T) {
 	preState := JiraBugState{Status: pre}
 	post2State := JiraBugState{Status: post2}
 	pre2State := JiraBugState{Status: pre2}
+	ignoreLabels1 := []string{"bad_label_1", "bad_label_2"}
+	ignoreLabels2 := []string{"bad_label_3", "bad_label_4"}
 	var testCases = []struct {
 		name          string
 		parent, child JiraBranchOptions
@@ -82,7 +84,7 @@ func TestResolveJiraOptions(t *testing.T) {
 		},
 		{
 			name:   "no child means a copy of parent is the output",
-			parent: JiraBranchOptions{ValidateByDefault: &yes, IsOpen: &open, TargetVersion: &one, ValidStates: &[]JiraBugState{modifiedState}, DependentBugStates: &[]JiraBugState{verifiedState}, DependentBugTargetVersions: &[]string{one}, StateAfterValidation: &postState},
+			parent: JiraBranchOptions{ValidateByDefault: &yes, IsOpen: &open, TargetVersion: &one, ValidStates: &[]JiraBugState{modifiedState}, DependentBugStates: &[]JiraBugState{verifiedState}, DependentBugTargetVersions: &[]string{one}, StateAfterValidation: &postState, IgnoreCloneLabels: ignoreLabels1},
 			expected: JiraBranchOptions{
 				ValidateByDefault:          &yes,
 				IsOpen:                     &open,
@@ -91,6 +93,7 @@ func TestResolveJiraOptions(t *testing.T) {
 				DependentBugStates:         &[]JiraBugState{verifiedState},
 				DependentBugTargetVersions: &[]string{one},
 				StateAfterValidation:       &postState,
+				IgnoreCloneLabels:          ignoreLabels1,
 			},
 		},
 		{
@@ -232,8 +235,8 @@ func TestResolveJiraOptions(t *testing.T) {
 		},
 		{
 			name:   "child overrides parent on all fields",
-			parent: JiraBranchOptions{ValidateByDefault: &yes, IsOpen: &open, SkipTargetVersionCheck: &yes, TargetVersion: &one, ValidStates: &[]JiraBugState{verifiedState}, DependentBugStates: &[]JiraBugState{verifiedState}, DependentBugTargetVersions: &[]string{one}, StateAfterValidation: &postState, StateAfterMerge: &postState},
-			child:  JiraBranchOptions{ValidateByDefault: &no, IsOpen: &closed, SkipTargetVersionCheck: &no, TargetVersion: &two, ValidStates: &[]JiraBugState{modifiedState}, DependentBugStates: &[]JiraBugState{modifiedState}, DependentBugTargetVersions: &[]string{two}, StateAfterValidation: &preState, StateAfterMerge: &preState},
+			parent: JiraBranchOptions{ValidateByDefault: &yes, IsOpen: &open, SkipTargetVersionCheck: &yes, TargetVersion: &one, ValidStates: &[]JiraBugState{verifiedState}, DependentBugStates: &[]JiraBugState{verifiedState}, DependentBugTargetVersions: &[]string{one}, StateAfterValidation: &postState, StateAfterMerge: &postState, IgnoreCloneLabels: ignoreLabels1},
+			child:  JiraBranchOptions{ValidateByDefault: &no, IsOpen: &closed, SkipTargetVersionCheck: &no, TargetVersion: &two, ValidStates: &[]JiraBugState{modifiedState}, DependentBugStates: &[]JiraBugState{modifiedState}, DependentBugTargetVersions: &[]string{two}, StateAfterValidation: &preState, StateAfterMerge: &preState, IgnoreCloneLabels: ignoreLabels2},
 			expected: JiraBranchOptions{
 				ValidateByDefault:          &no,
 				IsOpen:                     &closed,
@@ -244,6 +247,8 @@ func TestResolveJiraOptions(t *testing.T) {
 				DependentBugTargetVersions: &[]string{two},
 				StateAfterValidation:       &preState,
 				StateAfterMerge:            &preState,
+				// clone labels get merged
+				IgnoreCloneLabels: []string{"bad_label_1", "bad_label_2", "bad_label_3", "bad_label_4"},
 			},
 		},
 		{

@@ -1828,6 +1828,11 @@ refIssueLoop:
 		delete(bug.Fields.Unknowns, helpers.SprintField)
 		releaseNoteType := bug.Fields.Unknowns[helpers.ReleaseNoteTypeField]
 		releaseNoteText := bug.Fields.Unknowns[helpers.ReleaseNoteTextField]
+		if len(options.IgnoreCloneLabels) != 0 {
+			labelsSet := sets.New[string](bug.Fields.Labels...)
+			labelsSet.Delete(options.IgnoreCloneLabels...)
+			bug.Fields.Labels = labelsSet.UnsortedList()
+		}
 		clone, err := jc.CloneIssue(bug)
 		if err != nil {
 			log.WithError(err).Debugf("Failed to clone bug %+v", bugs)
