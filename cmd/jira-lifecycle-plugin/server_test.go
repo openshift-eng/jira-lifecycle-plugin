@@ -4797,7 +4797,7 @@ func TestProcessQuery(t *testing.T) {
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			response := processQuery(&testCase.query, testCase.email, logrus.WithField("testCase", testCase.name))
+			response := processQuery(&testCase.query, testCase.email)
 			if response != testCase.expected {
 				t.Errorf("%s: Expected \"%s\", got \"%s\"", testCase.name, testCase.expected, response)
 			}
