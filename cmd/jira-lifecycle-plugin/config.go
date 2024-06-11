@@ -125,6 +125,9 @@ type JiraBranchOptions struct {
 	RequireReleaseNotes *bool `json:"require_release_notes,omitempty"`
 	// ReleaseNotesDefaultText is the default text set by Jira for new bugs.
 	ReleaseNotesDefaultText *string `json:"release_notes_default_text,omitempty"`
+
+	// IgnoreCloneLabels is a list of labels that should be excluded when cloning a bug for cherrypicks
+	IgnoreCloneLabels []string `json:"ignore_clone_labels,omitempty"`
 }
 
 type JiraBugStateSet map[JiraBugState]interface{}
@@ -192,9 +195,11 @@ func (o JiraBranchOptions) matches(other JiraBranchOptions) bool {
 		(o.RequireReleaseNotes != nil && other.RequireReleaseNotes != nil && *o.RequireReleaseNotes == *other.RequireReleaseNotes)
 	releaseNotesTextMatch := o.ReleaseNotesDefaultText == nil && other.ReleaseNotesDefaultText == nil ||
 		(o.ReleaseNotesDefaultText != nil && other.ReleaseNotesDefaultText != nil && *o.ReleaseNotesDefaultText == *other.ReleaseNotesDefaultText)
+	ignoreCloneLabelsMatch := len(o.IgnoreCloneLabels) == 0 && len(other.IgnoreCloneLabels) == 0 ||
+		(sets.New[string](o.IgnoreCloneLabels...).Equal(sets.New[string](other.IgnoreCloneLabels...)))
 	return validateByDefaultMatch && isOpenMatch && targetReleaseMatch && skipTargetVersionCheckMatch && bugStatesMatch && dependentBugStatesMatch &&
 		statesAfterValidationMatch && addExternalLinkMatch && statesAfterMergeMatch && preMergestatesAfterMergeMatch &&
-		releaseNotesMatch && releaseNotesTextMatch
+		releaseNotesMatch && releaseNotesTextMatch && ignoreCloneLabelsMatch
 }
 
 const JiraOptionsWildcard = `*`
@@ -262,6 +267,9 @@ func ResolveJiraOptions(parent, child JiraBranchOptions) JiraBranchOptions {
 		if parent.AllowedSecurityLevels != nil {
 			output.AllowedSecurityLevels = sets.NewString(output.AllowedSecurityLevels...).Insert(parent.AllowedSecurityLevels...).List()
 		}
+		if parent.IgnoreCloneLabels != nil {
+			output.IgnoreCloneLabels = sets.NewString(output.IgnoreCloneLabels...).Insert(parent.IgnoreCloneLabels...).List()
+		}
 		if parent.RequireReleaseNotes != nil {
 			output.RequireReleaseNotes = parent.RequireReleaseNotes
 		}
@@ -320,6 +328,9 @@ func ResolveJiraOptions(parent, child JiraBranchOptions) JiraBranchOptions {
 	}
 	if child.AllowedSecurityLevels != nil {
 		output.AllowedSecurityLevels = sets.NewString(output.AllowedSecurityLevels...).Insert(child.AllowedSecurityLevels...).List()
+	}
+	if child.IgnoreCloneLabels != nil {
+		output.IgnoreCloneLabels = sets.NewString(output.IgnoreCloneLabels...).Insert(child.IgnoreCloneLabels...).List()
 	}
 	if child.RequireReleaseNotes != nil {
 		output.RequireReleaseNotes = child.RequireReleaseNotes

@@ -1835,6 +1835,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Project: jira.Project{
 					Name: "OCPBUGS",
 				},
+				Labels: []string{"good_label", "bad_label_1", "bad_label_2"},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      severityCritical,
 					helpers.TargetVersionField: &v2,
@@ -1844,7 +1845,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			title:               "[v1] " + base.title,
 			cherrypick:          true,
 			cherryPickFromPRNum: 1,
-			options:             JiraBranchOptions{TargetVersion: &v1Str},
+			options:             JiraBranchOptions{TargetVersion: &v1Str, IgnoreCloneLabels: []string{"bad_label_2", "bad_label_1"}},
 			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). Will retitle bug to link to clone.
 /retitle [v1] OCPBUGS-124: fixed it!
 
@@ -1867,6 +1868,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Project: jira.Project{
 					Name: "OCPBUGS",
 				},
+				Labels:     []string{"good_label"},
 				IssueLinks: []*jira.IssueLink{&cloneLinkTo123JustID, &blocksLinkTo123JustID},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
@@ -4795,7 +4797,7 @@ func TestProcessQuery(t *testing.T) {
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			response := processQuery(&testCase.query, testCase.email, logrus.WithField("testCase", testCase.name))
+			response := processQuery(&testCase.query, testCase.email)
 			if response != testCase.expected {
 				t.Errorf("%s: Expected \"%s\", got \"%s\"", testCase.name, testCase.expected, response)
 			}

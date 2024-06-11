@@ -583,7 +583,7 @@ func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, l
 							log.WithError(err).Error("Failed to run graphql github query")
 							return comment(formatError(fmt.Sprintf("querying GitHub for users with public email (%s)", email), jc.JiraURL(), refIssue.Key(), err))
 						}
-						response += fmt.Sprint("\n\n", processQuery(query, email, log))
+						response += fmt.Sprint("\n\n", processQuery(query, email))
 					}
 				} else {
 					log.Debug("Invalid bug found.")
@@ -1259,7 +1259,7 @@ type emailToLoginQuery struct {
 }
 
 // processQueryResult generates a response based on a populated emailToLoginQuery
-func processQuery(query *emailToLoginQuery, email string, log *logrus.Entry) string {
+func processQuery(query *emailToLoginQuery, email string) string {
 	switch len(query.Search.Edges) {
 	case 0:
 		return fmt.Sprintf("No GitHub users were found matching the public email listed for the QA contact in Jira (%s), skipping review request.", email)
@@ -1828,6 +1828,11 @@ refIssueLoop:
 		delete(bug.Fields.Unknowns, helpers.SprintField)
 		releaseNoteType := bug.Fields.Unknowns[helpers.ReleaseNoteTypeField]
 		releaseNoteText := bug.Fields.Unknowns[helpers.ReleaseNoteTextField]
+		if len(options.IgnoreCloneLabels) != 0 {
+			labelsSet := sets.New[string](bug.Fields.Labels...)
+			labelsSet.Delete(options.IgnoreCloneLabels...)
+			bug.Fields.Labels = labelsSet.UnsortedList()
+		}
 		clone, err := jc.CloneIssue(bug)
 		if err != nil {
 			log.WithError(err).Debugf("Failed to clone bug %+v", bugs)
