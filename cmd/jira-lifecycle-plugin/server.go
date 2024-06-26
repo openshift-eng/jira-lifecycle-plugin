@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"regexp"
@@ -45,6 +46,8 @@ var (
 	refreshCommandMatch     = regexp.MustCompile(`(?mi)^/jira refresh\s*$`)
 	qaReviewCommandMatch    = regexp.MustCompile(`(?mi)^/jira cc-qa\s*$`)
 	cherrypickCommandMatch  = regexp.MustCompile(`(?mi)^/jira cherry-?pick (` + jiraIssueRegexPart + `,?[[:space:]]*)*(` + jiraIssueRegexPart + `)+\s*$`)
+	backportCommandMatch    = regexp.MustCompile(`(?mi)^/jira backport\s+(([^\s]+,)*([^\s]+))$`)
+	existingBackportMatch   = regexp.MustCompile(`jlp-[^:]+:[^:]+`)
 	cherrypickPRMatch       = regexp.MustCompile(`This is an automated cherry-pick of #([0-9]+)`)
 	jiraIssueReferenceMatch = regexp.MustCompile(`([[:alnum:]]+)-([[:digit:]]+)`)
 )
@@ -339,14 +342,15 @@ func (s *server) handleIssueComment(l *logrus.Entry, e github.IssueCommentEvent)
 		l.Errorf("failed to digest comment: %v", err)
 	}
 	if event != nil {
-		options := cfg.OptionsForBranch(event.org, event.repo, event.baseRef)
-		if err := handle(s.jc, s.ghc, options, l, *event, s.prowConfigAgent.Config().AllRepos); err != nil {
+		branchOptions := cfg.OptionsForBranch(event.org, event.repo, event.baseRef)
+		repoOptions := cfg.OptionsForRepo(event.org, event.repo)
+		if err := handle(s.jc, s.ghc, repoOptions, branchOptions, l, *event, s.prowConfigAgent.Config().AllRepos); err != nil {
 			l.Errorf("failed to handle comment: %v", err)
 		}
 	}
 }
 
-func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, log *logrus.Entry, e event, allRepos sets.Set[string]) error {
+func handle(jc jiraclient.Client, ghc githubClient, repoOptions map[string]JiraBranchOptions, branchOptions JiraBranchOptions, log *logrus.Entry, e event, allRepos sets.Set[string]) error {
 	comment := e.comment(ghc)
 	if !e.missing {
 		for _, refIssue := range e.issues {
@@ -355,7 +359,7 @@ func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, l
 				if err != nil || issue == nil {
 					return err
 				}
-				bugAllowed, err := isBugAllowed(issue, options.AllowedSecurityLevels)
+				bugAllowed, err := isBugAllowed(issue, branchOptions.AllowedSecurityLevels)
 				if err != nil {
 					return err
 				}
@@ -363,9 +367,9 @@ func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, l
 					// ignore bugs that are in non-allowed security levels for this repo
 					if e.opened || e.refresh {
 						response := fmt.Sprintf(issueLink+" is in a security level that is not in the allowed security levels for this repo.", refIssue.Key(), jc.JiraURL(), refIssue.Key())
-						if len(options.AllowedSecurityLevels) > 0 {
+						if len(branchOptions.AllowedSecurityLevels) > 0 {
 							response += "\nAllowed security levels for this repo are:"
-							for _, group := range options.AllowedSecurityLevels {
+							for _, group := range branchOptions.AllowedSecurityLevels {
 								response += "\n- " + group
 							}
 						} else {
@@ -380,15 +384,18 @@ func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, l
 	}
 	// cherrypicks follow a different pattern than normal validation
 	if e.cherrypick {
-		return handleCherrypick(e, ghc, jc, options, log)
+		return handleCherrypick(e, ghc, jc, branchOptions, log)
+	}
+	if e.backport {
+		return handleBackport(e, ghc, jc, repoOptions, log)
 	}
 	// merges follow a different pattern from the normal validation
 	if e.merged {
-		return handleMerge(e, ghc, jc, options, log, allRepos)
+		return handleMerge(e, ghc, jc, branchOptions, log, allRepos)
 	}
 	// close events follow a different pattern from the normal validation
 	if e.closed && !e.merged {
-		return handleClose(e, ghc, jc, options, log)
+		return handleClose(e, ghc, jc, branchOptions, log)
 	}
 
 	var needsJiraValidRefLabel, needsJiraValidBugLabel, needsJiraInvalidBugLabel bool
@@ -420,20 +427,20 @@ func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, l
 						log.WithError(err).Warn("Could not list labels on PR")
 					} else {
 						premergeVerified := isPreMergeVerified(issue, labels)
-						if premergeVerified && options.PreMergeStateAfterValidation != nil {
-							if options.PreMergeStateAfterValidation.Status != "" && (issue.Fields.Status == nil || !strings.EqualFold(issue.Fields.Status.Name, options.PreMergeStateAfterValidation.Status)) {
-								if err := jc.UpdateStatus(issue.Key, options.PreMergeStateAfterValidation.Status); err != nil {
+						if premergeVerified && branchOptions.PreMergeStateAfterValidation != nil {
+							if branchOptions.PreMergeStateAfterValidation.Status != "" && (issue.Fields.Status == nil || !strings.EqualFold(issue.Fields.Status.Name, branchOptions.PreMergeStateAfterValidation.Status)) {
+								if err := jc.UpdateStatus(issue.Key, branchOptions.PreMergeStateAfterValidation.Status); err != nil {
 									log.WithError(err).Warn("Unexpected error updating jira issue.")
-									response += formatError(fmt.Sprintf("updating to the %s state", options.PreMergeStateAfterValidation.Status), jc.JiraURL(), refIssue.Key(), err)
+									response += formatError(fmt.Sprintf("updating to the %s state", branchOptions.PreMergeStateAfterValidation.Status), jc.JiraURL(), refIssue.Key(), err)
 									continue
 								}
 								premergeUpdated = true
 							}
-							if options.PreMergeStateAfterValidation.Resolution != "" && (issue.Fields.Resolution == nil || !strings.EqualFold(issue.Fields.Status.Name, options.PreMergeStateAfterValidation.Resolution)) {
-								updateIssue := jira.Issue{Key: issue.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.PreMergeStateAfterValidation.Resolution}}}
+							if branchOptions.PreMergeStateAfterValidation.Resolution != "" && (issue.Fields.Resolution == nil || !strings.EqualFold(issue.Fields.Status.Name, branchOptions.PreMergeStateAfterValidation.Resolution)) {
+								updateIssue := jira.Issue{Key: issue.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: branchOptions.PreMergeStateAfterValidation.Resolution}}}
 								if _, err := jc.UpdateIssue(&updateIssue); err != nil {
 									log.WithError(err).Warn("Unexpected error updating jira issue.")
-									response += formatError(fmt.Sprintf("updating to the %s resolution", options.PreMergeStateAfterMerge.Resolution), jc.JiraURL(), refIssue.Key(), err)
+									response += formatError(fmt.Sprintf("updating to the %s resolution", branchOptions.PreMergeStateAfterMerge.Resolution), jc.JiraURL(), refIssue.Key(), err)
 									continue
 								}
 								premergeUpdated = true
@@ -449,11 +456,11 @@ func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, l
 					// linkify refs to other projects.
 					response += fmt.Sprintf("This pull request references %s which is a valid jira issue.", refIssue.Key())
 					if premergeUpdated {
-						response += fmt.Sprintf(" The bug has been moved to the %s state.", PrettyStatus(options.PreMergeStateAfterValidation.Status, options.PreMergeStateAfterValidation.Resolution))
+						response += fmt.Sprintf(" The bug has been moved to the %s state.", PrettyStatus(branchOptions.PreMergeStateAfterValidation.Status, branchOptions.PreMergeStateAfterValidation.Resolution))
 					}
 					// We still want to notify if the pull request branch and bug target version mismatch
-					if checkTargetVersion(options) {
-						if err := validateTargetVersion(issue, *options.TargetVersion); err != nil {
+					if checkTargetVersion(branchOptions) {
+						if err := validateTargetVersion(issue, *branchOptions.TargetVersion); err != nil {
 							response += fmt.Sprintf("\n\nWarning: The referenced jira issue has an invalid target version for the target branch this PR targets: %v.", err)
 						}
 					}
@@ -481,7 +488,7 @@ func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, l
 				}
 
 				var dependents []dependent
-				if options.DependentBugStates != nil || options.DependentBugTargetVersions != nil {
+				if branchOptions.DependentBugStates != nil || branchOptions.DependentBugTargetVersions != nil {
 					for _, link := range issue.Fields.IssueLinks {
 						// identify if bug depends on this link; multiple different types of links may be blocker types; more can be added as they are identified
 						dependsOn := false
@@ -524,7 +531,7 @@ func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, l
 					}
 				}
 
-				valid, validationsRun, why := validateBug(issue, dependents, options, jc.JiraURL())
+				valid, validationsRun, why := validateBug(issue, dependents, branchOptions, jc.JiraURL())
 				if !needsJiraInvalidBugLabel {
 					needsJiraValidBugLabel, needsJiraInvalidBugLabel = valid, !valid
 				}
@@ -532,20 +539,20 @@ func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, l
 					log.Debug("Valid bug found.")
 					response += fmt.Sprintf(`This pull request references `+issueLink+`, which is valid.`, refIssue.Key(), jc.JiraURL(), refIssue.Key())
 					// if configured, move the bug to the new state
-					if options.StateAfterValidation != nil {
-						if options.StateAfterValidation.Status != "" && (issue.Fields.Status == nil || !strings.EqualFold(options.StateAfterValidation.Status, issue.Fields.Status.Name)) {
-							if err := jc.UpdateStatus(issue.ID, options.StateAfterValidation.Status); err != nil {
+					if branchOptions.StateAfterValidation != nil {
+						if branchOptions.StateAfterValidation.Status != "" && (issue.Fields.Status == nil || !strings.EqualFold(branchOptions.StateAfterValidation.Status, issue.Fields.Status.Name)) {
+							if err := jc.UpdateStatus(issue.ID, branchOptions.StateAfterValidation.Status); err != nil {
 								log.WithError(err).Warn("Unexpected error updating jira issue.")
-								return comment(formatError(fmt.Sprintf("updating to the %s state", options.StateAfterValidation.Status), jc.JiraURL(), refIssue.Key(), err))
+								return comment(formatError(fmt.Sprintf("updating to the %s state", branchOptions.StateAfterValidation.Status), jc.JiraURL(), refIssue.Key(), err))
 							}
-							if options.StateAfterValidation.Resolution != "" && (issue.Fields.Resolution == nil || !strings.EqualFold(options.StateAfterValidation.Resolution, issue.Fields.Resolution.Name)) {
-								updateIssue := jira.Issue{Key: issue.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterValidation.Resolution}}}
+							if branchOptions.StateAfterValidation.Resolution != "" && (issue.Fields.Resolution == nil || !strings.EqualFold(branchOptions.StateAfterValidation.Resolution, issue.Fields.Resolution.Name)) {
+								updateIssue := jira.Issue{Key: issue.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: branchOptions.StateAfterValidation.Resolution}}}
 								if _, err := jc.UpdateIssue(&updateIssue); err != nil {
 									log.WithError(err).Warn("Unexpected error updating jira issue.")
-									return comment(formatError(fmt.Sprintf("updating to the %s resolution", options.StateAfterValidation.Resolution), jc.JiraURL(), refIssue.Key(), err))
+									return comment(formatError(fmt.Sprintf("updating to the %s resolution", branchOptions.StateAfterValidation.Resolution), jc.JiraURL(), refIssue.Key(), err))
 								}
 							}
-							response += fmt.Sprintf(" The bug has been moved to the %s state.", options.StateAfterValidation)
+							response += fmt.Sprintf(" The bug has been moved to the %s state.", branchOptions.StateAfterValidation)
 						}
 					}
 
@@ -596,7 +603,7 @@ func handle(jc jiraclient.Client, ghc githubClient, options JiraBranchOptions, l
 Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jira bug are made, or edit the title of this pull request to link to a different bug.`, refIssue.Key(), jc.JiraURL(), refIssue.Key(), formattedReasons)
 				}
 
-				if options.AddExternalLink != nil && *options.AddExternalLink {
+				if branchOptions.AddExternalLink != nil && *branchOptions.AddExternalLink {
 					changed, err := upsertGitHubLinkToIssue(log, issue.ID, jc, e)
 					if err != nil {
 						log.WithError(err).Warn("Unexpected error adding external tracker bug to Jira bug.")
@@ -975,13 +982,14 @@ func upsertGitHubLinkToIssue(log *logrus.Entry, issueID string, jc jiraclient.Cl
 
 func (s *server) handlePullRequest(l *logrus.Entry, pre github.PullRequestEvent) {
 	cfg := s.config()
-	options := cfg.OptionsForBranch(pre.PullRequest.Base.Repo.Owner.Login, pre.PullRequest.Base.Repo.Name, pre.PullRequest.Base.Ref)
-	event, err := digestPR(l, pre, options.ValidateByDefault)
+	branchOptions := cfg.OptionsForBranch(pre.PullRequest.Base.Repo.Owner.Login, pre.PullRequest.Base.Repo.Name, pre.PullRequest.Base.Ref)
+	event, err := digestPR(l, pre, branchOptions.ValidateByDefault)
 	if err != nil {
 		l.Errorf("failed to digest PR: %v", err)
 	}
 	if event != nil {
-		if err := handle(s.jc, s.ghc, options, l, *event, s.prowConfigAgent.Config().AllRepos); err != nil {
+		repoOptions := cfg.OptionsForRepo(event.org, event.repo)
+		if err := handle(s.jc, s.ghc, repoOptions, branchOptions, l, *event, s.prowConfigAgent.Config().AllRepos); err != nil {
 			l.Errorf("failed to handle PR: %v", err)
 		}
 	}
@@ -1101,7 +1109,7 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 		return nil, nil
 	}
 	// Make sure they are requesting a valid command
-	var refresh, cc, cherrypick bool
+	var refresh, cc, cherrypick, backport bool
 	switch {
 	case refreshCommandMatch.MatchString(ice.Comment.Body):
 		refresh = true
@@ -1109,6 +1117,8 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 		cc = true
 	case cherrypickCommandMatch.MatchString(ice.Comment.Body):
 		cherrypick = true
+	case backportCommandMatch.MatchString(ice.Comment.Body):
+		backport = true
 	default:
 		return nil, nil
 	}
@@ -1144,6 +1154,15 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 		e.cherrypickCmd = true
 	}
 
+	if backport {
+		var matchError error
+		e.backportBranches, matchError = backportCommandMatches(ice.Comment.Body)
+		if matchError != nil {
+			return nil, matchError
+		}
+		e.backport = true
+	}
+
 	return e, nil
 }
 
@@ -1153,6 +1172,14 @@ func cherryPickCommandMatches(body string) ([]referencedIssue, error) {
 		return nil, fmt.Errorf("body %q did not match cherry-pick regex, programmer error", body)
 	}
 	return referencedIssues(commandMatches[0]), nil
+}
+
+func backportCommandMatches(body string) ([]string, error) {
+	commandMatches := backportCommandMatch.FindAllStringSubmatch(body, -1)
+	if len(commandMatches) == 0 || len(commandMatches[0]) < 2 {
+		return nil, fmt.Errorf("body %q did not match backport regex, programmer error", body)
+	}
+	return strings.Split(commandMatches[0][1], ","), nil
 }
 
 func referencedIssues(matchingText string) []referencedIssue {
@@ -1179,6 +1206,8 @@ type event struct {
 	refresh, cc, cherrypickCmd      bool
 	cherrypick                      bool
 	cherrypickFromPRNum             int
+	backport                        bool
+	backportBranches                []string
 }
 
 func (e *event) comment(gc githubClient) func(body string) error {
@@ -1772,7 +1801,6 @@ func handleCherrypick(e event, gc githubClient, jc jiraclient.Client, options Ji
 	}
 
 	retitleList := make(map[string]string)
-refIssueLoop:
 	for _, refIssue := range bugs {
 		bug, err := getJira(jc, refIssue.Key(), log, commentWithPrefix)
 		if err != nil || bug == nil {
@@ -1786,129 +1814,13 @@ refIssueLoop:
 				continue
 			}
 		}
-		allowed, err := isBugAllowed(bug, options.AllowedSecurityLevels)
+		cloneKey, response, err := createCherryPickBug(jc, bug, e.baseRef, options, log)
+		retitleList[refIssue.Key()] = cloneKey
+		msg += response
 		if err != nil {
-			return fmt.Errorf("failed to check is issue is in allowed security level: %w", err)
+			msg += err.Error()
 		}
-		if !allowed {
-			// ignore bugs that are in non-allowed groups for this repo
-			continue
-		}
-		clones := identifyClones(bug)
-		oldLink := fmt.Sprintf(issueLink, refIssue.Key(), jc.JiraURL(), refIssue.Key())
-		if options.TargetVersion == nil {
-			msg += fmt.Sprintf("Could not make automatic cherrypick of %s for this PR as the target version is not set for this branch in the jira plugin config. Running refresh:\n/jira refresh", oldLink) + "\n\n"
-			continue
-		}
-		targetVersion := *options.TargetVersion
-		for _, baseClone := range clones {
-			// get full issue struct
-			clone, err := jc.GetIssue(baseClone.Key)
-			if err != nil {
-				return fmt.Errorf("failed to get %s, which is a clone of %s: %w", baseClone.Key, bug.Key, err)
-			}
-			cloneVersion, err := helpers.GetIssueTargetVersion(clone)
-			if err != nil {
-				msg += formatError(fmt.Sprintf("getting the target version for clone %s", clone.Key), jc.JiraURL(), bug.Key, err) + "\n\n"
-				continue refIssueLoop
-			}
-			if len(cloneVersion) == 1 && cloneVersion[0].Name == targetVersion {
-				msg += fmt.Sprintf("Detected clone of %s with correct target version. Will retitle the PR to link to the clone.", oldLink) + "\n\n"
-				retitleList[bug.Key] = clone.Key
-				continue refIssueLoop
-			}
-		}
-		// TODO: these fields can cause the clone to fail if not manually removed. It may be better to
-		// perform some recursion when cloning issues, as these only error when everything else is correct...
-		delete(bug.Fields.Unknowns, "environment")
-		delete(bug.Fields.Unknowns, "customfield_12318341")
-		// This is the sprint field; sprints are handled by a custom plugin, and the data given to us via
-		// GetIssue is invalid for setting the field ourselves
-		sprintField := bug.Fields.Unknowns[helpers.SprintField]
-		delete(bug.Fields.Unknowns, helpers.SprintField)
-		releaseNoteType := bug.Fields.Unknowns[helpers.ReleaseNoteTypeField]
-		releaseNoteText := bug.Fields.Unknowns[helpers.ReleaseNoteTextField]
-		if len(options.IgnoreCloneLabels) != 0 {
-			labelsSet := sets.New[string](bug.Fields.Labels...)
-			labelsSet.Delete(options.IgnoreCloneLabels...)
-			bug.Fields.Labels = labelsSet.UnsortedList()
-		}
-		clone, err := jc.CloneIssue(bug)
-		if err != nil {
-			log.WithError(err).Debugf("Failed to clone bug %+v", bugs)
-			msg += formatError("cloning bug for cherrypick", jc.JiraURL(), bug.Key, err) + "\n\n"
-			continue
-		}
-		cloneLink := fmt.Sprintf(issueLink, clone.Key, jc.JiraURL(), clone.Key)
-		// add blocking issue link between parent and clone
-		blockLink := jira.IssueLink{
-			OutwardIssue: &jira.Issue{ID: clone.ID},
-			InwardIssue:  &jira.Issue{ID: bug.ID},
-			Type: jira.IssueLinkType{
-				Name:    "Blocks",
-				Inward:  "is blocked by",
-				Outward: "blocks",
-			},
-		}
-		if err := jc.CreateIssueLink(&blockLink); err != nil {
-			log.WithError(err).Debugf("Unable to create blocks link for bug %s", clone.Key)
-			msg += formatError(fmt.Sprintf("updating cherry-pick bug in Jira: Created cherrypick %s, but encountered error creating `Blocks` type link with original bug", cloneLink), jc.JiraURL(), clone.Key, err) + "\n\n"
-			continue
-		}
-		response := fmt.Sprintf("%s has been cloned as %s. Will retitle bug to link to clone.", oldLink, cloneLink)
-		retitleList[bug.Key] = clone.Key
-		// jira has automation to set the assignee to a default based on component; we wait up to 1 minute to avoid a race
-		for i := 0; i < 10; i++ {
-			if issue, err := jc.GetIssue(clone.Key); err == nil && issue.Fields.Assignee != nil && issue.Fields.Assignee.Name != "" {
-				break
-			}
-			time.Sleep(time.Second * 6)
-		}
-		// Update the version of the bug to the target release
-		update := jira.Issue{
-			Key: clone.Key,
-			Fields: &jira.IssueFields{
-				Assignee: bug.Fields.Assignee,
-				Unknowns: tcontainer.MarshalMap{
-					helpers.TargetVersionField: []*jira.Version{{Name: targetVersion}},
-				},
-			},
-		}
-		if releaseNoteText != nil {
-			update.Fields.Unknowns[helpers.ReleaseNoteTextField] = releaseNoteText
-		}
-		if releaseNoteType != nil {
-			update.Fields.Unknowns[helpers.ReleaseNoteTypeField] = releaseNoteType
-		}
-		sprintID, err := helpers.GetActiveSprintID(sprintField)
-		if err != nil {
-			response += fmt.Sprintf(`
-
-WARNING: Failed to update the sprint for the clone. Please update the sprint manually. Full error below:
-<details><summary>Full error message.</summary>
-
-<code>
-%v
-</code>
-
-</details>`, err)
-		} else if sprintID != -1 {
-			update.Fields.Unknowns[helpers.SprintField] = sprintID
-		}
-		_, err = jc.UpdateIssue(&update)
-		if err != nil {
-			response += fmt.Sprintf(`
-
-WARNING: Failed to update the target version, assignee, and sprint for the clone. Please update these fields manually. Full error below:
-<details><summary>Full error message.</summary>
-
-<code>
-%v
-</code>
-
-</details>`, err)
-		}
-		msg += response + "\n\n"
+		msg += "\n\n"
 	}
 	msg = strings.TrimSuffix(msg, "\n\n")
 	if len(retitleList) > 0 {
@@ -1935,6 +1847,242 @@ WARNING: Failed to update the target version, assignee, and sprint for the clone
 		msg += "\n/retitle " + newTitle
 	}
 	return comment(msg)
+}
+
+// createCherrypickBug has the following return values:
+// 1. string: key of clone
+// 2. string: message to print after clone. The `handleBackport` function does not use this field.
+// 3. error: a message regarding what went wrong during the clone
+func createCherryPickBug(jc jiraclient.Client, bug *jira.Issue, branch string, options JiraBranchOptions, log *logrus.Entry) (string, string, error) {
+	allowed, err := isBugAllowed(bug, options.AllowedSecurityLevels)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to check is issue is in allowed security level: %w", err)
+	}
+	if !allowed {
+		// ignore bugs that are in non-allowed groups for this repo
+		return "", "", nil
+	}
+	oldLink := fmt.Sprintf(issueLink, bug.Key, jc.JiraURL(), bug.Key)
+	for _, label := range bug.Fields.Labels {
+		match := existingBackportMatch.FindString(label)
+		if len(match) > 0 {
+			match = strings.TrimPrefix(match, "jlp-")
+			branchKey := strings.Split(match, ":")
+			if branchKey[0] == branch {
+				return branchKey[1], fmt.Sprintf("Detected clone of %s with correct target version. Will retitle the PR to link to the clone.", oldLink), nil
+			}
+		}
+	}
+	if options.TargetVersion == nil {
+		// this should never happen if the config is properly set up
+		msg := fmt.Sprintf("Could not make automatic cherrypick of %s for this PR as the target version is not set for this branch in the jira plugin config. Running refresh:\n/jira refresh", oldLink) + "\n\n"
+		return "", msg, nil
+	}
+	targetVersion := *options.TargetVersion
+	clones := identifyClones(bug)
+	for _, baseClone := range clones {
+		// get full issue struct
+		clone, err := jc.GetIssue(baseClone.Key)
+		if err != nil {
+			return "", "", fmt.Errorf("failed to get %s, which is a clone of %s: %w", baseClone.Key, bug.Key, err)
+		}
+		cloneVersion, err := helpers.GetIssueTargetVersion(clone)
+		if err != nil {
+			return "", "", errors.New(formatError(fmt.Sprintf("getting the target version for clone %s", clone.Key), jc.JiraURL(), bug.Key, err))
+		}
+		if len(cloneVersion) == 1 && cloneVersion[0].Name == targetVersion {
+			return clone.Key, fmt.Sprintf("Detected clone of %s with correct target version. Will retitle the PR to link to the clone.", oldLink), nil
+		}
+	}
+	// TODO: these fields can cause the clone to fail if not manually removed. It may be better to
+	// perform some recursion when cloning issues, as these only error when everything else is correct...
+	delete(bug.Fields.Unknowns, "environment")
+	delete(bug.Fields.Unknowns, "customfield_12318341")
+	// This is the sprint field; sprints are handled by a custom plugin, and the data given to us via
+	// GetIssue is invalid for setting the field ourselves
+	sprintField := bug.Fields.Unknowns[helpers.SprintField]
+	delete(bug.Fields.Unknowns, helpers.SprintField)
+	releaseNoteType := bug.Fields.Unknowns[helpers.ReleaseNoteTypeField]
+	releaseNoteText := bug.Fields.Unknowns[helpers.ReleaseNoteTextField]
+	if len(options.IgnoreCloneLabels) != 0 {
+		labelsSet := sets.New[string](bug.Fields.Labels...)
+		labelsSet.Delete(options.IgnoreCloneLabels...)
+		bug.Fields.Labels = labelsSet.UnsortedList()
+	}
+	clone, err := jc.CloneIssue(bug)
+	if err != nil {
+		log.WithError(err).Debugf("Failed to clone bug %+v", bug)
+		return "", "", errors.New(formatError("cloning bug for cherrypick", jc.JiraURL(), bug.Key, err))
+	}
+	cloneLink := fmt.Sprintf(issueLink, clone.Key, jc.JiraURL(), clone.Key)
+	// add blocking issue link between parent and clone
+	blockLink := jira.IssueLink{
+		OutwardIssue: &jira.Issue{ID: clone.ID},
+		InwardIssue:  &jira.Issue{ID: bug.ID},
+		Type: jira.IssueLinkType{
+			Name:    "Blocks",
+			Inward:  "is blocked by",
+			Outward: "blocks",
+		},
+	}
+	if err := jc.CreateIssueLink(&blockLink); err != nil {
+		log.WithError(err).Debugf("Unable to create blocks link for bug %s", clone.Key)
+		return "", "", errors.New(formatError(fmt.Sprintf("updating cherry-pick bug in Jira: Created cherrypick %s, but encountered error creating `Blocks` type link with original bug", cloneLink), jc.JiraURL(), clone.Key, err))
+	}
+	response := fmt.Sprintf("%s has been cloned as %s. Will retitle bug to link to clone.", oldLink, cloneLink)
+	// jira has automation to set the assignee to a default based on component; we wait up to 1 minute to avoid a race
+	for i := 0; i < 10; i++ {
+		if issue, err := jc.GetIssue(clone.Key); err == nil && issue.Fields.Assignee != nil && issue.Fields.Assignee.Name != "" {
+			break
+		}
+		time.Sleep(time.Second * 6)
+	}
+	// Update the version of the bug to the target release
+	update := jira.Issue{
+		Key: clone.Key,
+		Fields: &jira.IssueFields{
+			Assignee: bug.Fields.Assignee,
+			Unknowns: tcontainer.MarshalMap{
+				helpers.TargetVersionField: []*jira.Version{{Name: targetVersion}},
+			},
+		},
+	}
+	if releaseNoteText != nil {
+		update.Fields.Unknowns[helpers.ReleaseNoteTextField] = releaseNoteText
+	}
+	if releaseNoteType != nil {
+		update.Fields.Unknowns[helpers.ReleaseNoteTypeField] = releaseNoteType
+	}
+	sprintID, err := helpers.GetActiveSprintID(sprintField)
+	errs := []string{}
+	if err != nil {
+		errs = append(errs, fmt.Sprintf(`
+
+WARNING: Failed to update the sprint for the clone. Please update the sprint manually. Full error below:
+<details><summary>Full error message.</summary>
+
+<code>
+%v
+</code>
+
+</details>`, err))
+	} else if sprintID != -1 {
+		update.Fields.Unknowns[helpers.SprintField] = sprintID
+	}
+	_, err = jc.UpdateIssue(&update)
+	if err != nil {
+		errs = append(errs, fmt.Sprintf(`
+
+WARNING: Failed to update the target version, assignee, and sprint for the clone. Please update these fields manually. Full error below:
+<details><summary>Full error message.</summary>
+
+<code>
+%v
+</code>
+
+</details>`, err))
+	}
+	var errMsg error
+	if len(errs) != 0 {
+		errMsg = errors.New(strings.Join(errs, ""))
+	}
+	return clone.Key, response, errMsg
+}
+
+func handleBackport(e event, gc githubClient, jc jiraclient.Client, repoOptions map[string]JiraBranchOptions, log *logrus.Entry) error {
+	comment := e.comment(gc)
+	versionToBranch := map[string]string{}
+	for branch, bOpts := range repoOptions {
+		versionToBranch[*bOpts.TargetVersion] = branch
+	}
+	branchesMissingDependents := make(map[string][]string)
+	missingDependencies := sets.New[string]()
+	childBranches := make(map[string][]string)
+	var cherrypickBranches string
+	// sort for deterministic tests
+	existingBranches := append(e.backportBranches, e.baseRef)
+	sort.Strings(existingBranches)
+	existingBranchesSet := sets.New(existingBranches...)
+	for _, branch := range existingBranches {
+		cherrypickBranches += fmt.Sprintf("\n/cherrypick %s", branch)
+		if _, ok := repoOptions[branch]; !ok {
+			continue
+		}
+		for _, dependent := range *repoOptions[branch].DependentBugTargetVersions {
+			if dependentBranch, ok := versionToBranch[dependent]; !ok {
+				// this is a messy message, but should never occur if the jira options are correctly set up
+				missingDependencies.Insert(fmt.Sprintf("branch with target version `%s`", dependent))
+			} else if !existingBranchesSet.Has(dependentBranch) {
+				missingDependencies.Insert(dependentBranch)
+			} else {
+				childBranches[dependentBranch] = append(childBranches[dependentBranch], branch)
+			}
+		}
+	}
+	if len(branchesMissingDependents) != 0 {
+		return comment(fmt.Sprintf("Missing required branches for backport chain: %v", missingDependencies.UnsortedList()))
+	}
+	for _, refIssue := range e.issues {
+		if !refIssue.IsBug {
+			continue
+		}
+		issue, err := jc.GetIssue(refIssue.Key())
+		if err != nil {
+			return comment(fmt.Sprintf("Failed to get issue %s: %v", refIssue.Key(), err))
+		}
+		createdIssues, err := createLinkedJiras(jc, issue, e.baseRef, childBranches, repoOptions, log)
+		if err != nil {
+			return comment(fmt.Sprintf("Failed to create backported issues: %v", err))
+		}
+		updateIssue := jira.Issue{Key: issue.Key, Fields: &jira.IssueFields{
+			Labels: issue.Fields.Labels,
+		}}
+		var newLabels []string
+		for key, branch := range createdIssues {
+			newLabels = append(newLabels, fmt.Sprintf("jlp-%s:%s", branch, key))
+		}
+		// sorting the labels isn't necessary for production but helps with tests
+		sort.Strings(newLabels)
+		updateIssue.Fields.Labels = append(updateIssue.Fields.Labels, newLabels...)
+		issue, err = jc.UpdateIssue(&updateIssue)
+		if err != nil {
+			return comment(fmt.Sprintf("Failed to add label to issue %s: %v", issue.Key, err))
+		}
+	}
+	return comment(fmt.Sprintf("All backport jira issues created. Queuing cherrypicks to the requested branches to be created after this PR merges:\n%s", cherrypickBranches))
+}
+
+// createLinkedJiras recursively creates all descendants of the provided parent issue based on the child branches map
+// 1. map[string]string: issue key -> branch
+// 2. error
+func createLinkedJiras(jc jiraclient.Client, parentIssue *jira.Issue, parentBranch string, childBranches map[string][]string, repoOptions map[string]JiraBranchOptions, log *logrus.Entry) (map[string]string, error) {
+	if len(childBranches[parentBranch]) == 0 {
+		return nil, nil
+	}
+	createdIssues := make(map[string]string) // issue key -> branch
+	children := []*jira.Issue{}
+	for _, childBranch := range childBranches[parentBranch] {
+		cloneKey, _, err := createCherryPickBug(jc, parentIssue, childBranch, repoOptions[childBranch], log)
+		if err != nil {
+			return nil, err
+		}
+		createdIssues[cloneKey] = childBranch
+		child, err := jc.GetIssue(cloneKey)
+		if err != nil {
+			return nil, err
+		}
+		children = append(children, child)
+	}
+	for _, child := range children {
+		childIssues, err := createLinkedJiras(jc, child, createdIssues[child.Key], childBranches, repoOptions, log)
+		if err != nil {
+			return nil, nil
+		}
+		for key, branch := range childIssues {
+			createdIssues[key] = branch
+		}
+	}
+	return createdIssues, nil
 }
 
 // return values:

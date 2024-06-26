@@ -36,15 +36,33 @@ func (f fakeGHClient) QueryWithGitHubAppsSupport(ctx context.Context, q interfac
 	return nil
 }
 
+type fakeJiraClient struct {
+	*fakejira.FakeClient
+}
+
+// the upstream fake jira client does not clear issue links, so we do it here
+func (f *fakeJiraClient) CloneIssue(issue *jira.Issue) (*jira.Issue, error) {
+	// make deferenced copy of field and issuelinks to prevent changing the real issue
+	newIssue := *issue
+	newFields := *issue.Fields
+	newIssue.Fields = &newFields
+	newIssue.Fields.IssueLinks = nil
+	return jiraclient.CloneIssue(f, &newIssue)
+}
+
 func TestHandle(t *testing.T) {
 	t.Parallel()
 	yes := true
 	open := true
 	v1Str := "v1"
 	v2Str := "v2"
+	v3Str := "v3"
+	v4Str := "v4"
+	v5Str := "v5"
 	v1 := []*jira.Version{{Name: v1Str}}
 	v2 := []*jira.Version{{Name: v2Str}}
-	v3 := []*jira.Version{{Name: "v3"}}
+	v3 := []*jira.Version{{Name: v3Str}}
+	v5 := []*jira.Version{{Name: v5Str}}
 	updated := JiraBugState{Status: "UPDATED"}
 	updated2 := JiraBugState{Status: "UPDATED2"}
 	modified := JiraBugState{Status: "MODIFIED"}
@@ -130,8 +148,120 @@ func TestHandle(t *testing.T) {
 		},
 		InwardIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123"},
 	}
+	cloneInward2 := jira.IssueLink{
+		Type: jira.IssueLinkType{
+			Name:    "Cloners",
+			Inward:  "is cloned by",
+			Outward: "clones",
+		},
+		InwardIssue: &jira.Issue{ID: "2"},
+	}
+	cloneOutward2 := jira.IssueLink{
+		Type: jira.IssueLinkType{
+			Name:    "Cloners",
+			Inward:  "is cloned by",
+			Outward: "clones",
+		},
+		OutwardIssue: &jira.Issue{ID: "2"},
+	}
+	cloneInward3 := jira.IssueLink{
+		Type: jira.IssueLinkType{
+			Name:    "Cloners",
+			Inward:  "is cloned by",
+			Outward: "clones",
+		},
+		InwardIssue: &jira.Issue{ID: "3"},
+	}
+	cloneOutward3 := jira.IssueLink{
+		Type: jira.IssueLinkType{
+			Name:    "Cloners",
+			Inward:  "is cloned by",
+			Outward: "clones",
+		},
+		OutwardIssue: &jira.Issue{ID: "3"},
+	}
+	cloneInward4 := jira.IssueLink{
+		Type: jira.IssueLinkType{
+			Name:    "Cloners",
+			Inward:  "is cloned by",
+			Outward: "clones",
+		},
+		InwardIssue: &jira.Issue{ID: "4"},
+	}
+	cloneOutward4 := jira.IssueLink{
+		Type: jira.IssueLinkType{
+			Name:    "Cloners",
+			Inward:  "is cloned by",
+			Outward: "clones",
+		},
+		OutwardIssue: &jira.Issue{ID: "4"},
+	}
+	cloneInward5 := jira.IssueLink{
+		Type: jira.IssueLinkType{
+			Name:    "Cloners",
+			Inward:  "is cloned by",
+			Outward: "clones",
+		},
+		InwardIssue: &jira.Issue{ID: "5"},
+	}
+	blockInward2 := jira.IssueLink{
+		Type: jira.IssueLinkType{
+			Name:    "Blocks",
+			Inward:  "is blocked by",
+			Outward: "blocks",
+		},
+		InwardIssue: &jira.Issue{ID: "2"},
+	}
+	blockOutward2 := jira.IssueLink{
+		Type: jira.IssueLinkType{
+			Name:    "Blocks",
+			Inward:  "is blocked by",
+			Outward: "blocks",
+		},
+		OutwardIssue: &jira.Issue{ID: "2"},
+	}
+	blockInward3 := jira.IssueLink{
+		Type: jira.IssueLinkType{
+			Name:    "Blocks",
+			Inward:  "is blocked by",
+			Outward: "blocks",
+		},
+		InwardIssue: &jira.Issue{ID: "3"},
+	}
+	blockOutward3 := jira.IssueLink{
+		Type: jira.IssueLinkType{
+			Name:    "Blocks",
+			Inward:  "is blocked by",
+			Outward: "blocks",
+		},
+		OutwardIssue: &jira.Issue{ID: "3"},
+	}
+	blockInward4 := jira.IssueLink{
+		Type: jira.IssueLinkType{
+			Name:    "Blocks",
+			Inward:  "is blocked by",
+			Outward: "blocks",
+		},
+		InwardIssue: &jira.Issue{ID: "4"},
+	}
+	blockOutward4 := jira.IssueLink{
+		Type: jira.IssueLinkType{
+			Name:    "Blocks",
+			Inward:  "is blocked by",
+			Outward: "blocks",
+		},
+		OutwardIssue: &jira.Issue{ID: "4"},
+	}
+	blockOutward5 := jira.IssueLink{
+		Type: jira.IssueLinkType{
+			Name:    "Blocks",
+			Inward:  "is blocked by",
+			Outward: "blocks",
+		},
+		OutwardIssue: &jira.Issue{ID: "5"},
+	}
 	// the fake clone doesn't include the key in the link, which breaks our check; just make a second struct without the key set
-	cloneLinkTo123JustID := jira.IssueLink{
+	cloneOutward1 := jira.IssueLink{
 		Type: jira.IssueLinkType{
 			Name:    "Cloners",
 			Inward:  "is cloned by",
@@ -139,7 +269,7 @@ func TestHandle(t *testing.T) {
 		},
 		OutwardIssue: &jira.Issue{ID: "1"},
 	}
-	blocksLinkTo123JustID := jira.IssueLink{
+	blockInward1 := jira.IssueLink{
 		Type: jira.IssueLinkType{
 			Name:    "Blocks",
 			Inward:  "is blocked by",
@@ -194,10 +324,13 @@ func TestHandle(t *testing.T) {
 		closed                     bool
 		opened                     bool
 		refresh                    bool
+		backport                   bool
+		backportBranches           []string
 		cherrypick                 bool
 		cherryPickFromPRNum        int
 		body                       string
 		title                      string
+		baseRef                    string
 		replaceReferencedBugs      []referencedIssue
 		noJira                     bool
 		remoteLinks                map[string][]jira.RemoteLink
@@ -208,10 +341,10 @@ func TestHandle(t *testing.T) {
 		issueCreateErrors          map[string]error
 		issueUpdateErrors          map[string]error
 		options                    JiraBranchOptions
+		repoOptions                map[string]JiraBranchOptions
 		expectedLabels             []string
 		expectedComment            string
-		expectedIssue              *jira.Issue
-		expectedIssue2             *jira.Issue
+		expectedIssues             []*jira.Issue
 		expectedNewRemoteLinks     []jira.RemoteLink
 		expectedRemovedRemoteLinks []jira.RemoteLink
 		existingIssueLinks         []*jira.IssueLink
@@ -591,12 +724,12 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status:          &jira.Status{Name: "UPDATED2"},
 				Unknowns:        tcontainer.MarshalMap{helpers.SeverityField: severityModerate},
 				FixVersions:     []*jira.FixVersion{{Name: "premerge"}},
 				AffectsVersions: []*jira.AffectsVersion{{Name: "premerge"}},
-			}},
+			}}},
 		},
 		{
 			name:   "valid bug with status update removes invalid label, adds valid label, comments and updates status",
@@ -626,10 +759,10 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status:   &jira.Status{Name: "UPDATED"},
 				Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityModerate},
-			}},
+			}}},
 		},
 		{
 			name:                  "valid jira removes invalid label, adds valid label, comments",
@@ -815,7 +948,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{
 					Name: "CLOSED",
 				},
@@ -824,8 +957,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 				// due to the way `Unknowns` works, this has to be provided as a map[string]interface{}
 				Unknowns: tcontainer.MarshalMap{helpers.SeverityField: map[string]interface{}{"Value": string(`<img alt="" src="/images/icons/priorities/low.svg" width="16" height="16"> Low`)}},
-			},
-			},
+			}}},
 		},
 		{
 			name:           "valid bug with status update removes invalid label, adds valid label, comments and does not update status when it is already correct",
@@ -846,7 +978,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: "UPDATED"}}},
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: "UPDATED"}}}},
 		},
 		{
 			name:           "valid bug with external link removes invalid label, adds valid label, comments, makes an external bug link",
@@ -869,7 +1001,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123"},
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123"}},
 			expectedNewRemoteLinks: []jira.RemoteLink{{Object: &jira.RemoteLinkObject{
 				URL:   "https://github.com/org/repo/pull/1",
 				Title: "org/repo#1: OCPBUGS-123: fixed it!",
@@ -908,7 +1040,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123"},
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123"}},
 		},
 		{
 			name: "failure to fetch dependent bug results in a comment",
@@ -1017,11 +1149,11 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status:     &jira.Status{Name: "CLOSED"},
 				Resolution: &jira.Resolution{Name: "MERGED"},
 				Unknowns:   tcontainer.MarshalMap{},
-			}},
+			}}},
 		},
 		{
 			name:   "valid premerge bug on merged PR with one external link migrates to new state with resolution and comments",
@@ -1058,13 +1190,13 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status:          &jira.Status{Name: "UPDATED2"},
 				Resolution:      &jira.Resolution{Name: "MERGED2"},
 				FixVersions:     []*jira.FixVersion{{Name: "premerge"}},
 				AffectsVersions: []*jira.AffectsVersion{{Name: "premerge"}},
 				Unknowns:        tcontainer.MarshalMap{},
-			}},
+			}}},
 		},
 		{
 			name:   "2 valid bugs on merged PR with one external link migrates to new state with resolution and comments",
@@ -1111,16 +1243,15 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status:     &jira.Status{Name: "CLOSED"},
 				Resolution: &jira.Resolution{Name: "MERGED"},
 				Unknowns:   tcontainer.MarshalMap{},
-			}},
-			expectedIssue2: &jira.Issue{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+			}}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				Status:     &jira.Status{Name: "CLOSED"},
 				Resolution: &jira.Resolution{Name: "MERGED"},
 				Unknowns:   tcontainer.MarshalMap{},
-			}},
+			}}},
 		},
 		{
 			name:   "valid bug on merged PR with one external link migrates to new state and comments",
@@ -1151,7 +1282,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: "MODIFIED"}}},
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: "MODIFIED"}}}},
 		},
 		{
 			name:   "valid bug on merged PR with many external links migrates to new state and comments",
@@ -1207,7 +1338,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: "MODIFIED"}}},
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: "MODIFIED"}}}},
 		},
 		{
 			name:   "valid bug on merged PR with unmerged external links does nothing",
@@ -1235,9 +1366,9 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			}},
-			prs:           []github.PullRequest{{Number: base.number, Merged: true}, {Number: 22, Merged: false, State: "open"}},
-			options:       JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
-			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{}},
+			prs:            []github.PullRequest{{Number: base.number, Merged: true}, {Number: 22, Merged: false, State: "open"}},
+			options:        JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{}}},
 			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): Some pull requests linked via external trackers have merged:
  * [org/repo#1](https://github.com/org/repo/pull/1)
 
@@ -1321,14 +1452,13 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "MODIFIED"},
-			}},
-			expectedIssue2: &jira.Issue{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+			}}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				Status:     &jira.Status{Name: "CLOSED"},
 				Resolution: &jira.Resolution{Name: "MERGED"},
 				Unknowns:   tcontainer.MarshalMap{},
-			}},
+			}}},
 		},
 		{
 			name:   "External bug on rep that is not in our config is ignored, bug gets set to MODIFIED",
@@ -1343,9 +1473,9 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			}},
 			}},
-			prs:           []github.PullRequest{{Number: 22, Merged: false, State: "open"}},
-			options:       JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
-			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: "MODIFIED"}}},
+			prs:            []github.PullRequest{{Number: 22, Merged: false, State: "open"}},
+			options:        JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: "MODIFIED"}}}},
 			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
 
 
@@ -1374,9 +1504,9 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			}},
 			}},
-			prs:           []github.PullRequest{{Number: base.number, Merged: true}},
-			options:       JiraBranchOptions{}, // no requirements --> always valid
-			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123"},
+			prs:            []github.PullRequest{{Number: base.number, Merged: true}},
+			options:        JiraBranchOptions{}, // no requirements --> always valid
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123"}},
 		},
 		{
 			name:    "valid bug on merged PR with one external link but no referenced bug in the title does nothing",
@@ -1392,9 +1522,9 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			}},
 			}},
-			prs:           []github.PullRequest{{Number: base.number, Merged: true}},
-			options:       JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
-			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123"},
+			prs:            []github.PullRequest{{Number: base.number, Merged: true}},
+			options:        JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123"}},
 		},
 		{
 			name:           "valid bug on merged PR with one external link fails to update bug and comments",
@@ -1433,7 +1563,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123"},
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123"}},
 		},
 		{
 			name:   "valid bug on merged PR with merged external links but unknown status does not migrate to new state and comments",
@@ -1467,12 +1597,12 @@ In response to [this](https://github.com/org/repo/pull/1):
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 
-			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "CLOSED"},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField: severityCritical,
 				},
-			}},
+			}}},
 		},
 		{
 			name:   "closed PR removes link and comments",
@@ -1506,12 +1636,12 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "CLOSED"},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField: severityCritical,
 				},
-			}},
+			}}},
 			expectedRemovedRemoteLinks: []jira.RemoteLink{{ID: 1, Object: &jira.RemoteLinkObject{
 				URL:   "https://github.com/org/repo/pull/1",
 				Title: "org/repo#1: OCPBUGS-123: fixed it!",
@@ -1534,12 +1664,12 @@ Instructions for interacting with me using PR comments are available [here](http
 			}}},
 			prs:     []github.PullRequest{{Number: base.number, Merged: false}},
 			options: JiraBranchOptions{AddExternalLink: &yes},
-			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "CLOSED"},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField: severityCritical,
 				},
-			}},
+			}}},
 		},
 		{
 			name:   "closed PR removes link, changes bug state, and comments",
@@ -1576,7 +1706,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "NEW"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
 					Body: "This is a bug",
@@ -1587,7 +1717,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField: severityCritical,
 				},
-			}},
+			}}},
 			expectedRemovedRemoteLinks: []jira.RemoteLink{{ID: 1, Object: &jira.RemoteLinkObject{
 				URL:   "https://github.com/org/repo/pull/1",
 				Title: "org/repo#1: OCPBUGS-123: fixed it!",
@@ -1637,7 +1767,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "NEW2"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
 					Body: "This is a bug",
@@ -1650,7 +1780,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 				FixVersions:     []*jira.FixVersion{{Name: "premerge"}},
 				AffectsVersions: []*jira.AffectsVersion{{Name: "premerge"}},
-			}},
+			}}},
 			expectedRemovedRemoteLinks: []jira.RemoteLink{{ID: 1, Object: &jira.RemoteLinkObject{
 				URL:   "https://github.com/org/repo/pull/1",
 				Title: "org/repo#1: OCPBUGS-123: fixed it!",
@@ -1715,7 +1845,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "NEW"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
 					Body: "This is a bug",
@@ -1726,8 +1856,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField: severityCritical,
 				},
-			}},
-			expectedIssue2: &jira.Issue{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+			}}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "NEW"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
 					Body: "This is also a bug",
@@ -1738,7 +1867,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField: severityCritical,
 				},
-			}},
+			}}},
 			expectedRemovedRemoteLinks: []jira.RemoteLink{{ID: 1, Object: &jira.RemoteLinkObject{
 				URL:   "https://github.com/org/repo/pull/1",
 				Title: "org/repo#1: OCPBUGS-123,OCPBUGS-124: fixed it!",
@@ -1808,12 +1937,12 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "POST"},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField: severityCritical,
 				},
-			}},
+			}}},
 			expectedRemovedRemoteLinks: []jira.RemoteLink{{ID: 1, Object: &jira.RemoteLinkObject{
 				URL:   "https://github.com/org/repo/pull/1",
 				Title: "org/repo#1: OCPBUGS-123: fixed it!",
@@ -1858,7 +1987,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+			expectedIssues: []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Assignee:    &jira.User{Name: "testUser"},
 				Status:      &jira.Status{Name: "CLOSED"},
@@ -1869,12 +1998,12 @@ Instructions for interacting with me using PR comments are available [here](http
 					Name: "OCPBUGS",
 				},
 				Labels:     []string{"good_label"},
-				IssueLinks: []*jira.IssueLink{&cloneLinkTo123JustID, &blocksLinkTo123JustID},
+				IssueLinks: []*jira.IssueLink{&cloneOutward1, &blockInward1},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
 					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
 				},
-			}},
+			}}},
 		},
 		{
 
@@ -1911,7 +2040,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+			expectedIssues: []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Assignee:    &jira.User{Name: "testUser"},
 				Status:      &jira.Status{Name: "CLOSED"},
@@ -1921,13 +2050,13 @@ Instructions for interacting with me using PR comments are available [here](http
 				Project: jira.Project{
 					Name: "OCPBUGS",
 				},
-				IssueLinks: []*jira.IssueLink{&cloneLinkTo123JustID, &blocksLinkTo123JustID},
+				IssueLinks: []*jira.IssueLink{&cloneOutward1, &blockInward1},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
 					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
 					helpers.SprintField:        float64(57955),
 				},
-			}},
+			}}},
 		},
 		{
 			name: "Cherrypick PR for multiple bugs results in multiple cloned bug creation",
@@ -1978,7 +2107,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
+			expectedIssues: []*jira.Issue{{ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
 				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"},
@@ -1988,13 +2117,12 @@ Instructions for interacting with me using PR comments are available [here](http
 				Project: jira.Project{
 					Name: "OCPBUGS",
 				},
-				IssueLinks: []*jira.IssueLink{&cloneLinkTo123JustID, &blocksLinkTo123JustID},
+				IssueLinks: []*jira.IssueLink{&cloneOutward1, &blockInward1},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
 					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
 				},
-			}},
-			expectedIssue2: &jira.Issue{ID: "4", Key: "OCPBUGS-126", Fields: &jira.IssueFields{
+			}}, {ID: "4", Key: "OCPBUGS-126", Fields: &jira.IssueFields{
 				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-124. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"},
@@ -2023,7 +2151,7 @@ Instructions for interacting with me using PR comments are available [here](http
 					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
 					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
 				},
-			}},
+			}}},
 		},
 		{
 			name: "Cherrypick PR for multiple bugs with 1 failure still comments for both bugs",
@@ -2084,7 +2212,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
+			expectedIssues: []*jira.Issue{{ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
 				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"},
@@ -2094,13 +2222,12 @@ Instructions for interacting with me using PR comments are available [here](http
 				Project: jira.Project{
 					Name: "OCPBUGS",
 				},
-				IssueLinks: []*jira.IssueLink{&cloneLinkTo123JustID, &blocksLinkTo123JustID},
+				IssueLinks: []*jira.IssueLink{&cloneOutward1, &blockInward1},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
 					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v2Str}},
 				},
-			}},
-			expectedIssue2: &jira.Issue{ID: "4", Key: "OCPBUGS-126", Fields: &jira.IssueFields{
+			}}, {ID: "4", Key: "OCPBUGS-126", Fields: &jira.IssueFields{
 				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-124. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"},
@@ -2129,7 +2256,7 @@ Instructions for interacting with me using PR comments are available [here](http
 					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
 					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
 				},
-			}},
+			}}},
 		},
 		{
 			name: "Cherrypick comment results in cloned bug creation",
@@ -2166,7 +2293,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+			expectedIssues: []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"},
@@ -2176,12 +2303,12 @@ Instructions for interacting with me using PR comments are available [here](http
 				Project: jira.Project{
 					Name: "OCPBUGS",
 				},
-				IssueLinks: []*jira.IssueLink{&cloneLinkTo123JustID, &blocksLinkTo123JustID},
+				IssueLinks: []*jira.IssueLink{&cloneOutward1, &blockInward1},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
 					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
 				},
-			}},
+			}}},
 		},
 		{
 			name: "Cherrypick comment for multiple bugs results in multiple cloned bug creation",
@@ -2234,7 +2361,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
+			expectedIssues: []*jira.Issue{{ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
 				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"},
@@ -2244,13 +2371,12 @@ Instructions for interacting with me using PR comments are available [here](http
 				Project: jira.Project{
 					Name: "OCPBUGS",
 				},
-				IssueLinks: []*jira.IssueLink{&cloneLinkTo123JustID, &blocksLinkTo123JustID},
+				IssueLinks: []*jira.IssueLink{&cloneOutward1, &blockInward1},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
 					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
 				},
-			}},
-			expectedIssue2: &jira.Issue{ID: "4", Key: "OCPBUGS-126", Fields: &jira.IssueFields{
+			}}, {ID: "4", Key: "OCPBUGS-126", Fields: &jira.IssueFields{
 				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-124. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"},
@@ -2279,7 +2405,7 @@ Instructions for interacting with me using PR comments are available [here](http
 					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
 					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
 				},
-			}},
+			}}},
 		},
 		{
 			name: "Cherrypick comment for multiple bugs results in cloned bug creation and comment about non-bug issue",
@@ -2318,7 +2444,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+			expectedIssues: []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"},
@@ -2328,12 +2454,12 @@ Instructions for interacting with me using PR comments are available [here](http
 				Project: jira.Project{
 					Name: "OCPBUGS",
 				},
-				IssueLinks: []*jira.IssueLink{&cloneLinkTo123JustID, &blocksLinkTo123JustID},
+				IssueLinks: []*jira.IssueLink{&cloneOutward1, &blockInward1},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
 					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
 				},
-			}},
+			}}},
 		},
 		{
 			name: "parent PR of cherrypick not existing results in error",
@@ -2486,6 +2612,38 @@ In response to [this](https://github.com/org/repo/pull/1):
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		}, {
+			name: "If bug clone with correct target version already is listed as an issue label, just retitle PR",
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				IssueLinks: []*jira.IssueLink{&cloneLinkTo124, &blocksLinkTo124},
+				Labels:     []string{"random-label", "random-label-2", "jlp-v2:OCPBUGS-125", "jlp-v1:OCPBUGS-124"},
+				Status:     &jira.Status{Name: "CLOSED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      severityCritical,
+					helpers.TargetVersionField: &v2,
+				},
+			}}},
+			prs:                 []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}, {Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] " + base.title}},
+			baseRef:             "v1",
+			title:               "[v1] " + base.title,
+			cherrypick:          true,
+			cherryPickFromPRNum: 1,
+			options:             JiraBranchOptions{TargetVersion: &v1Str},
+			expectedComment: `org/repo#1:@user: Detected clone of [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) with correct target version. Will retitle the PR to link to the clone.
+/retitle [v1] OCPBUGS-124: fixed it!
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+		}, {
 			name: "If clone with correct target version already exists in multibug PR, retitle PR for correct clone and create clone for other bug",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Assignee:   &jira.User{Name: "testUser"},
@@ -2537,7 +2695,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "4", Key: "OCPBUGS-126", Fields: &jira.IssueFields{
+			expectedIssues: []*jira.Issue{{ID: "4", Key: "OCPBUGS-126", Fields: &jira.IssueFields{
 				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-125. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"},
@@ -2563,7 +2721,7 @@ Instructions for interacting with me using PR comments are available [here](http
 					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
 					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
 				},
-			}},
+			}}},
 		}, {
 			name: "Clone for different version does not block creation of new clone",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
@@ -2605,11 +2763,11 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
+			expectedIssues: []*jira.Issue{{ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
 				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"}, // during a clone on a real jira server, this field would get unset/reset; the fake client copies
-				IssueLinks:  []*jira.IssueLink{&cloneLinkTo123JustID, &blocksLinkTo123JustID},
+				IssueLinks:  []*jira.IssueLink{&cloneOutward1, &blockInward1},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
 					Body: "This is a bug",
 				}}},
@@ -2620,7 +2778,7 @@ Instructions for interacting with me using PR comments are available [here](http
 					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
 					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
 				},
-			}},
+			}}},
 		}, {
 			name:    "Bug with non-allowed security level is ignored",
 			issues:  []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{"security": jiraclient.SecurityLevel{Name: "security"}}}}},
@@ -2742,12 +2900,12 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssue: &jira.Issue{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Unknowns: tcontainer.MarshalMap{
 					"security":            jiraclient.SecurityLevel{Name: "security"},
 					helpers.SeverityField: severityModerate,
 				}, Status: &jira.Status{Name: "UPDATED"},
-			}},
+			}}},
 		}, {
 			name: "Bug with dependent bug not in OCPBUGS is invalid",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGSM-123", Fields: &jira.IssueFields{
@@ -2803,6 +2961,121 @@ In response to [this](https://github.com/org/repo/pull/2):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
+		}, {
+			name: "Backport with 4 version creates all issues and issue links and adds labels to parent",
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Assignee: &jira.User{Name: "testUser"},
+				Status:   &jira.Status{Name: "MODIFIED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.TargetVersionField: &v5,
+				},
+			}}},
+			backport:         true,
+			backportBranches: []string{"v1", "v2", "v3", "v4"},
+			options:          JiraBranchOptions{TargetVersion: &v5Str},
+			baseRef:          "v5",
+			repoOptions: map[string]JiraBranchOptions{
+				"v1": {TargetVersion: &v1Str, DependentBugTargetVersions: &[]string{v2Str}},
+				"v2": {TargetVersion: &v2Str, DependentBugTargetVersions: &[]string{v3Str}},
+				"v3": {TargetVersion: &v3Str, DependentBugTargetVersions: &[]string{v4Str}},
+				"v4": {TargetVersion: &v4Str, DependentBugTargetVersions: &[]string{v5Str}},
+				"v5": {TargetVersion: &v5Str, DependentBugTargetVersions: &[]string{}},
+			},
+			expectedComment: `org/repo#1:@user: All backport jira issues created. Queuing cherrypicks to the requested branches to be created after this PR merges:
+
+/cherrypick v1
+/cherrypick v2
+/cherrypick v3
+/cherrypick v4
+/cherrypick v5
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Assignee:   &jira.User{Name: "testUser"},
+				Labels:     []string{"jlp-v1:OCPBUGS-127", "jlp-v2:OCPBUGS-126", "jlp-v3:OCPBUGS-125", "jlp-v4:OCPBUGS-124"},
+				Status:     &jira.Status{Name: "MODIFIED"},
+				IssueLinks: []*jira.IssueLink{&cloneInward2, &blockOutward2},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v5Str}},
+				},
+			}}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+				Assignee:    &jira.User{Name: "testUser"},
+				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
+				Status:      &jira.Status{Name: "MODIFIED"}, // during a clone on a real jira server, this field would get unset/reset; the fake client copies
+				IssueLinks:  []*jira.IssueLink{&cloneOutward1, &blockInward1, &cloneInward3, &blockOutward3},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v4Str}},
+				},
+			}}, {ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
+				Assignee:    &jira.User{Name: "testUser"},
+				Description: "This is a clone of issue OCPBUGS-124. The following is the description of the original issue: \n---\nThis is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
+				Status:      &jira.Status{Name: "MODIFIED"}, // during a clone on a real jira server, this field would get unset/reset; the fake client copies
+				IssueLinks:  []*jira.IssueLink{&cloneOutward2, &blockInward2, &cloneInward4, &blockOutward4},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v3Str}},
+				},
+			}}, {ID: "4", Key: "OCPBUGS-126", Fields: &jira.IssueFields{
+				Assignee:    &jira.User{Name: "testUser"},
+				Description: "This is a clone of issue OCPBUGS-125. The following is the description of the original issue: \n---\nThis is a clone of issue OCPBUGS-124. The following is the description of the original issue: \n---\nThis is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
+				Status:      &jira.Status{Name: "MODIFIED"}, // during a clone on a real jira server, this field would get unset/reset; the fake client copies
+				IssueLinks:  []*jira.IssueLink{&cloneOutward3, &blockInward3, &cloneInward5, &blockOutward5},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v2Str}},
+				},
+			}}, {ID: "5", Key: "OCPBUGS-127", Fields: &jira.IssueFields{
+				Assignee:    &jira.User{Name: "testUser"},
+				Description: "This is a clone of issue OCPBUGS-126. The following is the description of the original issue: \n---\nThis is a clone of issue OCPBUGS-125. The following is the description of the original issue: \n---\nThis is a clone of issue OCPBUGS-124. The following is the description of the original issue: \n---\nThis is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
+				Status:      &jira.Status{Name: "MODIFIED"}, // during a clone on a real jira server, this field would get unset/reset; the fake client copies
+				IssueLinks:  []*jira.IssueLink{&cloneOutward4, &blockInward4},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
+				},
+			}},
+			},
 		},
 	}
 
@@ -2812,7 +3085,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			for index := range tc.issues {
 				ptrIssues = append(ptrIssues, &tc.issues[index])
 			}
-			jiraClient := &fakejira.FakeClient{
+			jc := &fakejira.FakeClient{
 				Issues:           ptrIssues,
 				ExistingLinks:    tc.remoteLinks,
 				GetIssueError:    tc.issueGetErrors,
@@ -2820,6 +3093,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				UpdateIssueError: tc.issueUpdateErrors,
 				Transitions:      jiraTransitions,
 			}
+			jiraClient := fakeJiraClient{jc}
 			var testEvent event // copy so parallel tests don't collide
 			if tc.overrideEvent != nil {
 				testEvent = *tc.overrideEvent
@@ -2827,6 +3101,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				testEvent = *base // copy so parallel tests don't collide
 			}
 			testEvent.refresh = tc.refresh
+			testEvent.backport = tc.backport
+			testEvent.backportBranches = tc.backportBranches
 			testEvent.missing = tc.missing
 			testEvent.merged = tc.merged
 			testEvent.closed = tc.closed || tc.merged
@@ -2848,6 +3124,9 @@ Instructions for interacting with me using PR comments are available [here](http
 			if tc.title != "" {
 				testEvent.title = tc.title
 			}
+			if tc.baseRef != "" {
+				testEvent.baseRef = tc.baseRef
+			}
 
 			gc := fakegithub.NewFakeClient()
 			gc.IssueLabelsExisting = []string{}
@@ -2868,7 +3147,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			// client with a custom one that has an empty Query function
 			// TODO: implement a basic fake query function in test-infra fakegithub library and start unit testing the query path
 			fakeClient := fakeGHClient{gc}
-			if err := handle(jiraClient, fakeClient, tc.options, logrus.WithField("testCase", tc.name), testEvent, sets.New[string]("org/repo")); err != nil {
+			if err := handle(&jiraClient, fakeClient, tc.repoOptions, tc.options, logrus.WithField("testCase", tc.name), testEvent, sets.New[string]("org/repo")); err != nil {
 				t.Fatalf("handle failed: %v", err)
 			}
 
@@ -2905,22 +3184,13 @@ Instructions for interacting with me using PR comments are available [here](http
 			// reset errors on client for verification
 			jiraClient.CreateIssueError = nil
 			jiraClient.GetIssueError = nil
-			if tc.expectedIssue != nil {
-				actual, err := jiraClient.GetIssue(tc.expectedIssue.ID)
+			for _, expectedIssue := range tc.expectedIssues {
+				actual, err := jiraClient.GetIssue(expectedIssue.ID)
 				if err != nil {
 					t.Errorf("%s: failed to get expected bug during test: %v", tc.name, err)
 				}
-				if !reflect.DeepEqual(actual, tc.expectedIssue) {
-					t.Errorf("%s: got incorrect bug after update: %s", tc.name, cmp.Diff(actual, tc.expectedIssue, allowEventAndDate))
-				}
-			}
-			if tc.expectedIssue2 != nil {
-				actual, err := jiraClient.GetIssue(tc.expectedIssue2.ID)
-				if err != nil {
-					t.Errorf("%s: failed to get expected bug during test: %v", tc.name, err)
-				}
-				if !reflect.DeepEqual(actual, tc.expectedIssue2) {
-					t.Errorf("%s: got incorrect bug after update: %s", tc.name, cmp.Diff(actual, tc.expectedIssue2, allowEventAndDate))
+				if !reflect.DeepEqual(actual, expectedIssue) {
+					t.Errorf("%s: got incorrect bug after update: %s", tc.name, cmp.Diff(actual, expectedIssue, allowEventAndDate))
 				}
 			}
 		})
@@ -4226,6 +4496,33 @@ Instructions for interacting with me using PR comments are available [here](http
 			title: "OCPBUGS-123: oopsie doopsie",
 			expected: &event{
 				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "1234", IsBug: true}}, body: "/jira cherrypick OCPBUGS-1234\r\nThis is part of a\r\nmultiline comment", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: false, cherrypick: true,
+			},
+		},
+		{
+			name: "backport comment event for multiple branches has backport bool set to true and correct branches set",
+			e: github.IssueCommentEvent{
+				Action: github.IssueCommentActionCreated,
+				Issue: github.Issue{
+					Number:      1,
+					PullRequest: &struct{}{},
+				},
+				Comment: github.IssueComment{
+					Body: "/jira backport release-4.16,release-4.15,release-4.14,release-4.13",
+					User: github.User{
+						Login: "user",
+					},
+					HTMLURL: "www.com",
+				},
+				Repo: github.Repo{
+					Owner: github.User{
+						Login: "org",
+					},
+					Name: "repo",
+				},
+			},
+			title: "OCPBUGS-123: oopsie doopsie",
+			expected: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/jira backport release-4.16,release-4.15,release-4.14,release-4.13", htmlUrl: "www.com", login: "user", backport: true, backportBranches: []string{"release-4.16", "release-4.15", "release-4.14", "release-4.13"},
 			},
 		},
 	}
