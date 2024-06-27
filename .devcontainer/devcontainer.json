@@ -1,0 +1,22 @@
+{
+    "name": "RHEL Go",
+	"build": { "dockerfile": "Dockerfile" },
+
+	"customizations": {
+		// Configure properties specific to VS Code.
+		"vscode": {
+			// Add the IDs of extensions you want installed when the container is created.
+			"extensions": ["golang.go", "ms-azuretools.vscode-docker"]
+		}
+	},
+
+	// The following allow us to use rootless podman
+	"runArgs": [
+		"--userns=keep-id:uid=1000,gid=1000"
+	],
+	"containerUser": "dev",
+	"updateRemoteUserUID": true,
+	"containerEnv": {
+		"HOME": "/home/dev"
+	}
+}
