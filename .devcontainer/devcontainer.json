@@ -12,7 +12,8 @@
 
 	// The following allow us to use rootless podman
 	"runArgs": [
-		"--userns=keep-id:uid=1000,gid=1000"
+		"--userns=keep-id:uid=1000,gid=1000",
+		"--security-opt=label=disable" // this is needed for SELinux enabled systems
 	],
 	"containerUser": "dev",
 	"updateRemoteUserUID": true,
