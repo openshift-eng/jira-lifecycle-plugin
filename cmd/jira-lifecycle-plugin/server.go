@@ -2010,6 +2010,9 @@ func handleBackport(e event, gc githubClient, jc jiraclient.Client, repoOptions 
 		if _, ok := repoOptions[branch]; !ok {
 			continue
 		}
+		if repoOptions[branch].DependentBugTargetVersions == nil {
+			continue
+		}
 		for _, dependent := range *repoOptions[branch].DependentBugTargetVersions {
 			if dependentBranch, ok := versionToBranch[dependent]; !ok {
 				// this is a messy message, but should never occur if the jira options are correctly set up

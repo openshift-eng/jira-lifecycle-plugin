@@ -2986,7 +2986,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				"v2": {TargetVersion: &v2Str, DependentBugTargetVersions: &[]string{v3Str}},
 				"v3": {TargetVersion: &v3Str, DependentBugTargetVersions: &[]string{v4Str}},
 				"v4": {TargetVersion: &v4Str, DependentBugTargetVersions: &[]string{v5Str}},
-				"v5": {TargetVersion: &v5Str, DependentBugTargetVersions: &[]string{}},
+				"v5": {TargetVersion: &v5Str, DependentBugTargetVersions: nil},
 			},
 			expectedComment: `org/repo#1:@user: All backport jira issues created. Queuing cherrypicks to the requested branches to be created after this PR merges:
 
