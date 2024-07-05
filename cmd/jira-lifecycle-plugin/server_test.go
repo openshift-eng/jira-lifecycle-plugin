@@ -2981,6 +2981,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:          JiraBranchOptions{TargetVersion: &v5Str},
 			baseRef:          "v5",
 			repoOptions: map[string]JiraBranchOptions{
+				"*":  {ValidateByDefault: &yes},
 				"v1": {TargetVersion: &v1Str, DependentBugTargetVersions: &[]string{v2Str}},
 				"v2": {TargetVersion: &v2Str, DependentBugTargetVersions: &[]string{v3Str}},
 				"v3": {TargetVersion: &v3Str, DependentBugTargetVersions: &[]string{v4Str}},

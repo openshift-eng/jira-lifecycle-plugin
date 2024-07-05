@@ -1993,7 +1993,9 @@ func handleBackport(e event, gc githubClient, jc jiraclient.Client, repoOptions 
 	comment := e.comment(gc)
 	versionToBranch := map[string]string{}
 	for branch, bOpts := range repoOptions {
-		versionToBranch[*bOpts.TargetVersion] = branch
+		if bOpts.TargetVersion != nil {
+			versionToBranch[*bOpts.TargetVersion] = branch
+		}
 	}
 	branchesMissingDependents := make(map[string][]string)
 	missingDependencies := sets.New[string]()
