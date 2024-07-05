@@ -2035,7 +2035,9 @@ func handleBackport(e event, gc githubClient, jc jiraclient.Client, repoOptions 
 		if err != nil {
 			return comment(fmt.Sprintf("Failed to get issue %s: %v", refIssue.Key(), err))
 		}
-		createdIssues, err := createLinkedJiras(jc, issue, e.baseRef, childBranches, repoOptions, log)
+		issueBranchLogger := log.WithField("issue_branch", fmt.Sprintf("%s_%s", issue.Key, e.baseRef))
+		issueBranchLogger.Infof("Child Branches map: %+v", childBranches)
+		createdIssues, err := createLinkedJiras(jc, issue, e.baseRef, childBranches, repoOptions, issueBranchLogger)
 		if err != nil {
 			return comment(fmt.Sprintf("Failed to create backported issues: %v", err))
 		}
@@ -2061,16 +2063,19 @@ func handleBackport(e event, gc githubClient, jc jiraclient.Client, repoOptions 
 // 1. map[string]string: issue key -> branch
 // 2. error
 func createLinkedJiras(jc jiraclient.Client, parentIssue *jira.Issue, parentBranch string, childBranches map[string][]string, repoOptions map[string]JiraBranchOptions, log *logrus.Entry) (map[string]string, error) {
+	log.Infof("Starting createLinkedJiras")
 	if len(childBranches[parentBranch]) == 0 {
 		return nil, nil
 	}
 	createdIssues := make(map[string]string) // issue key -> branch
 	children := []*jira.Issue{}
+	log.Infof("Starting childBranch loop")
 	for _, childBranch := range childBranches[parentBranch] {
 		cloneKey, _, err := createCherryPickBug(jc, parentIssue, childBranch, repoOptions[childBranch], log)
 		if err != nil {
 			return nil, err
 		}
+		log.Infof("Cloned %s as %s", parentIssue.Key, cloneKey)
 		createdIssues[cloneKey] = childBranch
 		child, err := jc.GetIssue(cloneKey)
 		if err != nil {
@@ -2079,14 +2084,16 @@ func createLinkedJiras(jc jiraclient.Client, parentIssue *jira.Issue, parentBran
 		children = append(children, child)
 	}
 	for _, child := range children {
+		log.Infof("creating links for child %s", child.Key)
 		childIssues, err := createLinkedJiras(jc, child, createdIssues[child.Key], childBranches, repoOptions, log)
 		if err != nil {
-			return nil, nil
+			return nil, err
 		}
 		for key, branch := range childIssues {
 			createdIssues[key] = branch
 		}
 	}
+	log.Infof("Created issues: %+v", createdIssues)
 	return createdIssues, nil
 }
 
