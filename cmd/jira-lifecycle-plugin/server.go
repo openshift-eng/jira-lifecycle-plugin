@@ -2006,7 +2006,9 @@ func handleBackport(e event, gc githubClient, jc jiraclient.Client, repoOptions 
 	sort.Strings(existingBranches)
 	existingBranchesSet := sets.New(existingBranches...)
 	for _, branch := range existingBranches {
-		cherrypickBranches += fmt.Sprintf("\n/cherrypick %s", branch)
+		if branch != e.baseRef {
+			cherrypickBranches += fmt.Sprintf("\n/cherrypick %s", branch)
+		}
 		if _, ok := repoOptions[branch]; !ok {
 			continue
 		}
