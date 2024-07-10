@@ -47,7 +47,13 @@ func (f *fakeJiraClient) CloneIssue(issue *jira.Issue) (*jira.Issue, error) {
 	newFields := *issue.Fields
 	newIssue.Fields = &newFields
 	newIssue.Fields.IssueLinks = nil
-	return jiraclient.CloneIssue(f, &newIssue)
+	clonedIssue, err := jiraclient.CloneIssue(f, &newIssue)
+	if err != nil {
+		return clonedIssue, err
+	}
+	// simulate auto-assignee plugin for jira
+	clonedIssue.Fields.Assignee = &jira.User{Name: "defaultAssignee"}
+	return clonedIssue, err
 }
 
 func TestHandle(t *testing.T) {
@@ -2213,7 +2219,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssues: []*jira.Issue{{ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
-				Assignee:    &jira.User{Name: "testUser"},
+				Assignee:    &jira.User{Name: "defaultAssignee"},
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
