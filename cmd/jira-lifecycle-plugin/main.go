@@ -19,8 +19,6 @@ import (
 	"sigs.k8s.io/prow/prow/logrusutil"
 	"sigs.k8s.io/prow/prow/pjutil"
 	"sigs.k8s.io/yaml"
-
-	"github.com/openshift/ci-tools/pkg/util/gzip"
 )
 
 type options struct {
@@ -73,7 +71,7 @@ func (o *options) Validate() error {
 		return err
 	}
 
-	bytes, err := gzip.ReadFileMaybeGZIP(o.configPath)
+	bytes, err := ReadFileMaybeGZIP(o.configPath)
 	if err != nil {
 		return fmt.Errorf("couldn't read configuration file: %v", o.configPath)
 	}
@@ -97,7 +95,7 @@ func (o *options) getConfigWatchAndUpdate() (func(ctx context.Context), error) {
 	}
 
 	eventFunc := func() error {
-		bytes, err := gzip.ReadFileMaybeGZIP(o.configPath)
+		bytes, err := ReadFileMaybeGZIP(o.configPath)
 		if err != nil {
 			return fmt.Errorf("couldn't read configuration file %s: %w", o.configPath, err)
 		}
@@ -128,7 +126,7 @@ func main() {
 
 	o := gatherOptions()
 	if o.validateConfig != "" {
-		bytes, err := gzip.ReadFileMaybeGZIP(o.validateConfig)
+		bytes, err := ReadFileMaybeGZIP(o.validateConfig)
 		if err != nil {
 			logger.Fatalf("couldn't read configuration file %s: %v", o.configPath, err)
 		}

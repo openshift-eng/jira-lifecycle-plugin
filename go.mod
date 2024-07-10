@@ -25,7 +25,6 @@ require (
 	github.com/andygrunwald/go-jira v1.15.1
 	github.com/google/go-cmp v0.5.9
 	github.com/openshift/build-machinery-go v0.0.0-20220429084610-baff9f8d23b3
-	github.com/openshift/ci-tools v0.0.0-20221125132251-82b14fbc45df
 	github.com/shurcooL/githubv4 v0.0.0-20220520033151-0b4e3294ff00
 	github.com/sirupsen/logrus v1.9.0
 	github.com/trivago/tgo v1.0.7
@@ -144,7 +143,7 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/api v0.27.2 // indirect
-	k8s.io/client-go v11.0.1-0.20190805182717-6502b5e7b1b5+incompatible // indirect
+	k8s.io/client-go v0.27.2 // indirect
 	k8s.io/component-base v0.27.2 // indirect
 	k8s.io/gengo v0.0.0-20221011193443-fad74ee6edd9 // indirect
 	k8s.io/klog/v2 v2.90.1 // indirect
