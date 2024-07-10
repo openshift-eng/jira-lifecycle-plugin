@@ -1894,22 +1894,28 @@ func createCherryPickBug(jc jiraclient.Client, bug *jira.Issue, branch string, o
 			return clone.Key, fmt.Sprintf("Detected clone of %s with correct target version. Will retitle the PR to link to the clone.", oldLink), nil
 		}
 	}
+	// clone the bug in order to not lose fields during backports, which reuse *bug
+	bugCopy := *bug
+	copyFields := *bug.Fields
+	bugCopy.Fields = &copyFields
 	// TODO: these fields can cause the clone to fail if not manually removed. It may be better to
 	// perform some recursion when cloning issues, as these only error when everything else is correct...
-	delete(bug.Fields.Unknowns, "environment")
-	delete(bug.Fields.Unknowns, "customfield_12318341")
+	delete(bugCopy.Fields.Unknowns, "environment")
+	delete(bugCopy.Fields.Unknowns, "customfield_12318341")
 	// This is the sprint field; sprints are handled by a custom plugin, and the data given to us via
 	// GetIssue is invalid for setting the field ourselves
-	sprintField := bug.Fields.Unknowns[helpers.SprintField]
-	delete(bug.Fields.Unknowns, helpers.SprintField)
-	releaseNoteType := bug.Fields.Unknowns[helpers.ReleaseNoteTypeField]
-	releaseNoteText := bug.Fields.Unknowns[helpers.ReleaseNoteTextField]
+	sprintField := bugCopy.Fields.Unknowns[helpers.SprintField]
+	delete(bugCopy.Fields.Unknowns, helpers.SprintField)
+	releaseNoteType := bugCopy.Fields.Unknowns[helpers.ReleaseNoteTypeField]
+	releaseNoteText := bugCopy.Fields.Unknowns[helpers.ReleaseNoteTextField]
 	if len(options.IgnoreCloneLabels) != 0 {
-		labelsSet := sets.New[string](bug.Fields.Labels...)
+		labelsSet := sets.New[string](bugCopy.Fields.Labels...)
 		labelsSet.Delete(options.IgnoreCloneLabels...)
-		bug.Fields.Labels = labelsSet.UnsortedList()
+		bugCopy.Fields.Labels = labelsSet.UnsortedList()
 	}
-	clone, err := jc.CloneIssue(bug)
+	// unset assignee so we can more easily check when jira's internal auto-assign completes
+	bugCopy.Fields.Assignee = nil
+	clone, err := jc.CloneIssue(&bugCopy)
 	if err != nil {
 		log.WithError(err).Debugf("Failed to clone bug %+v", bug)
 		return "", "", errors.New(formatError("cloning bug for cherrypick", jc.JiraURL(), bug.Key, err))
