@@ -331,9 +331,6 @@ github.com/openshift/build-machinery-go/make/targets/golang
 github.com/openshift/build-machinery-go/make/targets/openshift
 github.com/openshift/build-machinery-go/make/targets/openshift/operator
 github.com/openshift/build-machinery-go/scripts
-# github.com/openshift/ci-tools v0.0.0-20221125132251-82b14fbc45df
-## explicit; go 1.18
-github.com/openshift/ci-tools/pkg/util/gzip
 # github.com/peterbourgon/diskv v2.0.1+incompatible
 ## explicit
 github.com/peterbourgon/diskv

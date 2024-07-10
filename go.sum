@@ -451,8 +451,6 @@ github.com/opencontainers/go-digest v1.0.0 h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8
 github.com/opencontainers/go-digest v1.0.0/go.mod h1:0JzlMkj0TRzQZfJkVvzbP0HBR3IKzErnv2BNG4W4MAM=
 github.com/openshift/build-machinery-go v0.0.0-20220429084610-baff9f8d23b3 h1:M7ttIUk99wNgpBImKJEbE/QgmuRK+HZ4xUh8ZpH/r3Y=
 github.com/openshift/build-machinery-go v0.0.0-20220429084610-baff9f8d23b3/go.mod h1:b1BuldmJlbA/xYtdZvKi+7j5YGB44qJUJDZ9zwiNCfE=
-github.com/openshift/ci-tools v0.0.0-20221125132251-82b14fbc45df h1:lFSN/EioSQ6kcVc3BVcR3ji7BeuL7bQ0ryTrfnZ1OcY=
-github.com/openshift/ci-tools v0.0.0-20221125132251-82b14fbc45df/go.mod h1:+v6edduOOB6Sm9h+1sSpaM6/ConMZwRuBYF4lE+xZ/4=
 github.com/peterbourgon/diskv v2.0.1+incompatible h1:UBdAOUP5p4RWqPBg048CAvpKN+vxiaj6gdUUzhl4XmI=
 github.com/peterbourgon/diskv v2.0.1+incompatible/go.mod h1:uqqh8zWWbv1HBMNONnaR/tNboyR3/BZd58JJSHlUSCU=
 github.com/pkg/errors v0.8.0/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=

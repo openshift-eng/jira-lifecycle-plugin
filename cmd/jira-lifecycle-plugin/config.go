@@ -1,7 +1,11 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"fmt"
+	"io"
+	"os"
 
 	"k8s.io/apimachinery/pkg/util/sets"
 )
@@ -400,4 +404,28 @@ func (b *Config) OptionsForRepo(org, repo string) map[string]JiraBranchOptions {
 	}
 
 	return options
+}
+
+// ReadFileMaybeGZIP wraps util.ReadBytesMaybeGZIP, returning the decompressed contents
+// if the file is gzipped, or otherwise the raw contents
+func ReadFileMaybeGZIP(path string) ([]byte, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return ReadBytesMaybeGZIP(b)
+}
+
+func ReadBytesMaybeGZIP(data []byte) ([]byte, error) {
+	// check if data contains gzip header: http://www.zlib.org/rfc-gzip.html
+	if !bytes.HasPrefix(data, []byte("\x1F\x8B")) {
+		// go ahead and return the contents if not gzipped
+		return data, nil
+	}
+	// otherwise decode
+	gzipReader, err := gzip.NewReader(bytes.NewBuffer(data))
+	if err != nil {
+		return nil, err
+	}
+	return io.ReadAll(gzipReader)
 }

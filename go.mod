@@ -25,7 +25,6 @@ require (
 	github.com/andygrunwald/go-jira v1.15.1
 	github.com/google/go-cmp v0.5.9
 	github.com/openshift/build-machinery-go v0.0.0-20220429084610-baff9f8d23b3
-	github.com/openshift/ci-tools v0.0.0-20221125132251-82b14fbc45df
 	github.com/shurcooL/githubv4 v0.0.0-20220520033151-0b4e3294ff00
 	github.com/sirupsen/logrus v1.9.0
 	github.com/trivago/tgo v1.0.7
