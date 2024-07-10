@@ -2988,8 +2988,13 @@ Instructions for interacting with me using PR comments are available [here](http
 				"v4": {TargetVersion: &v4Str, DependentBugTargetVersions: &[]string{v5Str}},
 				"v5": {TargetVersion: &v5Str, DependentBugTargetVersions: nil},
 			},
-			expectedComment: `org/repo#1:@user: All backport jira issues created. Queuing cherrypicks to the requested branches to be created after this PR merges:
+			expectedComment: `org/repo#1:@user: The following backport issues have been created:
+- [OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) for branch v4
+- [OCPBUGS-125](https://my-jira.com/browse/OCPBUGS-125) for branch v3
+- [OCPBUGS-126](https://my-jira.com/browse/OCPBUGS-126) for branch v2
+- [OCPBUGS-127](https://my-jira.com/browse/OCPBUGS-127) for branch v1
 
+Queuing cherrypicks to the requested branches to be created after this PR merges:
 /cherrypick v1
 /cherrypick v2
 /cherrypick v3

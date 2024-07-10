@@ -2029,6 +2029,7 @@ func handleBackport(e event, gc githubClient, jc jiraclient.Client, repoOptions 
 	if len(branchesMissingDependents) != 0 {
 		return comment(fmt.Sprintf("Missing required branches for backport chain: %v", missingDependencies.UnsortedList()))
 	}
+	createdIssuesMessageLines := []string{}
 	for _, refIssue := range e.issues {
 		if !refIssue.IsBug {
 			continue
@@ -2049,6 +2050,7 @@ func handleBackport(e event, gc githubClient, jc jiraclient.Client, repoOptions 
 		var newLabels []string
 		for key, branch := range createdIssues {
 			newLabels = append(newLabels, fmt.Sprintf("jlp-%s:%s", branch, key))
+			createdIssuesMessageLines = append(createdIssuesMessageLines, insertLinksIntoLine(fmt.Sprintf("- %s for branch %s", key, branch), []string{key}, jc.JiraURL()))
 		}
 		// sorting the labels isn't necessary for production but helps with tests
 		sort.Strings(newLabels)
@@ -2058,7 +2060,10 @@ func handleBackport(e event, gc githubClient, jc jiraclient.Client, repoOptions 
 			return comment(fmt.Sprintf("Failed to add label to issue %s: %v", issue.Key, err))
 		}
 	}
-	return comment(fmt.Sprintf("All backport jira issues created. Queuing cherrypicks to the requested branches to be created after this PR merges:\n%s", cherrypickBranches))
+	// make message deterministic for tests
+	sort.Strings(createdIssuesMessageLines)
+	createdIssuesMessage := strings.Join(createdIssuesMessageLines, "\n")
+	return comment(fmt.Sprintf("The following backport issues have been created:\n%s\n\nQueuing cherrypicks to the requested branches to be created after this PR merges:%s", createdIssuesMessage, cherrypickBranches))
 }
 
 // createLinkedJiras recursively creates all descendants of the provided parent issue based on the child branches map
