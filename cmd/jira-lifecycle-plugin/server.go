@@ -343,14 +343,13 @@ func (s *server) handleIssueComment(l *logrus.Entry, e github.IssueCommentEvent)
 	}
 	if event != nil {
 		branchOptions := cfg.OptionsForBranch(event.org, event.repo, event.baseRef)
-		repoOptions := cfg.OptionsForRepo(event.org, event.repo)
-		if err := handle(s.jc, s.ghc, repoOptions, branchOptions, l, *event, s.prowConfigAgent.Config().AllRepos); err != nil {
+		if err := handle(s.jc, s.ghc, cfg, branchOptions, l, *event, s.prowConfigAgent.Config().AllRepos); err != nil {
 			l.Errorf("failed to handle comment: %v", err)
 		}
 	}
 }
 
-func handle(jc jiraclient.Client, ghc githubClient, repoOptions map[string]JiraBranchOptions, branchOptions JiraBranchOptions, log *logrus.Entry, e event, allRepos sets.Set[string]) error {
+func handle(jc jiraclient.Client, ghc githubClient, fullConfig *Config, branchOptions JiraBranchOptions, log *logrus.Entry, e event, allRepos sets.Set[string]) error {
 	comment := e.comment(ghc)
 	if !e.missing {
 		for _, refIssue := range e.issues {
@@ -387,7 +386,7 @@ func handle(jc jiraclient.Client, ghc githubClient, repoOptions map[string]JiraB
 		return handleCherrypick(e, ghc, jc, branchOptions, log)
 	}
 	if e.backport {
-		return handleBackport(e, ghc, jc, repoOptions, log)
+		return handleBackport(e, ghc, jc, fullConfig, log)
 	}
 	// merges follow a different pattern from the normal validation
 	if e.merged {
@@ -988,8 +987,7 @@ func (s *server) handlePullRequest(l *logrus.Entry, pre github.PullRequestEvent)
 		l.Errorf("failed to digest PR: %v", err)
 	}
 	if event != nil {
-		repoOptions := cfg.OptionsForRepo(event.org, event.repo)
-		if err := handle(s.jc, s.ghc, repoOptions, branchOptions, l, *event, s.prowConfigAgent.Config().AllRepos); err != nil {
+		if err := handle(s.jc, s.ghc, cfg, branchOptions, l, *event, s.prowConfigAgent.Config().AllRepos); err != nil {
 			l.Errorf("failed to handle PR: %v", err)
 		}
 	}
@@ -1995,14 +1993,8 @@ WARNING: Failed to update the target version, assignee, and sprint for the clone
 	return clone.Key, response, errMsg
 }
 
-func handleBackport(e event, gc githubClient, jc jiraclient.Client, repoOptions map[string]JiraBranchOptions, log *logrus.Entry) error {
+func handleBackport(e event, gc githubClient, jc jiraclient.Client, fullConfig *Config, log *logrus.Entry) error {
 	comment := e.comment(gc)
-	versionToBranch := map[string]string{}
-	for branch, bOpts := range repoOptions {
-		if bOpts.TargetVersion != nil {
-			versionToBranch[*bOpts.TargetVersion] = branch
-		}
-	}
 	branchesMissingDependents := make(map[string][]string)
 	missingDependencies := sets.New[string]()
 	childBranches := make(map[string][]string)
@@ -2011,17 +2003,22 @@ func handleBackport(e event, gc githubClient, jc jiraclient.Client, repoOptions 
 	existingBranches := append(e.backportBranches, e.baseRef)
 	sort.Strings(existingBranches)
 	existingBranchesSet := sets.New(existingBranches...)
+	versionToBranch := map[string]string{}
+	for _, branch := range existingBranches {
+		opts := fullConfig.OptionsForBranch(e.org, e.repo, branch)
+		if opts.TargetVersion != nil {
+			versionToBranch[*opts.TargetVersion] = branch
+		}
+	}
 	for _, branch := range existingBranches {
 		if branch != e.baseRef {
 			cherrypickBranches += fmt.Sprintf("\n/cherrypick %s", branch)
 		}
-		if _, ok := repoOptions[branch]; !ok {
+		resolvedOptions := fullConfig.OptionsForBranch(e.org, e.repo, branch)
+		if resolvedOptions.DependentBugTargetVersions == nil {
 			continue
 		}
-		if repoOptions[branch].DependentBugTargetVersions == nil {
-			continue
-		}
-		for _, dependent := range *repoOptions[branch].DependentBugTargetVersions {
+		for _, dependent := range *resolvedOptions.DependentBugTargetVersions {
 			if dependentBranch, ok := versionToBranch[dependent]; !ok {
 				// this is a messy message, but should never occur if the jira options are correctly set up
 				missingDependencies.Insert(fmt.Sprintf("branch with target version `%s`", dependent))
@@ -2046,7 +2043,7 @@ func handleBackport(e event, gc githubClient, jc jiraclient.Client, repoOptions 
 		}
 		issueBranchLogger := log.WithField("issue_branch", fmt.Sprintf("%s_%s", issue.Key, e.baseRef))
 		issueBranchLogger.Infof("Child Branches map: %+v", childBranches)
-		createdIssues, err := createLinkedJiras(jc, issue, e.baseRef, childBranches, repoOptions, issueBranchLogger)
+		createdIssues, err := createLinkedJiras(jc, issue, e.baseRef, childBranches, e.org, e.repo, fullConfig, issueBranchLogger)
 		if err != nil {
 			return comment(fmt.Sprintf("Failed to create backported issues: %v", err))
 		}
@@ -2075,7 +2072,7 @@ func handleBackport(e event, gc githubClient, jc jiraclient.Client, repoOptions 
 // createLinkedJiras recursively creates all descendants of the provided parent issue based on the child branches map
 // 1. map[string]string: issue key -> branch
 // 2. error
-func createLinkedJiras(jc jiraclient.Client, parentIssue *jira.Issue, parentBranch string, childBranches map[string][]string, repoOptions map[string]JiraBranchOptions, log *logrus.Entry) (map[string]string, error) {
+func createLinkedJiras(jc jiraclient.Client, parentIssue *jira.Issue, parentBranch string, childBranches map[string][]string, org, repo string, fullConfig *Config, log *logrus.Entry) (map[string]string, error) {
 	log.Infof("Starting createLinkedJiras")
 	if len(childBranches[parentBranch]) == 0 {
 		return nil, nil
@@ -2084,7 +2081,7 @@ func createLinkedJiras(jc jiraclient.Client, parentIssue *jira.Issue, parentBran
 	children := []*jira.Issue{}
 	log.Infof("Starting childBranch loop")
 	for _, childBranch := range childBranches[parentBranch] {
-		cloneKey, _, err := createCherryPickBug(jc, parentIssue, childBranch, repoOptions[childBranch], log)
+		cloneKey, _, err := createCherryPickBug(jc, parentIssue, childBranch, fullConfig.OptionsForBranch(org, repo, childBranch), log)
 		if err != nil {
 			return nil, err
 		}
@@ -2098,7 +2095,7 @@ func createLinkedJiras(jc jiraclient.Client, parentIssue *jira.Issue, parentBran
 	}
 	for _, child := range children {
 		log.Infof("creating links for child %s", child.Key)
-		childIssues, err := createLinkedJiras(jc, child, createdIssues[child.Key], childBranches, repoOptions, log)
+		childIssues, err := createLinkedJiras(jc, child, createdIssues[child.Key], childBranches, org, repo, fullConfig, log)
 		if err != nil {
 			return nil, err
 		}

@@ -347,7 +347,7 @@ func TestHandle(t *testing.T) {
 		issueCreateErrors          map[string]error
 		issueUpdateErrors          map[string]error
 		options                    JiraBranchOptions
-		repoOptions                map[string]JiraBranchOptions
+		fullConfig                 Config
 		expectedLabels             []string
 		expectedComment            string
 		expectedIssues             []*jira.Issue
@@ -2986,13 +2986,15 @@ Instructions for interacting with me using PR comments are available [here](http
 			backportBranches: []string{"v1", "v2", "v3", "v4"},
 			options:          JiraBranchOptions{TargetVersion: &v5Str},
 			baseRef:          "v5",
-			repoOptions: map[string]JiraBranchOptions{
-				"*":  {ValidateByDefault: &yes},
-				"v1": {TargetVersion: &v1Str, DependentBugTargetVersions: &[]string{v2Str}},
-				"v2": {TargetVersion: &v2Str, DependentBugTargetVersions: &[]string{v3Str}},
-				"v3": {TargetVersion: &v3Str, DependentBugTargetVersions: &[]string{v4Str}},
-				"v4": {TargetVersion: &v4Str, DependentBugTargetVersions: &[]string{v5Str}},
-				"v5": {TargetVersion: &v5Str, DependentBugTargetVersions: nil},
+			fullConfig: Config{
+				Default: map[string]JiraBranchOptions{
+					"*":  {ValidateByDefault: &yes},
+					"v1": {TargetVersion: &v1Str, DependentBugTargetVersions: &[]string{v2Str}},
+					"v2": {TargetVersion: &v2Str, DependentBugTargetVersions: &[]string{v3Str}},
+					"v3": {TargetVersion: &v3Str, DependentBugTargetVersions: &[]string{v4Str}},
+					"v4": {TargetVersion: &v4Str, DependentBugTargetVersions: &[]string{v5Str}},
+					"v5": {TargetVersion: &v5Str, DependentBugTargetVersions: nil},
+				},
 			},
 			expectedComment: `org/repo#1:@user: The following backport issues have been created:
 - [OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) for branch v4
@@ -3158,7 +3160,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			// client with a custom one that has an empty Query function
 			// TODO: implement a basic fake query function in test-infra fakegithub library and start unit testing the query path
 			fakeClient := fakeGHClient{gc}
-			if err := handle(&jiraClient, fakeClient, tc.repoOptions, tc.options, logrus.WithField("testCase", tc.name), testEvent, sets.New[string]("org/repo")); err != nil {
+			if err := handle(&jiraClient, fakeClient, &tc.fullConfig, tc.options, logrus.WithField("testCase", tc.name), testEvent, sets.New[string]("org/repo")); err != nil {
 				t.Fatalf("handle failed: %v", err)
 			}
 
