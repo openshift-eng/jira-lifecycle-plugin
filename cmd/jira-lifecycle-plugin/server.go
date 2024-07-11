@@ -2003,7 +2003,6 @@ func handleBackport(e event, gc githubClient, jc jiraclient.Client, repoOptions 
 			versionToBranch[*bOpts.TargetVersion] = branch
 		}
 	}
-	branchesMissingDependents := make(map[string][]string)
 	missingDependencies := sets.New[string]()
 	childBranches := make(map[string][]string)
 	var cherrypickBranches string
@@ -2032,7 +2031,7 @@ func handleBackport(e event, gc githubClient, jc jiraclient.Client, repoOptions 
 			}
 		}
 	}
-	if len(branchesMissingDependents) != 0 {
+	if len(missingDependencies) != 0 {
 		return comment(fmt.Sprintf("Missing required branches for backport chain: %v", missingDependencies.UnsortedList()))
 	}
 	createdIssuesMessageLines := []string{}

@@ -347,7 +347,7 @@ func TestHandle(t *testing.T) {
 		issueCreateErrors          map[string]error
 		issueUpdateErrors          map[string]error
 		options                    JiraBranchOptions
-		repoOptions                map[string]JiraBranchOptions
+		fullConfig                 Config
 		expectedLabels             []string
 		expectedComment            string
 		expectedIssues             []*jira.Issue
@@ -2986,13 +2986,15 @@ Instructions for interacting with me using PR comments are available [here](http
 			backportBranches: []string{"v1", "v2", "v3", "v4"},
 			options:          JiraBranchOptions{TargetVersion: &v5Str},
 			baseRef:          "v5",
-			repoOptions: map[string]JiraBranchOptions{
-				"*":  {ValidateByDefault: &yes},
-				"v1": {TargetVersion: &v1Str, DependentBugTargetVersions: &[]string{v2Str}},
-				"v2": {TargetVersion: &v2Str, DependentBugTargetVersions: &[]string{v3Str}},
-				"v3": {TargetVersion: &v3Str, DependentBugTargetVersions: &[]string{v4Str}},
-				"v4": {TargetVersion: &v4Str, DependentBugTargetVersions: &[]string{v5Str}},
-				"v5": {TargetVersion: &v5Str, DependentBugTargetVersions: nil},
+			fullConfig: Config{
+				Default: map[string]JiraBranchOptions{
+					"*":  {ValidateByDefault: &yes},
+					"v1": {TargetVersion: &v1Str, DependentBugTargetVersions: &[]string{v2Str}},
+					"v2": {TargetVersion: &v2Str, DependentBugTargetVersions: &[]string{v3Str}},
+					"v3": {TargetVersion: &v3Str, DependentBugTargetVersions: &[]string{v4Str}},
+					"v4": {TargetVersion: &v4Str, DependentBugTargetVersions: &[]string{v5Str}},
+					"v5": {TargetVersion: &v5Str, DependentBugTargetVersions: nil},
+				},
 			},
 			expectedComment: `org/repo#1:@user: The following backport issues have been created:
 - [OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) for branch v4
@@ -3087,6 +3089,45 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			}},
 			},
+		}, {
+			name: "Backport with 4 version creates all issues and issue links and adds labels to parent",
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Assignee: &jira.User{Name: "testUser"},
+				Status:   &jira.Status{Name: "MODIFIED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+				},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.TargetVersionField: &v5,
+				},
+			}}},
+			backport:         true,
+			backportBranches: []string{"v1", "v2", "v3", "v4"},
+			options:          JiraBranchOptions{TargetVersion: &v5Str},
+			baseRef:          "v5",
+			fullConfig: Config{
+				Default: map[string]JiraBranchOptions{
+					"*":  {ValidateByDefault: &yes},
+					"v1": {TargetVersion: &v1Str, DependentBugTargetVersions: &[]string{v2Str}},
+					"v2": {TargetVersion: &v2Str, DependentBugTargetVersions: &[]string{v3Str}},
+					"v4": {TargetVersion: &v4Str, DependentBugTargetVersions: &[]string{v5Str}},
+					"v5": {TargetVersion: &v5Str, DependentBugTargetVersions: nil},
+				},
+			},
+			expectedComment: `org/repo#1:@user: Missing required branches for backport chain: [branch with target version ` + "`v3`" + `]
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
 		},
 	}
 
@@ -3158,7 +3199,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			// client with a custom one that has an empty Query function
 			// TODO: implement a basic fake query function in test-infra fakegithub library and start unit testing the query path
 			fakeClient := fakeGHClient{gc}
-			if err := handle(&jiraClient, fakeClient, tc.repoOptions, tc.options, logrus.WithField("testCase", tc.name), testEvent, sets.New[string]("org/repo")); err != nil {
+			if err := handle(&jiraClient, fakeClient, tc.fullConfig.OptionsForRepo("org", "repo"), tc.options, logrus.WithField("testCase", tc.name), testEvent, sets.New[string]("org/repo")); err != nil {
 				t.Fatalf("handle failed: %v", err)
 			}
 
@@ -5359,6 +5400,32 @@ func TestCherryPickCommandMatches(t *testing.T) {
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			got, err := cherryPickCommandMatches(testCase.body)
+			if err == nil && testCase.expectedErr {
+				t.Errorf("expected an error but got none")
+			}
+			if err != nil && !testCase.expectedErr {
+				t.Errorf("expected no error but got: %v", err)
+			}
+			if diff := cmp.Diff(got, testCase.expected); diff != "" {
+				t.Errorf("invalid bug matches: %v", diff)
+			}
+		})
+	}
+}
+
+func TestBackportCommandMatches(t *testing.T) {
+	for _, testCase := range []struct {
+		name        string
+		body        string
+		expected    []string
+		expectedErr bool
+	}{{
+		name:     "Full",
+		body:     "/jira backport release-4.16,release-4.15,release-4.14",
+		expected: []string{"release-4.16", "release-4.15", "release-4.14"},
+	}} {
+		t.Run(testCase.name, func(t *testing.T) {
+			got, err := backportCommandMatches(testCase.body)
 			if err == nil && testCase.expectedErr {
 				t.Errorf("expected an error but got none")
 			}
