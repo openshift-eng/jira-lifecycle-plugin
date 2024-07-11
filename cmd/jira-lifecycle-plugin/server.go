@@ -1997,10 +1997,10 @@ WARNING: Failed to update the target version, assignee, and sprint for the clone
 
 func handleBackport(e event, gc githubClient, jc jiraclient.Client, repoOptions map[string]JiraBranchOptions, log *logrus.Entry) error {
 	comment := e.comment(gc)
-	versionToBranch := map[string]string{}
+	versionToBranch := map[string][]string{}
 	for branch, bOpts := range repoOptions {
 		if bOpts.TargetVersion != nil {
-			versionToBranch[*bOpts.TargetVersion] = branch
+			versionToBranch[*bOpts.TargetVersion] = append(versionToBranch[*bOpts.TargetVersion], branch)
 		}
 	}
 	missingDependencies := sets.New[string]()
@@ -2010,29 +2010,54 @@ func handleBackport(e event, gc githubClient, jc jiraclient.Client, repoOptions 
 	existingBranches := append(e.backportBranches, e.baseRef)
 	sort.Strings(existingBranches)
 	existingBranchesSet := sets.New(existingBranches...)
-	for _, branch := range existingBranches {
-		if branch != e.baseRef {
-			cherrypickBranches += fmt.Sprintf("\n/cherrypick %s", branch)
-		}
+	for _, branch := range e.backportBranches {
+		cherrypickBranches += fmt.Sprintf("\n/cherrypick %s", branch)
 		if _, ok := repoOptions[branch]; !ok {
 			continue
 		}
 		if repoOptions[branch].DependentBugTargetVersions == nil {
 			continue
 		}
+		existingBranchesForTargetVersions := [][]string{}
 		for _, dependent := range *repoOptions[branch].DependentBugTargetVersions {
-			if dependentBranch, ok := versionToBranch[dependent]; !ok {
-				// this is a messy message, but should never occur if the jira options are correctly set up
-				missingDependencies.Insert(fmt.Sprintf("branch with target version `%s`", dependent))
-			} else if !existingBranchesSet.Has(dependentBranch) {
-				missingDependencies.Insert(dependentBranch)
+			if dependentBranches, ok := versionToBranch[dependent]; ok {
+				existingBranchesForTargetVersions = append(existingBranchesForTargetVersions, dependentBranches)
+			}
+		}
+		if len(existingBranchesForTargetVersions) == 0 {
+			missingDependencies.Insert(fmt.Sprintf("branch with one of the following target versions: %v", *repoOptions[branch].DependentBugTargetVersions))
+		}
+		for _, dependentBranches := range existingBranchesForTargetVersions {
+			var branchExists bool
+			for _, dependentBranch := range dependentBranches {
+				if existingBranchesSet.Has(dependentBranch) {
+					branchExists = true
+					break
+				}
+			}
+			if !branchExists {
+				message := dependentBranches[0]
+				if len(dependentBranches) > 0 {
+					for _, dependentBranch := range dependentBranches[1:] {
+						message += " OR " + dependentBranch
+					}
+				}
+				missingDependencies.Insert(message + ", ")
 			} else {
-				childBranches[dependentBranch] = append(childBranches[dependentBranch], branch)
+				for _, dependentBranch := range dependentBranches {
+					childBranches[dependentBranch] = append(childBranches[dependentBranch], branch)
+				}
 			}
 		}
 	}
 	if len(missingDependencies) != 0 {
-		return comment(fmt.Sprintf("Missing required branches for backport chain: %v", missingDependencies.UnsortedList()))
+		message := "Missing required branches for backport chain:\n"
+		errorMsgs := missingDependencies.UnsortedList()
+		sort.Strings(errorMsgs)
+		for _, errorMsg := range errorMsgs {
+			message += "- " + errorMsg + "\n"
+		}
+		return comment(message)
 	}
 	createdIssuesMessageLines := []string{}
 	for _, refIssue := range e.issues {

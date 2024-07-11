@@ -65,6 +65,11 @@ func TestHandle(t *testing.T) {
 	v3Str := "v3"
 	v4Str := "v4"
 	v5Str := "v5"
+	v1zStr := "v1z"
+	v2zStr := "v2z"
+	v3zStr := "v3z"
+	v4zStr := "v4z"
+	v5zStr := "v5z"
 	v1 := []*jira.Version{{Name: v1Str}}
 	v2 := []*jira.Version{{Name: v2Str}}
 	v3 := []*jira.Version{{Name: v3Str}}
@@ -2989,10 +2994,10 @@ Instructions for interacting with me using PR comments are available [here](http
 			fullConfig: Config{
 				Default: map[string]JiraBranchOptions{
 					"*":  {ValidateByDefault: &yes},
-					"v1": {TargetVersion: &v1Str, DependentBugTargetVersions: &[]string{v2Str}},
-					"v2": {TargetVersion: &v2Str, DependentBugTargetVersions: &[]string{v3Str}},
-					"v3": {TargetVersion: &v3Str, DependentBugTargetVersions: &[]string{v4Str}},
-					"v4": {TargetVersion: &v4Str, DependentBugTargetVersions: &[]string{v5Str}},
+					"v1": {TargetVersion: &v1zStr, DependentBugTargetVersions: &[]string{v2Str, v2zStr}},
+					"v2": {TargetVersion: &v2zStr, DependentBugTargetVersions: &[]string{v3Str, v3zStr}},
+					"v3": {TargetVersion: &v3zStr, DependentBugTargetVersions: &[]string{v4Str, v4zStr}},
+					"v4": {TargetVersion: &v4zStr, DependentBugTargetVersions: &[]string{v5Str, v5zStr}},
 					"v5": {TargetVersion: &v5Str, DependentBugTargetVersions: nil},
 				},
 			},
@@ -3043,7 +3048,7 @@ Instructions for interacting with me using PR comments are available [here](http
 					Name: "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
-					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v4Str}},
+					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v4zStr}},
 				},
 			}}, {ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
 				Assignee:    &jira.User{Name: "testUser"},
@@ -3057,7 +3062,7 @@ Instructions for interacting with me using PR comments are available [here](http
 					Name: "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
-					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v3Str}},
+					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v3zStr}},
 				},
 			}}, {ID: "4", Key: "OCPBUGS-126", Fields: &jira.IssueFields{
 				Assignee:    &jira.User{Name: "testUser"},
@@ -3071,7 +3076,7 @@ Instructions for interacting with me using PR comments are available [here](http
 					Name: "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
-					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v2Str}},
+					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v2zStr}},
 				},
 			}}, {ID: "5", Key: "OCPBUGS-127", Fields: &jira.IssueFields{
 				Assignee:    &jira.User{Name: "testUser"},
@@ -3085,12 +3090,12 @@ Instructions for interacting with me using PR comments are available [here](http
 					Name: "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
-					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
+					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1zStr}},
 				},
 			}},
 			},
 		}, {
-			name: "Backport with 4 version creates all issues and issue links and adds labels to parent",
+			name: "Backport with 4 versions missing one version in the config results in missingDependency error",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Assignee: &jira.User{Name: "testUser"},
 				Status:   &jira.Status{Name: "MODIFIED"},
@@ -3111,13 +3116,15 @@ Instructions for interacting with me using PR comments are available [here](http
 			fullConfig: Config{
 				Default: map[string]JiraBranchOptions{
 					"*":  {ValidateByDefault: &yes},
-					"v1": {TargetVersion: &v1Str, DependentBugTargetVersions: &[]string{v2Str}},
-					"v2": {TargetVersion: &v2Str, DependentBugTargetVersions: &[]string{v3Str}},
-					"v4": {TargetVersion: &v4Str, DependentBugTargetVersions: &[]string{v5Str}},
+					"v1": {TargetVersion: &v1Str, DependentBugTargetVersions: &[]string{v2Str, v2zStr}},
+					"v2": {TargetVersion: &v2Str, DependentBugTargetVersions: &[]string{v3Str, v3zStr}},
+					"v4": {TargetVersion: &v4Str, DependentBugTargetVersions: &[]string{v5Str, v5zStr}},
 					"v5": {TargetVersion: &v5Str, DependentBugTargetVersions: nil},
 				},
 			},
-			expectedComment: `org/repo#1:@user: Missing required branches for backport chain: [branch with target version ` + "`v3`" + `]
+			expectedComment: `org/repo#1:@user: Missing required branches for backport chain:
+- branch with one of the following target versions: [` + "v3 v3z" + `]
+
 
 <details>
 
