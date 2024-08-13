@@ -50,6 +50,7 @@ var (
 	existingBackportMatch   = regexp.MustCompile(`jlp-[^:]+:[^:]+`)
 	cherrypickPRMatch       = regexp.MustCompile(`This is an automated cherry-pick of #([0-9]+)`)
 	jiraIssueReferenceMatch = regexp.MustCompile(`([[:alnum:]]+)-([[:digit:]]+)`)
+	bugProjects             = sets.New[string]("OCPBUGS", "DFBUGS")
 )
 
 type referencedIssue struct {
@@ -452,7 +453,7 @@ func handle(jc jiraclient.Client, ghc githubClient, repoOptions map[string]JiraB
 				}
 				if !refIssue.IsBug {
 					// don't linkify the jira ref in this case because the prow-jira plugin will do so and we don't want it to
-					// end up double-linkified.  The prow-jira plugin is configured to not linkify OCPBUGS refs, but it will
+					// end up double-linkified.  The prow-jira plugin should be configured to not linkify bugProjects refs, but it will
 					// linkify refs to other projects.
 					response += fmt.Sprintf("This pull request references %s which is a valid jira issue.", refIssue.Key())
 					if premergeUpdated {
@@ -1128,7 +1129,7 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 		number = ice.Issue.Number
 	)
 
-	// We don't support linking issues to OCPBUGS
+	// We don't support linking issues to bugProjects
 	if !ice.Issue.IsPullRequest() {
 		log.Debug("Jira bug command requested on an issue, ignoring")
 		return nil, gc.CreateComment(org, repo, number, formatResponseRaw(ice.Comment.Body, ice.Comment.HTMLURL, ice.Comment.User.Login, `Jira bug referencing is only supported for Pull Requests, not issues.`, fmt.Sprintf("%s/%s", ice.Repo.Owner.Login, ice.Repo.Name)))
@@ -1189,7 +1190,7 @@ func referencedIssues(matchingText string) []referencedIssue {
 		issues = append(issues, referencedIssue{
 			Project: match[1],
 			ID:      match[2],
-			IsBug:   match[1] == "OCPBUGS",
+			IsBug:   bugProjects.Has(match[1]),
 		})
 	}
 	return issues
@@ -1445,37 +1446,47 @@ func validateBug(bug *jira.Issue, dependents []dependent, options JiraBranchOpti
 	}
 
 	if options.DependentBugStates != nil {
-		for _, bug := range dependents {
-			if !strings.HasPrefix(bug.key, "OCPBUGS-") {
-				continue
+		for _, depBug := range dependents {
+			if bug.Fields != nil {
+				if !strings.HasPrefix(depBug.key, bug.Fields.Project.Key+"-") {
+					continue
+				}
+			} else {
+				// this should never happen
+				errors = append(errors, fmt.Sprintf("unable to identify project for issue %s", depBug.key))
 			}
-			if !bug.bugState.matches(*options.DependentBugStates) {
+			if !depBug.bugState.matches(*options.DependentBugStates) {
 				valid = false
 				expected := strings.Join(prettyStates(*options.DependentBugStates), ", ")
-				actual := PrettyStatus(bug.bugState.Status, bug.bugState.Resolution)
-				errors = append(errors, fmt.Sprintf("expected dependent "+issueLink+" to be in one of the following states: %s, but it is %s instead", bug.key, jiraEndpoint, bug.key, expected, actual))
+				actual := PrettyStatus(depBug.bugState.Status, depBug.bugState.Resolution)
+				errors = append(errors, fmt.Sprintf("expected dependent "+issueLink+" to be in one of the following states: %s, but it is %s instead", depBug.key, jiraEndpoint, depBug.key, expected, actual))
 			} else {
-				validations = append(validations, fmt.Sprintf("dependent bug "+issueLink+" is in the state %s, which is one of the valid states (%s)", bug.key, jiraEndpoint, bug.key, PrettyStatus(bug.bugState.Status, bug.bugState.Resolution), strings.Join(prettyStates(*options.DependentBugStates), ", ")))
+				validations = append(validations, fmt.Sprintf("dependent bug "+issueLink+" is in the state %s, which is one of the valid states (%s)", depBug.key, jiraEndpoint, depBug.key, PrettyStatus(depBug.bugState.Status, depBug.bugState.Resolution), strings.Join(prettyStates(*options.DependentBugStates), ", ")))
 			}
 		}
 	}
 
 	if options.DependentBugTargetVersions != nil {
-		for _, bug := range dependents {
-			if !strings.HasPrefix(bug.key, "OCPBUGS-") {
-				continue
+		for _, depBug := range dependents {
+			if bug.Fields != nil {
+				if !strings.HasPrefix(depBug.key, bug.Fields.Project.Key+"-") {
+					continue
+				}
+			} else {
+				// this should never happen
+				errors = append(errors, fmt.Sprintf("unable to identify project for issue %s", depBug.key))
 			}
-			if bug.targetVersion == nil {
+			if depBug.targetVersion == nil {
 				valid = false
-				errors = append(errors, fmt.Sprintf("expected dependent "+issueLink+" to target a version in %s, but no target version was set", bug.key, jiraEndpoint, bug.key, strings.Join(*options.DependentBugTargetVersions, ", ")))
-			} else if bug.multipleVersions {
+				errors = append(errors, fmt.Sprintf("expected dependent "+issueLink+" to target a version in %s, but no target version was set", depBug.key, jiraEndpoint, depBug.key, strings.Join(*options.DependentBugTargetVersions, ", ")))
+			} else if depBug.multipleVersions {
 				valid = false
-				errors = append(errors, fmt.Sprintf("expected dependent "+issueLink+" to target a version in %s, but it has multiple target versions", bug.key, jiraEndpoint, bug.key, strings.Join(*options.DependentBugTargetVersions, ", ")))
-			} else if sets.NewString(*options.DependentBugTargetVersions...).Has(*bug.targetVersion) {
-				validations = append(validations, fmt.Sprintf("dependent "+issueLink+" targets the %q version, which is one of the valid target versions: %s", bug.key, jiraEndpoint, bug.key, *bug.targetVersion, strings.Join(*options.DependentBugTargetVersions, ", ")))
+				errors = append(errors, fmt.Sprintf("expected dependent "+issueLink+" to target a version in %s, but it has multiple target versions", depBug.key, jiraEndpoint, depBug.key, strings.Join(*options.DependentBugTargetVersions, ", ")))
+			} else if sets.NewString(*options.DependentBugTargetVersions...).Has(*depBug.targetVersion) {
+				validations = append(validations, fmt.Sprintf("dependent "+issueLink+" targets the %q version, which is one of the valid target versions: %s", depBug.key, jiraEndpoint, depBug.key, *depBug.targetVersion, strings.Join(*options.DependentBugTargetVersions, ", ")))
 			} else {
 				valid = false
-				errors = append(errors, fmt.Sprintf("expected dependent "+issueLink+" to target a version in %s, but it targets %q instead", bug.key, jiraEndpoint, bug.key, strings.Join(*options.DependentBugTargetVersions, ", "), *bug.targetVersion))
+				errors = append(errors, fmt.Sprintf("expected dependent "+issueLink+" to target a version in %s, but it targets %q instead", depBug.key, jiraEndpoint, depBug.key, strings.Join(*options.DependentBugTargetVersions, ", "), *depBug.targetVersion))
 			}
 		}
 	}
@@ -1499,11 +1510,16 @@ func validateBug(bug *jira.Issue, dependents []dependent, options JiraBranchOpti
 		validations = append(validations, "bug has dependents")
 	}
 
-	// make sure all dependents are part of OCPBUGS
+	// make sure all dependents are part of the parent bug's project
 	for _, dependent := range dependents {
-		if !strings.HasPrefix(dependent.key, "OCPBUGS-") {
-			valid = false
-			errors = append(validations, fmt.Sprintf("dependent bug %s is not in the required `OCPBUGS` project", dependent.key))
+		if bug.Fields != nil {
+			if !strings.HasPrefix(dependent.key, bug.Fields.Project.Key+"-") {
+				valid = false
+				errors = append(validations, fmt.Sprintf("dependent bug %s is not in the required `%s` project", dependent.key, bug.Fields.Project.Key))
+			}
+		} else {
+			// this should never happen
+			errors = append(errors, fmt.Sprintf("unable to identify project for issue %s", dependent.key))
 		}
 	}
 

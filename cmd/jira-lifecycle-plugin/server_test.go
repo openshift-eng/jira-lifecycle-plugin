@@ -443,7 +443,7 @@ Instructions for interacting with me using PR comments are available [here](http
 		},
 		{
 			name:           "valid bug removes invalid label, adds valid/severity labels and comments",
-			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
+			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraInvalidBug},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
@@ -462,8 +462,31 @@ Instructions for interacting with me using PR comments are available [here](http
 </details>`,
 		},
 		{
+			name:           "valid DFBUGS bug removes invalid label, adds valid/severity labels and comments",
+			issues:         []jira.Issue{{ID: "1", Key: "DFBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "DFBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
+			options:        JiraBranchOptions{}, // no requirements --> always valid
+			labels:         []string{labels.JiraInvalidBug},
+			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
+			overrideEvent: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "DFBUGS", ID: "123", IsBug: true}}, body: "This PR fixes DFBUGS-123", title: "DFBUGS-123: fixed it!", htmlUrl: "https://github.com/org/repo/pull/1", login: "user",
+			},
+			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue DFBUGS-123](https://my-jira.com/browse/DFBUGS-123), which is valid.
+
+<details><summary>No validations were run on this bug</summary></details>
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes DFBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+		},
+		{
 			name:           "invalid bug adds invalid label, removes valid label and comments",
-			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityImportant}}}},
+			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityImportant}}}},
 			options:        JiraBranchOptions{IsOpen: &open},
 			labels:         []string{labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraInvalidBug, labels.SeverityImportant},
@@ -498,7 +521,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`, User: github.User{Login: fakegithub.Bot}}}},
-			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityImportant}}}},
+			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityImportant}}}},
 			options:        JiraBranchOptions{IsOpen: &open},
 			labels:         []string{labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraInvalidBug, labels.SeverityImportant},
@@ -533,7 +556,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`, User: github.User{Login: fakegithub.Bot}}}},
-			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityImportant}}}},
+			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityImportant}}}},
 			options:        JiraBranchOptions{IsOpen: &open},
 			labels:         []string{labels.JiraValidRef, labels.JiraInvalidBug, labels.SeverityImportant},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraInvalidBug, labels.SeverityImportant},
@@ -541,8 +564,8 @@ Instructions for interacting with me using PR comments are available [here](http
 		{
 			name: "one invalid bug and one valid bug adds invalid/severity labels and comments",
 			issues: []jira.Issue{
-				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
-				{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
+				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
+				{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
 			},
 			replaceReferencedBugs: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "OCPBUGS", ID: "124", IsBug: true}},
 			options:               JiraBranchOptions{IsOpen: &open},
@@ -572,8 +595,8 @@ Instructions for interacting with me using PR comments are available [here](http
 		{
 			name: "one valid bug and one invalid bug adds invalid/severity labels and comments",
 			issues: []jira.Issue{
-				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
-				{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
+				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
+				{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
 			},
 			replaceReferencedBugs: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "OCPBUGS", ID: "124", IsBug: true}},
 			options:               JiraBranchOptions{IsOpen: &open},
@@ -603,8 +626,8 @@ Instructions for interacting with me using PR comments are available [here](http
 		{
 			name: "two valid bugs valid/severity labels and comments",
 			issues: []jira.Issue{
-				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
-				{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
+				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
+				{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
 			},
 			replaceReferencedBugs: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "OCPBUGS", ID: "124", IsBug: true}},
 			options:               JiraBranchOptions{IsOpen: &open},
@@ -635,8 +658,8 @@ Instructions for interacting with me using PR comments are available [here](http
 		{
 			name: "two valid bugs with different severities set valid and higher severity labels and comments",
 			issues: []jira.Issue{
-				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
-				{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityImportant}}},
+				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
+				{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityImportant}}},
 			},
 			replaceReferencedBugs: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "OCPBUGS", ID: "124", IsBug: true}},
 			options:               JiraBranchOptions{IsOpen: &open},
@@ -666,7 +689,7 @@ Instructions for interacting with me using PR comments are available [here](http
 		},
 		{
 			name:           "invalid bug adds keeps human-added valid bug label",
-			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityImportant}}}},
+			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityImportant}}}},
 			options:        JiraBranchOptions{IsOpen: &open},
 			humanLabelled:  true,
 			labels:         []string{labels.JiraValidBug, labels.SeverityCritical},
@@ -708,6 +731,7 @@ Instructions for interacting with me using PR comments are available [here](http
 		{
 			name: "valid premerge bug with status update comments and updates status",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Project:         jira.Project{Key: "OCPBUGS"},
 				Unknowns:        tcontainer.MarshalMap{helpers.SeverityField: severityModerate},
 				FixVersions:     []*jira.FixVersion{{Name: "premerge"}},
 				AffectsVersions: []*jira.AffectsVersion{{Name: "premerge"}},
@@ -736,6 +760,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Project:         jira.Project{Key: "OCPBUGS"},
 				Status:          &jira.Status{Name: "UPDATED2"},
 				Unknowns:        tcontainer.MarshalMap{helpers.SeverityField: severityModerate},
 				FixVersions:     []*jira.FixVersion{{Name: "premerge"}},
@@ -744,7 +769,7 @@ Instructions for interacting with me using PR comments are available [here](http
 		},
 		{
 			name:   "valid bug with status update removes invalid label, adds valid label, comments and updates status",
-			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityModerate}}}},
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityModerate}}}},
 			remoteLinks: map[string][]jira.RemoteLink{"OCPBUGS-123": {{ID: 1, Object: &jira.RemoteLinkObject{
 				URL:   "https://github.com/org/repo/pull/1",
 				Title: "org/repo#1: OCPBUGS-123: fixed it!",
@@ -771,6 +796,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Project:  jira.Project{Key: "OCPBUGS"},
 				Status:   &jira.Status{Name: "UPDATED"},
 				Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityModerate},
 			}}},
@@ -778,7 +804,7 @@ Instructions for interacting with me using PR comments are available [here](http
 		{
 			name:                  "valid jira removes invalid label, adds valid label, comments",
 			replaceReferencedBugs: []referencedIssue{{Project: "JIRA", ID: "123", IsBug: false}},
-			issues:                []jira.Issue{{ID: "1", Key: "JIRA-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityModerate}}}},
+			issues:                []jira.Issue{{ID: "1", Key: "JIRA-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "JIRA"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityModerate}}}},
 			labels:                []string{labels.JiraInvalidBug},
 			expectedLabels:        []string{labels.JiraValidRef},
 			expectedComment: `org/repo#1:@user: This pull request references JIRA-123 which is a valid jira issue.
@@ -796,7 +822,7 @@ Instructions for interacting with me using PR comments are available [here](http
 		{
 			name:                  "valid jira with incorrect version removes invalid label, adds valid label,comments",
 			replaceReferencedBugs: []referencedIssue{{Project: "JIRA", ID: "123", IsBug: false}},
-			issues:                []jira.Issue{{ID: "1", Key: "JIRA-123", Fields: &jira.IssueFields{Type: jira.IssueType{Name: "Issue"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityModerate}}}},
+			issues:                []jira.Issue{{ID: "1", Key: "JIRA-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "JIRA"}, Type: jira.IssueType{Name: "Issue"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityModerate}}}},
 			labels:                []string{labels.JiraInvalidBug},
 			expectedLabels:        []string{labels.JiraValidRef},
 			options:               JiraBranchOptions{TargetVersion: &v1Str},
@@ -817,8 +843,8 @@ Instructions for interacting with me using PR comments are available [here](http
 		{
 			name: "valid bug and valid jira ref adds valid/severity labels and comments",
 			issues: []jira.Issue{
-				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
-				{ID: "2", Key: "JIRA-123", Fields: &jira.IssueFields{}},
+				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
+				{ID: "2", Key: "JIRA-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "JIRA"}}},
 			},
 			replaceReferencedBugs: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "JIRA", ID: "123", IsBug: false}},
 			options:               JiraBranchOptions{IsOpen: &open},
@@ -942,7 +968,7 @@ Instructions for interacting with me using PR comments are available [here](http
 		},
 		{
 			name:           "valid bug with status update removes invalid label, adds valid label, comments and updates status with resolution",
-			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityLow}}}},
+			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityLow}}}},
 			options:        JiraBranchOptions{StateAfterValidation: &JiraBugState{Status: "CLOSED", Resolution: "VALIDATED"}}, // no requirements --> always valid
 			labels:         []string{labels.JiraInvalidBug},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityLow},
@@ -960,6 +986,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Project: jira.Project{Key: "OCPBUGS"},
 				Status: &jira.Status{
 					Name: "CLOSED",
 				},
@@ -972,7 +999,7 @@ Instructions for interacting with me using PR comments are available [here](http
 		},
 		{
 			name:           "valid bug with status update removes invalid label, adds valid label, comments and does not update status when it is already correct",
-			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: "UPDATED"}}}},
+			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Status: &jira.Status{Name: "UPDATED"}}}},
 			options:        JiraBranchOptions{StateAfterValidation: &updated}, // no requirements --> always valid
 			labels:         []string{labels.JiraInvalidBug},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug},
@@ -989,7 +1016,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: "UPDATED"}}}},
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Status: &jira.Status{Name: "UPDATED"}}}},
 		},
 		{
 			name:           "valid bug with external link removes invalid label, adds valid label, comments, makes an external bug link",
@@ -1089,6 +1116,7 @@ Instructions for interacting with me using PR comments are available [here](http
 		{
 			name: "valid bug with dependent bugs removes invalid label, adds valid label, comments",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Project:    jira.Project{Key: "OCPBUGS"},
 				Status:     &jira.Status{Name: "VERIFIED"},
 				IssueLinks: []*jira.IssueLink{&cloneLinkTo124, &blocksLinkTo124},
 				Unknowns: tcontainer.MarshalMap{
@@ -1096,6 +1124,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+				Project:    jira.Project{Key: "OCPBUGS"},
 				Status:     &jira.Status{Name: "MODIFIED"},
 				IssueLinks: []*jira.IssueLink{&cloneLinkTo123, &blocksLinkTo123},
 				Unknowns: tcontainer.MarshalMap{
@@ -1133,7 +1162,8 @@ Instructions for interacting with me using PR comments are available [here](http
 			name:   "valid bug on merged PR with one external link migrates to new state with resolution and comments",
 			merged: true,
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
-				Status: &jira.Status{Name: "MODIFIED"},
+				Project: jira.Project{Key: "OCPBUGS"},
+				Status:  &jira.Status{Name: "MODIFIED"},
 			}}},
 			remoteLinks: map[string][]jira.RemoteLink{"OCPBUGS-123": {{ID: 1, Object: &jira.RemoteLinkObject{
 				URL:   "https://github.com/org/repo/pull/1",
@@ -1161,6 +1191,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Project:    jira.Project{Key: "OCPBUGS"},
 				Status:     &jira.Status{Name: "CLOSED"},
 				Resolution: &jira.Resolution{Name: "MERGED"},
 				Unknowns:   tcontainer.MarshalMap{},
@@ -1170,6 +1201,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			name:   "valid premerge bug on merged PR with one external link migrates to new state with resolution and comments",
 			merged: true,
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Project:         jira.Project{Key: "OCPBUGS"},
 				Status:          &jira.Status{Name: "MODIFIED"},
 				FixVersions:     []*jira.FixVersion{{Name: "premerge"}},
 				AffectsVersions: []*jira.AffectsVersion{{Name: "premerge"}},
@@ -1202,6 +1234,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Project:         jira.Project{Key: "OCPBUGS"},
 				Status:          &jira.Status{Name: "UPDATED2"},
 				Resolution:      &jira.Resolution{Name: "MERGED2"},
 				FixVersions:     []*jira.FixVersion{{Name: "premerge"}},
@@ -1213,8 +1246,8 @@ Instructions for interacting with me using PR comments are available [here](http
 			name:   "2 valid bugs on merged PR with one external link migrates to new state with resolution and comments",
 			merged: true,
 			issues: []jira.Issue{
-				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Modified}}},
-				{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Status: &jira.Status{Name: status.Modified}}},
+				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Status: &jira.Status{Name: status.Modified}}},
+				{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Status: &jira.Status{Name: status.Modified}}},
 			},
 			replaceReferencedBugs: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "OCPBUGS", ID: "124", IsBug: true}},
 			remoteLinks: map[string][]jira.RemoteLink{"OCPBUGS-123": {{ID: 1, Object: &jira.RemoteLinkObject{
@@ -1255,10 +1288,12 @@ In response to [this](https://github.com/org/repo/pull/1):
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Project:    jira.Project{Key: "OCPBUGS"},
 				Status:     &jira.Status{Name: "CLOSED"},
 				Resolution: &jira.Resolution{Name: "MERGED"},
 				Unknowns:   tcontainer.MarshalMap{},
 			}}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+				Project:    jira.Project{Key: "OCPBUGS"},
 				Status:     &jira.Status{Name: "CLOSED"},
 				Resolution: &jira.Resolution{Name: "MERGED"},
 				Unknowns:   tcontainer.MarshalMap{},
@@ -1974,6 +2009,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				Labels: []string{"good_label", "bad_label_1", "bad_label_2"},
 				Unknowns: tcontainer.MarshalMap{
@@ -2007,6 +2043,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				Labels:     []string{"good_label"},
 				IssueLinks: []*jira.IssueLink{&cloneOutward1, &blockInward1},
@@ -2027,6 +2064,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      severityCritical,
@@ -2060,6 +2098,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				IssueLinks: []*jira.IssueLink{&cloneOutward1, &blockInward1},
 				Unknowns: tcontainer.MarshalMap{
@@ -2079,6 +2118,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      severityCritical,
@@ -2092,6 +2132,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      severityCritical,
@@ -2127,6 +2168,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				IssueLinks: []*jira.IssueLink{&cloneOutward1, &blockInward1},
 				Unknowns: tcontainer.MarshalMap{
@@ -2142,6 +2184,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				IssueLinks: []*jira.IssueLink{{
 					Type: jira.IssueLinkType{
@@ -2174,6 +2217,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      severityCritical,
@@ -2187,6 +2231,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      severityCritical,
@@ -2232,6 +2277,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				IssueLinks: []*jira.IssueLink{&cloneOutward1, &blockInward1},
 				Unknowns: tcontainer.MarshalMap{
@@ -2247,6 +2293,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				IssueLinks: []*jira.IssueLink{{
 					Type: jira.IssueLinkType{
@@ -2279,6 +2326,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      severityCritical,
@@ -2313,6 +2361,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				IssueLinks: []*jira.IssueLink{&cloneOutward1, &blockInward1},
 				Unknowns: tcontainer.MarshalMap{
@@ -2331,6 +2380,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      severityCritical,
@@ -2344,6 +2394,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      severityCritical,
@@ -2381,6 +2432,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				IssueLinks: []*jira.IssueLink{&cloneOutward1, &blockInward1},
 				Unknowns: tcontainer.MarshalMap{
@@ -2396,6 +2448,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				IssueLinks: []*jira.IssueLink{{
 					Type: jira.IssueLinkType{
@@ -2428,6 +2481,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      severityCritical,
@@ -2464,6 +2518,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				IssueLinks: []*jira.IssueLink{&cloneOutward1, &blockInward1},
 				Unknowns: tcontainer.MarshalMap{
@@ -2551,6 +2606,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      severityCritical,
@@ -2680,6 +2736,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Status:   &jira.Status{Name: "CLOSED"},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      severityCritical,
@@ -2712,6 +2769,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Status:      &jira.Status{Name: "CLOSED"},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				IssueLinks: []*jira.IssueLink{{
 					Type: jira.IssueLinkType{
@@ -2743,6 +2801,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      severityCritical,
@@ -2784,6 +2843,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
@@ -2927,7 +2987,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
-				Status: &jira.Status{Name: "MODIFIED"},
+				Project: jira.Project{Key: "OCPBUGS"},
+				Status:  &jira.Status{Name: "MODIFIED"},
 				IssueLinks: []*jira.IssueLink{{
 					Type: jira.IssueLinkType{
 						Name:    "Blocks",
@@ -2982,6 +3043,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.TargetVersionField: &v5,
@@ -3032,6 +3094,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v5Str}},
@@ -3046,6 +3109,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v4zStr}},
@@ -3060,6 +3124,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v3zStr}},
@@ -3074,6 +3139,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v2zStr}},
@@ -3088,6 +3154,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1zStr}},
@@ -3104,6 +3171,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				}}},
 				Project: jira.Project{
 					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.TargetVersionField: &v5,
@@ -3606,6 +3674,33 @@ func TestDigestPR(t *testing.T) {
 			},
 			expected: &event{
 				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: true, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, title: "OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
+			},
+		},
+		{
+			name: "title referencing DFBUGS bug gets an event",
+			pre: github.PullRequestEvent{
+				Action: github.PullRequestActionOpened,
+				PullRequest: github.PullRequest{
+					Base: github.PullRequestBranch{
+						Repo: github.Repo{
+							Owner: github.User{
+								Login: "org",
+							},
+							Name: "repo",
+						},
+						Ref: "branch",
+					},
+					Number:  1,
+					Title:   "DFBUGS-123: fixed it!",
+					State:   "open",
+					HTMLURL: "http.com",
+					User: github.User{
+						Login: "user",
+					},
+				},
+			},
+			expected: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: true, issues: []referencedIssue{{Project: "DFBUGS", ID: "123", IsBug: true}}, title: "DFBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
 			},
 		},
 		{
@@ -4260,6 +4355,33 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 		},
 		{
+			name: "title referencing DFBUGS bug gets an event",
+			e: github.IssueCommentEvent{
+				Action: github.IssueCommentActionCreated,
+				Issue: github.Issue{
+					Number:      1,
+					PullRequest: &struct{}{},
+				},
+				Comment: github.IssueComment{
+					Body: "/jira refresh",
+					User: github.User{
+						Login: "user",
+					},
+					HTMLURL: "www.com",
+				},
+				Repo: github.Repo{
+					Owner: github.User{
+						Login: "org",
+					},
+					Name: "repo",
+				},
+			},
+			title: "DFBUGS-123: oopsie doopsie",
+			expected: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "DFBUGS", ID: "123", IsBug: true}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+			},
+		},
+		{
 			name: "title referencing multiple bugs gets an event",
 			e: github.IssueCommentEvent{
 				Action: github.IssueCommentActionCreated,
@@ -4627,6 +4749,10 @@ func TestBugKeyFromTitle(t *testing.T) {
 			expectedRefBugs: []referencedIssue{{Project: "OCPBUGS", ID: "12", IsBug: true}},
 		},
 		{
+			title:           "DFBUGS-12: Canonical",
+			expectedRefBugs: []referencedIssue{{Project: "DFBUGS", ID: "12", IsBug: true}},
+		},
+		{
 			title:           "OCPBUGS-12,OCPBUGS-13: Multiple Canonical",
 			expectedRefBugs: []referencedIssue{{Project: "OCPBUGS", ID: "12", IsBug: true}, {Project: "OCPBUGS", ID: "13", IsBug: true}},
 		},
@@ -4886,7 +5012,7 @@ func TestValidateBug(t *testing.T) {
 		},
 		{
 			name:        "not matching dependent bug status requirement means an invalid bug",
-			issue:       &jira.Issue{Fields: &jira.IssueFields{}},
+			issue:       &jira.Issue{Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}}},
 			dependents:  []dependent{{key: "OCPBUGS-124", bugState: JiraBugState{Status: "MODIFIED"}}},
 			options:     JiraBranchOptions{DependentBugStates: &[]JiraBugState{verified}},
 			valid:       false,
@@ -4895,7 +5021,7 @@ func TestValidateBug(t *testing.T) {
 		},
 		{
 			name:        "not matching dependent bug target version requirement means an invalid bug",
-			issue:       &jira.Issue{Fields: &jira.IssueFields{}},
+			issue:       &jira.Issue{Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}}},
 			dependents:  []dependent{{key: "OCPBUGS-124", bugState: JiraBugState{Status: "MODIFIED"}, targetVersion: &twoStr}},
 			options:     JiraBranchOptions{DependentBugTargetVersions: &[]string{oneStr}},
 			valid:       false,
@@ -4904,7 +5030,7 @@ func TestValidateBug(t *testing.T) {
 		},
 		{
 			name:        "not having a dependent bug target version means an invalid bug",
-			issue:       &jira.Issue{Fields: &jira.IssueFields{}},
+			issue:       &jira.Issue{Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}}},
 			dependents:  []dependent{{key: "OCPBUGS-124", bugState: JiraBugState{Status: "MODIFIED"}}},
 			options:     JiraBranchOptions{DependentBugTargetVersions: &[]string{oneStr}},
 			valid:       false,
@@ -4914,7 +5040,8 @@ func TestValidateBug(t *testing.T) {
 		{
 			name: "matching all requirements means a valid bug",
 			issue: &jira.Issue{Fields: &jira.IssueFields{
-				Status: &jira.Status{Name: "MODIFIED"},
+				Project: jira.Project{Key: "OCPBUGS"},
+				Status:  &jira.Status{Name: "MODIFIED"},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.TargetVersionField: &one,
 				},
@@ -4930,8 +5057,28 @@ func TestValidateBug(t *testing.T) {
 			valid: true,
 		},
 		{
+			name: "matching all requirements means a valid bug (DFBUGS)",
+			issue: &jira.Issue{Fields: &jira.IssueFields{
+				Project: jira.Project{Key: "DFBUGS"},
+				Status:  &jira.Status{Name: "MODIFIED"},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.TargetVersionField: &one,
+				},
+			}},
+			dependents: []dependent{{key: "DFBUGS-124", bugState: JiraBugState{Status: "MODIFIED"}, targetVersion: &twoStr}},
+			options:    JiraBranchOptions{IsOpen: &yes, TargetVersion: &oneStr, ValidStates: &[]JiraBugState{modified}, DependentBugStates: &[]JiraBugState{modified}, DependentBugTargetVersions: &[]string{twoStr}},
+			validations: []string{`bug is open, matching expected state (open)`,
+				`bug target version (v1) matches configured target version for branch (v1)`,
+				"bug is in the state MODIFIED, which is one of the valid states (MODIFIED)",
+				"dependent bug [Jira Issue DFBUGS-124](https://my-jira.com/browse/DFBUGS-124) is in the state MODIFIED, which is one of the valid states (MODIFIED)",
+				`dependent [Jira Issue DFBUGS-124](https://my-jira.com/browse/DFBUGS-124) targets the "v2" version, which is one of the valid target versions: v2`,
+				"bug has dependents"},
+			valid: true,
+		},
+		{
 			name: "matching no requirements means an invalid bug",
 			issue: &jira.Issue{Fields: &jira.IssueFields{
+				Project: jira.Project{Key: "OCPBUGS"},
 				Type: jira.IssueType{
 					Name: "Bug",
 				},
@@ -4953,6 +5100,7 @@ func TestValidateBug(t *testing.T) {
 		{
 			name: "matching status means a valid bug when resolution is not required",
 			issue: &jira.Issue{Fields: &jira.IssueFields{
+				Project:    jira.Project{Key: "OCPBUGS"},
 				Status:     &jira.Status{Name: "CLOSED"},
 				Resolution: &jira.Resolution{Name: "LOL_GO_AWAY"},
 			}},
@@ -4963,6 +5111,7 @@ func TestValidateBug(t *testing.T) {
 		{
 			name: "matching just status means an invalid bug when resolution does not match",
 			issue: &jira.Issue{Fields: &jira.IssueFields{
+				Project:    jira.Project{Key: "OCPBUGS"},
 				Status:     &jira.Status{Name: "CLOSED"},
 				Resolution: &jira.Resolution{Name: "LOL_GO_AWAY"},
 			}},
@@ -4975,6 +5124,7 @@ func TestValidateBug(t *testing.T) {
 		{
 			name: "matching status and resolution means a valid bug when both are required",
 			issue: &jira.Issue{Fields: &jira.IssueFields{
+				Project:    jira.Project{Key: "OCPBUGS"},
 				Status:     &jira.Status{Name: "CLOSED"},
 				Resolution: &jira.Resolution{Name: "ERRATA"},
 			}},
@@ -4985,6 +5135,7 @@ func TestValidateBug(t *testing.T) {
 		{
 			name: "matching status and resolution means a valid bug when both are required (case-insensitive)",
 			issue: &jira.Issue{Fields: &jira.IssueFields{
+				Project:    jira.Project{Key: "OCPBUGS"},
 				Status:     &jira.Status{Name: "Closed"},
 				Resolution: &jira.Resolution{Name: "Errata"},
 			}},
@@ -4995,6 +5146,7 @@ func TestValidateBug(t *testing.T) {
 		{
 			name: "matching resolution means a valid bug when status is not required",
 			issue: &jira.Issue{Fields: &jira.IssueFields{
+				Project:    jira.Project{Key: "OCPBUGS"},
 				Status:     &jira.Status{Name: "CLOSED"},
 				Resolution: &jira.Resolution{Name: "ERRATA"},
 			}},
@@ -5005,6 +5157,7 @@ func TestValidateBug(t *testing.T) {
 		{
 			name: "matching just resolution means an invalid bug when status does not match",
 			issue: &jira.Issue{Fields: &jira.IssueFields{
+				Project:    jira.Project{Key: "OCPBUGS"},
 				Status:     &jira.Status{Name: "CLOSED"},
 				Resolution: &jira.Resolution{Name: "ERRATA"},
 			}},
@@ -5017,6 +5170,7 @@ func TestValidateBug(t *testing.T) {
 		{
 			name: "matching status on dependent bug means a valid bug when resolution is not required",
 			issue: &jira.Issue{Fields: &jira.IssueFields{
+				Project:    jira.Project{Key: "OCPBUGS"},
 				Status:     &jira.Status{Name: "CLOSED"},
 				Resolution: &jira.Resolution{Name: "LOL_GO_AWAY"},
 			}},
@@ -5028,6 +5182,7 @@ func TestValidateBug(t *testing.T) {
 		{
 			name: "matching just status on dependent bug means an invalid bug when resolution does not match",
 			issue: &jira.Issue{Fields: &jira.IssueFields{
+				Project:    jira.Project{Key: "OCPBUGS"},
 				Status:     &jira.Status{Name: "CLOSED"},
 				Resolution: &jira.Resolution{Name: "LOL_GO_AWAY"},
 			}},
@@ -5042,6 +5197,7 @@ func TestValidateBug(t *testing.T) {
 		{
 			name: "matching status and resolution on dependent bug means a valid bug when both are required",
 			issue: &jira.Issue{Fields: &jira.IssueFields{
+				Project:    jira.Project{Key: "OCPBUGS"},
 				Status:     &jira.Status{Name: "CLOSED"},
 				Resolution: &jira.Resolution{Name: "ERRATA"},
 			}},
@@ -5065,8 +5221,9 @@ func TestValidateBug(t *testing.T) {
 			validations: []string{"bug is in the state MODIFIED, which is one of the valid states (MODIFIED, VERIFIED)"},
 		},
 		{
-			name: "dependent bug not being in OCPBUGS project results in failure",
+			name: "dependent bug not being in parent project results in failure",
 			issue: &jira.Issue{Fields: &jira.IssueFields{
+				Project:    jira.Project{Key: "OCPBUGS"},
 				Status:     &jira.Status{Name: "CLOSED"},
 				Resolution: &jira.Resolution{Name: "ERRATA"},
 			}},
