@@ -4908,7 +4908,7 @@ func TestValidateBug(t *testing.T) {
 			issue:   &jira.Issue{Fields: &jira.IssueFields{}},
 			options: JiraBranchOptions{RequireReleaseNotes: &yes, ReleaseNotesDefaultText: &oneStr},
 			valid:   false,
-			why:     []string{"release note text must be set and not match the template OR release note type must be set to \"Release Note Not Required\""},
+			why:     []string{"release note text must be set and not match the template OR release note type must be set to \"Release Note Not Required\".  For more information you can reference the [OpenShift Bug Process](https://source.redhat.com/groups/public/openshift/openshift_wiki/openshift_bugzilla_process#doc-text-for-bugs)."},
 		},
 		{
 			name: "release notes matching default text means an invalid bug",
@@ -4919,7 +4919,7 @@ func TestValidateBug(t *testing.T) {
 			}},
 			options: JiraBranchOptions{RequireReleaseNotes: &yes, ReleaseNotesDefaultText: &oneStr},
 			valid:   false,
-			why:     []string{"release note text must be set and not match the template OR release note type must be set to \"Release Note Not Required\""},
+			why:     []string{"release note text must be set and not match the template OR release note type must be set to \"Release Note Not Required\".  For more information you can reference the [OpenShift Bug Process](https://source.redhat.com/groups/public/openshift/openshift_wiki/openshift_bugzilla_process#doc-text-for-bugs)."},
 		},
 		{
 			name:        "no release notes with release notes requirement but release type set to not required means an valid bug",
