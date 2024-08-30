@@ -1431,7 +1431,7 @@ func validateBug(bug *jira.Issue, dependents []dependent, options JiraBranchOpti
 		} else {
 			if (releaseNotes == nil || *releaseNotes == "" || (options.ReleaseNotesDefaultText != nil && *options.ReleaseNotesDefaultText == *releaseNotes)) && (releaseNoteType == nil || releaseNoteType.Value != "Release Note Not Required") {
 				valid = false
-				errors = append(errors, "release note text must be set and not match the template OR release note type must be set to \"Release Note Not Required\"")
+				errors = append(errors, "release note text must be set and not match the template OR release note type must be set to \"Release Note Not Required\".  For more information you can reference the [OpenShift Bug Process](https://source.redhat.com/groups/public/openshift/openshift_wiki/openshift_bugzilla_process#doc-text-for-bugs).")
 			} else {
 				if releaseNotes != nil && *releaseNotes != "" {
 					validations = append(validations, "release note text is set and does not match the template")
