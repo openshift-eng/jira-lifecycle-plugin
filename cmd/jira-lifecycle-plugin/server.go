@@ -532,7 +532,7 @@ func handle(jc jiraclient.Client, ghc githubClient, repoOptions map[string]JiraB
 					}
 				}
 
-				valid, validationsRun, why := validateBug(issue, dependents, branchOptions, jc.JiraURL())
+				valid, passes, fails := validateBug(issue, dependents, branchOptions, jc.JiraURL())
 				if !needsJiraInvalidBugLabel {
 					needsJiraValidBugLabel, needsJiraInvalidBugLabel = valid, !valid
 				}
@@ -558,12 +558,12 @@ func handle(jc jiraclient.Client, ghc githubClient, repoOptions map[string]JiraB
 					}
 
 					response += "\n\n<details>"
-					if len(validationsRun) == 0 {
+					if len(passes) == 0 {
 						response += "<summary>No validations were run on this bug</summary>"
 					} else {
-						response += fmt.Sprintf("<summary>%d validation(s) were run on this bug</summary>\n", len(validationsRun))
+						response += fmt.Sprintf("<summary>%d validation(s) were run on this bug</summary>\n", len(passes))
 					}
-					for _, validation := range validationsRun {
+					for _, validation := range passes {
 						response += fmt.Sprint("\n* ", validation)
 					}
 					response += "</details>"
@@ -596,7 +596,7 @@ func handle(jc jiraclient.Client, ghc githubClient, repoOptions map[string]JiraB
 				} else {
 					log.Debug("Invalid bug found.")
 					var formattedReasons string
-					for _, reason := range why {
+					for _, reason := range fails {
 						formattedReasons += fmt.Sprintf(" - %s\n", reason)
 					}
 					response += fmt.Sprintf(`This pull request references `+issueLink+`, which is invalid:
@@ -1357,8 +1357,8 @@ func prettyStates(statuses []JiraBugState) []string {
 // validateBug determines if the bug matches the options and returns a description of why not
 func validateBug(bug *jira.Issue, dependents []dependent, options JiraBranchOptions, jiraEndpoint string) (bool, []string, []string) {
 	valid := true
-	var errors []string
-	var validations []string
+	var passes []string
+	var fails []string
 	if options.IsOpen != nil && (bug.Fields == nil || bug.Fields.Status == nil || *options.IsOpen != !strings.EqualFold(bug.Fields.Status.Name, status.Closed)) {
 		valid = false
 		not := ""
@@ -1367,7 +1367,7 @@ func validateBug(bug *jira.Issue, dependents []dependent, options JiraBranchOpti
 			not = "not "
 			was = "is"
 		}
-		errors = append(errors, fmt.Sprintf("expected the bug to %sbe open, but it %s", not, was))
+		fails = append(fails, fmt.Sprintf("expected the bug to %sbe open, but it %s", not, was))
 	} else if options.IsOpen != nil {
 		expected := "open"
 		if !*options.IsOpen {
@@ -1377,15 +1377,15 @@ func validateBug(bug *jira.Issue, dependents []dependent, options JiraBranchOpti
 		if !strings.EqualFold(bug.Fields.Status.Name, status.Closed) {
 			was = "is"
 		}
-		validations = append(validations, fmt.Sprintf("bug %s open, matching expected state (%s)", was, expected))
+		passes = append(passes, fmt.Sprintf("bug %s open, matching expected state (%s)", was, expected))
 	}
 
 	if options.TargetVersion != nil {
 		if err := validateTargetVersion(bug, *options.TargetVersion); err != nil {
-			errors = append(errors, err.Error())
+			fails = append(fails, err.Error())
 			valid = false
 		} else {
-			validations = append(validations, fmt.Sprintf("bug target version (%s) matches configured target version for branch (%s)", *options.TargetVersion, *options.TargetVersion))
+			passes = append(passes, fmt.Sprintf("bug target version (%s) matches configured target version for branch (%s)", *options.TargetVersion, *options.TargetVersion))
 		}
 	}
 
@@ -1413,33 +1413,33 @@ func validateBug(bug *jira.Issue, dependents []dependent, options JiraBranchOpti
 		}
 		if !bugMatchesStates(bug, allowed) {
 			valid = false
-			errors = append(errors, fmt.Sprintf("expected the bug to be in one of the following states: %s, but it is %s instead", strings.Join(prettyStates(allowed), ", "), PrettyStatus(status, resolution)))
+			fails = append(fails, fmt.Sprintf("expected the bug to be in one of the following states: %s, but it is %s instead", strings.Join(prettyStates(allowed), ", "), PrettyStatus(status, resolution)))
 		} else {
-			validations = append(validations, fmt.Sprintf("bug is in the state %s, which is one of the valid states (%s)", PrettyStatus(status, resolution), strings.Join(prettyStates(allowed), ", ")))
+			passes = append(passes, fmt.Sprintf("bug is in the state %s, which is one of the valid states (%s)", PrettyStatus(status, resolution), strings.Join(prettyStates(allowed), ", ")))
 		}
 	}
 
 	if options.RequireReleaseNotes != nil && *options.RequireReleaseNotes {
 		releaseNoteType, err := helpers.GetIssueReleaseNoteType(bug)
 		if err != nil {
-			errors = append(errors, err.Error())
+			fails = append(fails, err.Error())
 		}
 		releaseNotes, err := helpers.GetIssueReleaseNoteText(bug)
 		if err != nil {
-			errors = append(errors, err.Error())
+			fails = append(fails, err.Error())
 			valid = false
 		} else {
 			if (releaseNotes == nil || *releaseNotes == "" || (options.ReleaseNotesDefaultText != nil && *options.ReleaseNotesDefaultText == *releaseNotes)) && (releaseNoteType == nil || releaseNoteType.Value != "Release Note Not Required") {
 				valid = false
-				errors = append(errors, "release note text must be set and not match the template OR release note type must be set to \"Release Note Not Required\".  For more information you can reference the [OpenShift Bug Process](https://source.redhat.com/groups/public/openshift/openshift_wiki/openshift_bugzilla_process#doc-text-for-bugs).")
+				fails = append(fails, "release note text must be set and not match the template OR release note type must be set to \"Release Note Not Required\".  For more information you can reference the [OpenShift Bug Process](https://source.redhat.com/groups/public/openshift/openshift_wiki/openshift_bugzilla_process#doc-text-for-bugs).")
 			} else {
 				if releaseNotes != nil && *releaseNotes != "" {
-					validations = append(validations, "release note text is set and does not match the template")
+					passes = append(passes, "release note text is set and does not match the template")
 				} else if releaseNoteType != nil && releaseNoteType.Value == "Release Note Not Required" {
-					validations = append(validations, "release note type set to \"Release Note Not Required\"")
+					passes = append(passes, "release note type set to \"Release Note Not Required\"")
 				} else {
 					// this else shouldn't be triggered, but it should still set the validation in case something was missed or changes above
-					validations = append(validations, "release notes fields are valid")
+					passes = append(passes, "release notes fields are valid")
 				}
 			}
 		}
@@ -1453,15 +1453,15 @@ func validateBug(bug *jira.Issue, dependents []dependent, options JiraBranchOpti
 				}
 			} else {
 				// this should never happen
-				errors = append(errors, fmt.Sprintf("unable to identify project for issue %s", depBug.key))
+				fails = append(fails, fmt.Sprintf("unable to identify project for issue %s", depBug.key))
 			}
 			if !depBug.bugState.matches(*options.DependentBugStates) {
 				valid = false
 				expected := strings.Join(prettyStates(*options.DependentBugStates), ", ")
 				actual := PrettyStatus(depBug.bugState.Status, depBug.bugState.Resolution)
-				errors = append(errors, fmt.Sprintf("expected dependent "+issueLink+" to be in one of the following states: %s, but it is %s instead", depBug.key, jiraEndpoint, depBug.key, expected, actual))
+				fails = append(fails, fmt.Sprintf("expected dependent "+issueLink+" to be in one of the following states: %s, but it is %s instead", depBug.key, jiraEndpoint, depBug.key, expected, actual))
 			} else {
-				validations = append(validations, fmt.Sprintf("dependent bug "+issueLink+" is in the state %s, which is one of the valid states (%s)", depBug.key, jiraEndpoint, depBug.key, PrettyStatus(depBug.bugState.Status, depBug.bugState.Resolution), strings.Join(prettyStates(*options.DependentBugStates), ", ")))
+				passes = append(passes, fmt.Sprintf("dependent bug "+issueLink+" is in the state %s, which is one of the valid states (%s)", depBug.key, jiraEndpoint, depBug.key, PrettyStatus(depBug.bugState.Status, depBug.bugState.Resolution), strings.Join(prettyStates(*options.DependentBugStates), ", ")))
 			}
 		}
 	}
@@ -1474,19 +1474,19 @@ func validateBug(bug *jira.Issue, dependents []dependent, options JiraBranchOpti
 				}
 			} else {
 				// this should never happen
-				errors = append(errors, fmt.Sprintf("unable to identify project for issue %s", depBug.key))
+				fails = append(fails, fmt.Sprintf("unable to identify project for issue %s", depBug.key))
 			}
 			if depBug.targetVersion == nil {
 				valid = false
-				errors = append(errors, fmt.Sprintf("expected dependent "+issueLink+" to target a version in %s, but no target version was set", depBug.key, jiraEndpoint, depBug.key, strings.Join(*options.DependentBugTargetVersions, ", ")))
+				fails = append(fails, fmt.Sprintf("expected dependent "+issueLink+" to target a version in %s, but no target version was set", depBug.key, jiraEndpoint, depBug.key, strings.Join(*options.DependentBugTargetVersions, ", ")))
 			} else if depBug.multipleVersions {
 				valid = false
-				errors = append(errors, fmt.Sprintf("expected dependent "+issueLink+" to target a version in %s, but it has multiple target versions", depBug.key, jiraEndpoint, depBug.key, strings.Join(*options.DependentBugTargetVersions, ", ")))
+				fails = append(fails, fmt.Sprintf("expected dependent "+issueLink+" to target a version in %s, but it has multiple target versions", depBug.key, jiraEndpoint, depBug.key, strings.Join(*options.DependentBugTargetVersions, ", ")))
 			} else if sets.NewString(*options.DependentBugTargetVersions...).Has(*depBug.targetVersion) {
-				validations = append(validations, fmt.Sprintf("dependent "+issueLink+" targets the %q version, which is one of the valid target versions: %s", depBug.key, jiraEndpoint, depBug.key, *depBug.targetVersion, strings.Join(*options.DependentBugTargetVersions, ", ")))
+				passes = append(passes, fmt.Sprintf("dependent "+issueLink+" targets the %q version, which is one of the valid target versions: %s", depBug.key, jiraEndpoint, depBug.key, *depBug.targetVersion, strings.Join(*options.DependentBugTargetVersions, ", ")))
 			} else {
 				valid = false
-				errors = append(errors, fmt.Sprintf("expected dependent "+issueLink+" to target a version in %s, but it targets %q instead", depBug.key, jiraEndpoint, depBug.key, strings.Join(*options.DependentBugTargetVersions, ", "), *depBug.targetVersion))
+				fails = append(fails, fmt.Sprintf("expected dependent "+issueLink+" to target a version in %s, but it targets %q instead", depBug.key, jiraEndpoint, depBug.key, strings.Join(*options.DependentBugTargetVersions, ", "), *depBug.targetVersion))
 			}
 		}
 	}
@@ -1496,18 +1496,18 @@ func validateBug(bug *jira.Issue, dependents []dependent, options JiraBranchOpti
 		case options.DependentBugStates != nil && options.DependentBugTargetVersions != nil:
 			valid = false
 			expected := strings.Join(prettyStates(*options.DependentBugStates), ", ")
-			errors = append(errors, fmt.Sprintf("expected "+issueLink+" to depend on a bug targeting a version in %s and in one of the following states: %s, but no dependents were found", bug.Key, jiraEndpoint, bug.Key, strings.Join(*options.DependentBugTargetVersions, ", "), expected))
+			fails = append(fails, fmt.Sprintf("expected "+issueLink+" to depend on a bug targeting a version in %s and in one of the following states: %s, but no dependents were found", bug.Key, jiraEndpoint, bug.Key, strings.Join(*options.DependentBugTargetVersions, ", "), expected))
 		case options.DependentBugStates != nil:
 			valid = false
 			expected := strings.Join(prettyStates(*options.DependentBugStates), ", ")
-			errors = append(errors, fmt.Sprintf("expected "+issueLink+" to depend on a bug in one of the following states: %s, but no dependents were found", bug.Key, jiraEndpoint, bug.Key, expected))
+			fails = append(fails, fmt.Sprintf("expected "+issueLink+" to depend on a bug in one of the following states: %s, but no dependents were found", bug.Key, jiraEndpoint, bug.Key, expected))
 		case options.DependentBugTargetVersions != nil:
 			valid = false
-			errors = append(errors, fmt.Sprintf("expected "+issueLink+" to depend on a bug targeting a version in %s, but no dependents were found", bug.Key, jiraEndpoint, bug.Key, strings.Join(*options.DependentBugTargetVersions, ", ")))
+			fails = append(fails, fmt.Sprintf("expected "+issueLink+" to depend on a bug targeting a version in %s, but no dependents were found", bug.Key, jiraEndpoint, bug.Key, strings.Join(*options.DependentBugTargetVersions, ", ")))
 		default:
 		}
 	} else {
-		validations = append(validations, "bug has dependents")
+		passes = append(passes, "bug has dependents")
 	}
 
 	// make sure all dependents are part of the parent bug's project
@@ -1515,15 +1515,15 @@ func validateBug(bug *jira.Issue, dependents []dependent, options JiraBranchOpti
 		if bug.Fields != nil {
 			if !strings.HasPrefix(dependent.key, bug.Fields.Project.Key+"-") {
 				valid = false
-				errors = append(validations, fmt.Sprintf("dependent bug %s is not in the required `%s` project", dependent.key, bug.Fields.Project.Key))
+				fails = append(fails, fmt.Sprintf("dependent bug %s is not in the required `%s` project", dependent.key, bug.Fields.Project.Key))
 			}
 		} else {
 			// this should never happen
-			errors = append(errors, fmt.Sprintf("unable to identify project for issue %s", dependent.key))
+			fails = append(fails, fmt.Sprintf("unable to identify project for issue %s", dependent.key))
 		}
 	}
 
-	return valid, validations, errors
+	return valid, passes, fails
 }
 
 func validateTargetVersion(issue *jira.Issue, requiredTargetVersion string) error {
