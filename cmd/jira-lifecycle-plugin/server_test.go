@@ -3017,9 +3017,6 @@ Instructions for interacting with me using PR comments are available [here](http
 			labels:         []string{},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraInvalidBug},
 			expectedComment: `org/repo#2:@user: This pull request references [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124), which is invalid:
- - bug is open, matching expected state (open)
- - bug target version (v1) matches configured target version for branch (v1)
- - bug has dependents
  - dependent bug OCPBUGSM-123 is not in the required ` + "`OCPBUGS`" + ` project
 
 Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jira bug are made, or edit the title of this pull request to link to a different bug.
@@ -5232,7 +5229,6 @@ func TestValidateBug(t *testing.T) {
 			valid:       false,
 			validations: []string{"bug has dependents"},
 			why: []string{
-				"bug has dependents",
 				"dependent bug OCPBUGSM-38676 is not in the required `OCPBUGS` project",
 			},
 		},
