@@ -455,14 +455,25 @@ func handle(jc jiraclient.Client, ghc githubClient, repoOptions map[string]JiraB
 					// don't linkify the jira ref in this case because the prow-jira plugin will do so and we don't want it to
 					// end up double-linkified.  The prow-jira plugin should be configured to not linkify bugProjects refs, but it will
 					// linkify refs to other projects.
-					response += fmt.Sprintf("This pull request references %s which is a valid jira issue.", refIssue.Key())
 					if premergeUpdated {
-						response += fmt.Sprintf(" The bug has been moved to the %s state.", PrettyStatus(branchOptions.PreMergeStateAfterValidation.Status, branchOptions.PreMergeStateAfterValidation.Resolution))
-					}
-					// We still want to notify if the pull request branch and bug target version mismatch
-					if checkTargetVersion(branchOptions) {
-						if err := validateTargetVersion(issue, *branchOptions.TargetVersion); err != nil {
-							response += fmt.Sprintf("\n\nWarning: The referenced jira issue has an invalid target version for the target branch this PR targets: %v.", err)
+						response += fmt.Sprintf(
+							"This pull request references %s. The bug has been moved to the %s state.",
+							refIssue.Key(),
+							PrettyStatus(branchOptions.PreMergeStateAfterValidation.Status, branchOptions.PreMergeStateAfterValidation.Resolution),
+						)
+						// We still want to notify if the pull request branch and bug target version mismatch
+						if checkTargetVersion(branchOptions) {
+							if err := validateTargetVersion(issue, *branchOptions.TargetVersion); err != nil {
+								response += fmt.Sprintf("\n\nWarning: The referenced jira issue has an invalid target version for the target branch this PR targets: %v.", err)
+							}
+						}
+					} else {
+						// We still want to notify if the pull request branch and bug target version mismatch
+						if checkTargetVersion(branchOptions) {
+							if err := validateTargetVersion(issue, *branchOptions.TargetVersion); err != nil {
+								response += fmt.Sprintf("This pull request references %s.", refIssue.Key())
+								response += fmt.Sprintf("\n\nWarning: The referenced jira issue has an invalid target version for the target branch this PR targets: %v.", err)
+							}
 						}
 					}
 				}
@@ -538,7 +549,6 @@ func handle(jc jiraclient.Client, ghc githubClient, repoOptions map[string]JiraB
 				}
 				if valid {
 					log.Debug("Valid bug found.")
-					response += fmt.Sprintf(`This pull request references `+issueLink+`, which is valid.`, refIssue.Key(), jc.JiraURL(), refIssue.Key())
 					// if configured, move the bug to the new state
 					if branchOptions.StateAfterValidation != nil {
 						if branchOptions.StateAfterValidation.Status != "" && (issue.Fields.Status == nil || !strings.EqualFold(branchOptions.StateAfterValidation.Status, issue.Fields.Status.Name)) {
@@ -553,34 +563,26 @@ func handle(jc jiraclient.Client, ghc githubClient, repoOptions map[string]JiraB
 									return comment(formatError(fmt.Sprintf("updating to the %s resolution", branchOptions.StateAfterValidation.Resolution), jc.JiraURL(), refIssue.Key(), err))
 								}
 							}
-							response += fmt.Sprintf(" The bug has been moved to the %s state.", branchOptions.StateAfterValidation)
+							response += fmt.Sprintf(`This pull request references `+issueLink+`. `, refIssue.Key(), jc.JiraURL(), refIssue.Key())
+							response += fmt.Sprintf("The bug has been moved to the %s state.", branchOptions.StateAfterValidation)
+							response += "\n\n<details>"
+							if len(passes) == 0 {
+								response += "<summary>No validations were run on this bug</summary>"
+							} else {
+								response += fmt.Sprintf("<summary>%d validation(s) were run on this bug</summary>\n", len(passes))
+							}
+							for _, validation := range passes {
+								response += fmt.Sprint("\n* ", validation)
+							}
+							response += "</details>"
 						}
 					}
-
-					response += "\n\n<details>"
-					if len(passes) == 0 {
-						response += "<summary>No validations were run on this bug</summary>"
-					} else {
-						response += fmt.Sprintf("<summary>%d validation(s) were run on this bug</summary>\n", len(passes))
-					}
-					for _, validation := range passes {
-						response += fmt.Sprint("\n* ", validation)
-					}
-					response += "</details>"
 
 					qaContactDetail, err := helpers.GetIssueQaContact(issue)
 					if err != nil {
 						return comment(formatError("processing qa contact information for the bug", jc.JiraURL(), refIssue.Key(), err))
 					}
-					if qaContactDetail == nil {
-						if e.cc {
-							response += fmt.Sprintf(issueLink+" does not have a QA contact, skipping assignment", refIssue.Key(), jc.JiraURL(), refIssue.Key())
-						}
-					} else if qaContactDetail.EmailAddress == "" {
-						if e.cc {
-							response += fmt.Sprintf("QA contact for "+issueLink+" does not have a listed email, skipping assignment", refIssue.Key(), jc.JiraURL(), refIssue.Key())
-						}
-					} else {
+					if qaContactDetail != nil && qaContactDetail.EmailAddress != "" {
 						query := &emailToLoginQuery{}
 						email := qaContactDetail.EmailAddress
 						queryVars := map[string]interface{}{
@@ -591,7 +593,6 @@ func handle(jc jiraclient.Client, ghc githubClient, repoOptions map[string]JiraB
 							log.WithError(err).Error("Failed to run graphql github query")
 							return comment(formatError(fmt.Sprintf("querying GitHub for users with public email (%s)", email), jc.JiraURL(), refIssue.Key(), err))
 						}
-						response += fmt.Sprint("\n\n", processQuery(query, email))
 					}
 				} else {
 					log.Debug("Invalid bug found.")
@@ -605,20 +606,16 @@ Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jir
 				}
 
 				if branchOptions.AddExternalLink != nil && *branchOptions.AddExternalLink {
-					changed, err := upsertGitHubLinkToIssue(log, issue.ID, jc, e)
+					_, err := upsertGitHubLinkToIssue(log, issue.ID, jc, e)
 					if err != nil {
 						log.WithError(err).Warn("Unexpected error adding external tracker bug to Jira bug.")
 						return comment(formatError("adding this pull request to the external tracker bugs", jc.JiraURL(), refIssue.Key(), err))
-					}
-					if changed {
-						response += "\n\nThe bug has been updated to refer to the pull request using the external bug tracker."
 					}
 				}
 			}
 		}
 	} else {
 		needsJiraValidRefLabel = true
-		response = "This pull request explicitly references no jira issue."
 	}
 
 	// ensure label state is correct. Do not propagate errors
