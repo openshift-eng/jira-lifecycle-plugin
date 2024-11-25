@@ -1380,6 +1380,16 @@ func validateBug(bug *jira.Issue, dependents []dependent, options JiraBranchOpti
 		passes = append(passes, fmt.Sprintf("bug %s open, matching expected state (%s)", was, expected))
 	}
 
+	// check for Dev and QE approval flags for DFBUGS project
+	if strings.EqualFold(bug.Fields.Project.Key, "DFBUGS") {
+		if err := validateApprovalFlags(bug); err != nil {
+			fails = append(fails, err.Error())
+			valid = false
+		} else {
+			passes = append(passes, "bug has the required flags 'Dev Approval', 'QE Approval' set to 'Committed'")
+		}
+	}
+
 	if options.TargetVersion != nil {
 		if err := validateTargetVersion(bug, *options.TargetVersion); err != nil {
 			fails = append(fails, err.Error())
@@ -1556,6 +1566,28 @@ func validateTargetVersion(issue *jira.Issue, requiredTargetVersion string) erro
 	truncatedPrefixedRequiredTargetVersion := fmt.Sprintf("openshift-%s", truncatedRequiredTargetVersion)
 	if !strings.HasPrefix(targetVersion[0].Name, truncatedRequiredTargetVersion) && !strings.HasPrefix(targetVersion[0].Name, truncatedPrefixedRequiredTargetVersion) {
 		return fmt.Errorf("expected the %s to target either version %q or %q, but it targets %q instead", issueType, fmt.Sprintf("%s.*", truncatedRequiredTargetVersion), fmt.Sprintf("%s.*", truncatedPrefixedRequiredTargetVersion), targetVersion[0].Name)
+	}
+	return nil
+}
+
+func validateApprovalFlags(issue *jira.Issue) error {
+	issueType := ""
+	if issue.Fields != nil {
+		issueType = strings.ToLower(issue.Fields.Type.Name)
+	} else {
+		issueType = "bug"
+	}
+	flags, err := helpers.GetApprovalFlags(issue)
+	if err != nil {
+		return fmt.Errorf("failed to get Dev,QE Approval flags for %s: %v", issueType, err)
+	}
+	if len(flags) < 2 {
+		return fmt.Errorf("expected the %s to have Dev,QE Approval flags, but no flags were set", issueType)
+	}
+	for _, flag := range flags {
+		if !strings.EqualFold(flag, "Committed") {
+			return fmt.Errorf("expected the %s to have Dev,QE Approval flags set to 'Committed', but it has '%s' flag instead", issueType, flag)
+		}
 	}
 	return nil
 }

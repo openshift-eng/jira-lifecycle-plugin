@@ -19,6 +19,8 @@ const (
 	ReleaseNoteTextField  = "customfield_12317313"
 	SprintField           = "customfield_12310940"
 	ReleaseNoteTypeField  = "customfield_12320850"
+	DevApprovalField      = "customfield_12317260"
+	QEApprovalField       = "customfield_12317264"
 )
 
 // GetUnknownField will attempt to get the specified field from the Unknowns struct and unmarshal
@@ -181,4 +183,27 @@ func GetActiveSprintID(sprintField interface{}) (int, error) {
 		}
 	}
 	return -1, nil
+}
+
+func GetApprovalFlags(issue *jira.Issue) ([]string, error) {
+	var fieldValues []string
+	var obj *CustomField
+	isSet, err := GetUnknownField(DevApprovalField, issue, func() interface{} {
+		obj = &CustomField{}
+		return obj
+	})
+	if !isSet {
+		return nil, err
+	}
+	fieldValues = append(fieldValues, obj.Value)
+
+	isSet, err = GetUnknownField(QEApprovalField, issue, func() interface{} {
+		obj = &CustomField{}
+		return obj
+	})
+	if !isSet {
+		return fieldValues, err
+	}
+	fieldValues = append(fieldValues, obj.Value)
+	return fieldValues, nil
 }
