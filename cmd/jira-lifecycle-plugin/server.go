@@ -2335,6 +2335,11 @@ func isBugAllowed(issue *jira.Issue, allowedSecurityLevel []string) (bool, error
 			break
 		}
 	}
+	// This is a special case, for RedHat, to handle the case where a Jira issue has been marked "Restricted"
+	// to allow for contributors from "other" locations the ability to cherrypick, etc.
+	if !found && level.Name == "Restricted" {
+		return checkRHRestrictedIssue(issue, allowedSecurityLevel)
+	}
 	return found, nil
 }
 
@@ -2347,4 +2352,38 @@ func checkTargetVersion(options JiraBranchOptions) bool {
 	default:
 		return false
 	}
+}
+
+// checkRHRestrictedIssue verifies that the "Red Hat Employee" is both:
+//  1. an allowed security level
+//  2. a member of the Contributors group
+//
+// If both of these conditions are true, then allow further processing of the issue.
+// If not, do not process the issue any further.
+func checkRHRestrictedIssue(issue *jira.Issue, allowedSecurityLevel []string) (bool, error) {
+	isRHEmployeeAllowed := false
+	for _, allowed := range allowedSecurityLevel {
+		if allowed == "Red Hat Employee" {
+			isRHEmployeeAllowed = true
+			break
+		}
+	}
+	if isRHEmployeeAllowed {
+		if issue == nil {
+			return false, fmt.Errorf("jira issue is nil")
+		}
+		contributors, err := helpers.GetIssueContributors(issue)
+		if err != nil {
+			return false, err
+		}
+		isContributor := false
+		for _, contributor := range *contributors {
+			if contributor.Name == "Red Hat Employee" {
+				isContributor = true
+				break
+			}
+		}
+		return isContributor, nil
+	}
+	return false, nil
 }

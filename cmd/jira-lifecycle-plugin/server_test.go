@@ -5598,3 +5598,70 @@ func TestBackportCommandMatches(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckRHRestrictedIssue(t *testing.T) {
+	testCases := []struct {
+		name           string
+		bug            *jira.Issue
+		securityLevels []string
+		expected       bool
+		expectedErr    string
+	}{
+		{
+			name:     "no security levels",
+			expected: false,
+		},
+		{
+			name:           "no redhat employee security level",
+			securityLevels: []string{"whoa", "really", "cool"},
+			expected:       false,
+		},
+		{
+			name:           "nil Jira",
+			securityLevels: []string{"Red Hat Employee"},
+			expected:       false,
+			expectedErr:    "jira issue is nil",
+		},
+		{
+			name:           "red hat employee and not a contributor",
+			securityLevels: []string{"Red Hat Employee"},
+			bug: &jira.Issue{
+				Fields: &jira.IssueFields{
+					Unknowns: tcontainer.MarshalMap{
+						helpers.ContributorsField: []map[string]interface{}{
+							{
+								"name": "Group A",
+							},
+						},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name:           "red hat employee and contributor",
+			securityLevels: []string{"Red Hat Employee"},
+			bug: &jira.Issue{
+				Fields: &jira.IssueFields{
+					Unknowns: tcontainer.MarshalMap{
+						helpers.ContributorsField: []map[string]interface{}{
+							{
+								"name": "Red Hat Employee",
+							},
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+	}
+	for _, testCase := range testCases {
+		got, err := checkRHRestrictedIssue(testCase.bug, testCase.securityLevels)
+		if err != nil && err.Error() != testCase.expectedErr {
+			t.Errorf("%s: checkRHRestrictedIssue() returned unexpected error: %v", testCase.name, err)
+		}
+		if got != testCase.expected {
+			t.Errorf("%s: checkRHRestrictedIssue() returned = %v, wanted = %v", testCase.name, got, testCase.expected)
+		}
+	}
+}

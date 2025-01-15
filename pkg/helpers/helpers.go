@@ -19,6 +19,7 @@ const (
 	ReleaseNoteTextField  = "customfield_12317313"
 	SprintField           = "customfield_12310940"
 	ReleaseNoteTypeField  = "customfield_12320850"
+	ContributorsField     = "customfield_12319640"
 )
 
 // GetUnknownField will attempt to get the specified field from the Unknowns struct and unmarshal
@@ -181,4 +182,21 @@ func GetActiveSprintID(sprintField interface{}) (int, error) {
 		}
 	}
 	return -1, nil
+}
+
+type Contributor struct {
+	Self string `json:"self"`
+	Name string `json:"name"`
+}
+
+func GetIssueContributors(issue *jira.Issue) (*[]Contributor, error) {
+	var obj *[]Contributor
+	isSet, err := GetUnknownField(ContributorsField, issue, func() interface{} {
+		obj = &[]Contributor{}
+		return obj
+	})
+	if !isSet {
+		return nil, err
+	}
+	return obj, err
 }
