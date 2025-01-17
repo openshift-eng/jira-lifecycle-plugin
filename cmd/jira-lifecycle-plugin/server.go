@@ -1550,7 +1550,7 @@ func validateTargetVersion(issue *jira.Issue, requiredTargetVersion string) erro
 	// TODO: Remove this truncated version check...
 	truncatedRequiredTargetVersion := requiredTargetVersion
 	pieces := strings.Split(requiredTargetVersion, ".")
-	if len(pieces) >= 2 {
+	if issue.Fields.Project.Key != "DFBUGS" && len(pieces) >= 2 {
 		truncatedRequiredTargetVersion = fmt.Sprintf("%s.%s", pieces[0], pieces[1])
 	}
 	truncatedPrefixedRequiredTargetVersion := fmt.Sprintf("openshift-%s", truncatedRequiredTargetVersion)
