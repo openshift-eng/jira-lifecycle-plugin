@@ -4842,6 +4842,9 @@ func TestValidateBug(t *testing.T) {
 	oneStr, twoStr, threeStr := "v1", "v2", "v3"
 	one := []*jira.Version{{Name: "v1"}}
 	two := []*jira.Version{{Name: "v2"}}
+	dfbugsOne := []*jira.Version{{Name: "odf-v1.1.z"}}
+	dfbugsTwo := []*jira.Version{{Name: "odf-v1.1.1"}}
+	dfbugsOneStr := "odf-v1.1.1"
 	three := []*jira.Version{{Name: "openshift-v3"}}
 	verified := JiraBugState{Status: "VERIFIED"}
 	modified := JiraBugState{Status: "MODIFIED"}
@@ -5070,6 +5073,41 @@ func TestValidateBug(t *testing.T) {
 				"dependent bug [Jira Issue DFBUGS-124](https://my-jira.com/browse/DFBUGS-124) is in the state MODIFIED, which is one of the valid states (MODIFIED)",
 				`dependent [Jira Issue DFBUGS-124](https://my-jira.com/browse/DFBUGS-124) targets the "v2" version, which is one of the valid target versions: v2`,
 				"bug has dependents"},
+			valid: true,
+		},
+		{
+			name: "not matching all requirements for z-stream means an invalid bug (DFBUGS)",
+			issue: &jira.Issue{Fields: &jira.IssueFields{
+				Project: jira.Project{Key: "DFBUGS"},
+				Type: jira.IssueType{
+					Name: "Bug",
+				},
+				Status: &jira.Status{Name: "MODIFIED"},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.TargetVersionField: &dfbugsOne,
+				},
+			}},
+			options: JiraBranchOptions{IsOpen: &yes, TargetVersion: &dfbugsOneStr, ValidStates: &[]JiraBugState{modified}},
+			validations: []string{`bug is open, matching expected state (open)`,
+				"bug is in the state MODIFIED, which is one of the valid states (MODIFIED)",
+			},
+			why:   []string{"expected the bug to target either version \"odf-v1.1.1.*\" or \"openshift-odf-v1.1.1.*\", but it targets \"odf-v1.1.z\" instead"},
+			valid: false,
+		},
+		{
+			name: "matching all requirements for z-stream means a valid bug (DFBUGS)",
+			issue: &jira.Issue{Fields: &jira.IssueFields{
+				Project: jira.Project{Key: "DFBUGS"},
+				Status:  &jira.Status{Name: "MODIFIED"},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.TargetVersionField: &dfbugsTwo,
+				},
+			}},
+			options: JiraBranchOptions{IsOpen: &yes, TargetVersion: &dfbugsOneStr, ValidStates: &[]JiraBugState{modified}},
+			validations: []string{`bug is open, matching expected state (open)`,
+				`bug target version (odf-v1.1.1) matches configured target version for branch (odf-v1.1.1)`,
+				"bug is in the state MODIFIED, which is one of the valid states (MODIFIED)",
+			},
 			valid: true,
 		},
 		{
