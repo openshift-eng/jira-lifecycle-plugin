@@ -10,4 +10,6 @@ const (
 	Verified       = "VERIFIED"
 	ReleasePending = "RELEASE PENDING"
 	Closed         = "CLOSED"
+	Refinement     = "REFINEMENT"
+	InProgress     = "IN PROGRESS"
 )
