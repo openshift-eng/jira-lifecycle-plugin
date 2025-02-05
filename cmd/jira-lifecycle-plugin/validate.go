@@ -84,4 +84,6 @@ var validStatusSet = sets.NewString(status.Assigned,
 	status.OnQA,
 	status.Post,
 	status.ReleasePending,
-	status.Verified)
+	status.Verified,
+	status.Refinement,
+	status.InProgress)
