@@ -10,14 +10,14 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	prowconfig "sigs.k8s.io/prow/prow/config"
-	"sigs.k8s.io/prow/prow/config/secret"
-	prowflagutil "sigs.k8s.io/prow/prow/flagutil"
-	configflagutil "sigs.k8s.io/prow/prow/flagutil/config"
-	"sigs.k8s.io/prow/prow/githubeventserver"
-	"sigs.k8s.io/prow/prow/interrupts"
-	"sigs.k8s.io/prow/prow/logrusutil"
-	"sigs.k8s.io/prow/prow/pjutil"
+	prowconfig "sigs.k8s.io/prow/pkg/config"
+	"sigs.k8s.io/prow/pkg/config/secret"
+	prowflagutil "sigs.k8s.io/prow/pkg/flagutil"
+	configflagutil "sigs.k8s.io/prow/pkg/flagutil/config"
+	"sigs.k8s.io/prow/pkg/githubeventserver"
+	"sigs.k8s.io/prow/pkg/interrupts"
+	"sigs.k8s.io/prow/pkg/logrusutil"
+	"sigs.k8s.io/prow/pkg/pjutil"
 	"sigs.k8s.io/yaml"
 )
 

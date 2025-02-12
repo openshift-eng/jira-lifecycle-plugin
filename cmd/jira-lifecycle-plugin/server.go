@@ -18,12 +18,12 @@ import (
 	"github.com/trivago/tgo/tcontainer"
 
 	"k8s.io/apimachinery/pkg/util/sets"
-	"sigs.k8s.io/prow/prow/config"
-	prowconfig "sigs.k8s.io/prow/prow/config"
-	"sigs.k8s.io/prow/prow/github"
-	jiraclient "sigs.k8s.io/prow/prow/jira"
-	"sigs.k8s.io/prow/prow/pluginhelp"
-	"sigs.k8s.io/prow/prow/plugins"
+	"sigs.k8s.io/prow/pkg/config"
+	prowconfig "sigs.k8s.io/prow/pkg/config"
+	"sigs.k8s.io/prow/pkg/github"
+	jiraclient "sigs.k8s.io/prow/pkg/jira"
+	"sigs.k8s.io/prow/pkg/pluginhelp"
+	"sigs.k8s.io/prow/pkg/plugins"
 
 	"github.com/openshift-eng/jira-lifecycle-plugin/pkg/helpers"
 	"github.com/openshift-eng/jira-lifecycle-plugin/pkg/labels"

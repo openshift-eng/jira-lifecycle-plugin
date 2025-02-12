@@ -17,13 +17,13 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/yaml"
 
-	prowconfig "sigs.k8s.io/prow/prow/config"
-	cherrypicker "sigs.k8s.io/prow/prow/external-plugins/cherrypicker/lib"
-	"sigs.k8s.io/prow/prow/github"
-	"sigs.k8s.io/prow/prow/github/fakegithub"
-	jiraclient "sigs.k8s.io/prow/prow/jira"
-	"sigs.k8s.io/prow/prow/jira/fakejira"
-	"sigs.k8s.io/prow/prow/pluginhelp"
+	cherrypicker "sigs.k8s.io/prow/cmd/external-plugins/cherrypicker/lib"
+	prowconfig "sigs.k8s.io/prow/pkg/config"
+	"sigs.k8s.io/prow/pkg/github"
+	"sigs.k8s.io/prow/pkg/github/fakegithub"
+	jiraclient "sigs.k8s.io/prow/pkg/jira"
+	"sigs.k8s.io/prow/pkg/jira/fakejira"
+	"sigs.k8s.io/prow/pkg/pluginhelp"
 )
 
 var allowEventAndDate = cmp.AllowUnexported(event{}, jira.Date{})
@@ -5381,7 +5381,7 @@ func TestGetCherrypickPRMatch(t *testing.T) {
 	}
 	for _, testCase := range testCases {
 		testPR := *pr
-		testPR.PullRequest.Body = cherrypicker.CreateCherrypickBody(prNum, testCase.requestor, testCase.note)
+		testPR.PullRequest.Body = cherrypicker.CreateCherrypickBody(prNum, testCase.requestor, testCase.note, nil)
 		cherrypick, cherrypickOfPRNum, err := getCherryPickMatch(testPR)
 		if err != nil {
 			t.Fatalf("%s: Got error but did not expect one: %v", testCase.name, err)
