@@ -134,7 +134,7 @@ type JiraBranchOptions struct {
 	IgnoreCloneLabels []string `json:"ignore_clone_labels,omitempty"`
 }
 
-type JiraBugStateSet map[JiraBugState]interface{}
+type JiraBugStateSet map[JiraBugState]any
 
 func NewJiraBugStateSet(states []JiraBugState) JiraBugStateSet {
 	set := make(JiraBugStateSet, len(states))

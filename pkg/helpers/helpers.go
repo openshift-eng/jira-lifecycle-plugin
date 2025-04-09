@@ -25,7 +25,7 @@ const (
 // GetUnknownField will attempt to get the specified field from the Unknowns struct and unmarshal
 // the value into the provided function. If the field is not set, the first return value of this
 // function will return false.
-func GetUnknownField(field string, issue *jira.Issue, fn func() interface{}) (bool, error) {
+func GetUnknownField(field string, issue *jira.Issue, fn func() any) (bool, error) {
 	obj := fn()
 	if issue.Fields == nil || issue.Fields.Unknowns == nil {
 		return false, nil
@@ -46,7 +46,7 @@ func GetUnknownField(field string, issue *jira.Issue, fn func() interface{}) (bo
 
 // GetSprintField returns a raw interface for the Sprint value of an issue if it exists. Currently, the value
 // is only used during cloning, so no struct is currently needed for us to parse data from the interface.
-func GetSprintField(issue *jira.Issue) interface{} {
+func GetSprintField(issue *jira.Issue) any {
 	if issue.Fields == nil || issue.Fields.Unknowns == nil {
 		return nil
 	}
@@ -65,7 +65,7 @@ func GetIssueSecurityLevel(issue *jira.Issue) (*SecurityLevel, error) {
 	// as part of the issue fields
 	// See https://github.com/andygrunwald/go-jira/issues/456
 	var obj *SecurityLevel
-	isSet, err := GetUnknownField("security", issue, func() interface{} {
+	isSet, err := GetUnknownField("security", issue, func() any {
 		obj = &SecurityLevel{}
 		return obj
 	})
@@ -84,7 +84,7 @@ type SecurityLevel struct {
 
 func GetIssueQaContact(issue *jira.Issue) (*jira.User, error) {
 	var obj *jira.User
-	isSet, err := GetUnknownField(QAContactField, issue, func() interface{} {
+	isSet, err := GetUnknownField(QAContactField, issue, func() any {
 		obj = &jira.User{}
 		return obj
 	})
@@ -96,14 +96,14 @@ func GetIssueQaContact(issue *jira.Issue) (*jira.User, error) {
 
 func GetIssueTargetVersion(issue *jira.Issue) ([]*jira.Version, error) {
 	var obj *[]*jira.Version
-	isSet, err := GetUnknownField(TargetVersionField, issue, func() interface{} {
+	isSet, err := GetUnknownField(TargetVersionField, issue, func() any {
 		obj = &[]*jira.Version{{}}
 		return obj
 	})
 	if isSet && obj != nil && *obj != nil {
 		return *obj, err
 	}
-	isSet, err = GetUnknownField(TargetVersionFieldOld, issue, func() interface{} {
+	isSet, err = GetUnknownField(TargetVersionFieldOld, issue, func() any {
 		obj = &[]*jira.Version{{}}
 		return obj
 	})
@@ -115,7 +115,7 @@ func GetIssueTargetVersion(issue *jira.Issue) ([]*jira.Version, error) {
 
 func GetIssueSeverity(issue *jira.Issue) (*CustomField, error) {
 	var obj *CustomField
-	isSet, err := GetUnknownField(SeverityField, issue, func() interface{} {
+	isSet, err := GetUnknownField(SeverityField, issue, func() any {
 		obj = &CustomField{}
 		return obj
 	})
@@ -134,7 +134,7 @@ type CustomField struct {
 
 func GetIssueReleaseNoteText(issue *jira.Issue) (*string, error) {
 	var obj *string
-	isSet, err := GetUnknownField(ReleaseNoteTextField, issue, func() interface{} {
+	isSet, err := GetUnknownField(ReleaseNoteTextField, issue, func() any {
 		var field string
 		obj = &field
 		return obj
@@ -147,7 +147,7 @@ func GetIssueReleaseNoteText(issue *jira.Issue) (*string, error) {
 
 func GetIssueReleaseNoteType(issue *jira.Issue) (*CustomField, error) {
 	var obj *CustomField
-	isSet, err := GetUnknownField(ReleaseNoteTypeField, issue, func() interface{} {
+	isSet, err := GetUnknownField(ReleaseNoteTypeField, issue, func() any {
 		obj = &CustomField{}
 		return obj
 	})
@@ -160,11 +160,11 @@ func GetIssueReleaseNoteType(issue *jira.Issue) (*CustomField, error) {
 var activeSprintReg = regexp.MustCompile(",state=ACTIVE,")
 var sprintIDReg = regexp.MustCompile("id=([0-9]+)")
 
-func GetActiveSprintID(sprintField interface{}) (int, error) {
+func GetActiveSprintID(sprintField any) (int, error) {
 	if sprintField == nil {
 		return -1, nil
 	}
-	sprintFieldSlice, ok := sprintField.([]interface{})
+	sprintFieldSlice, ok := sprintField.([]any)
 	if !ok {
 		return -1, errors.New("failed to convert sprint field to slice of interfaces")
 	}
@@ -191,7 +191,7 @@ type Contributor struct {
 
 func GetIssueContributors(issue *jira.Issue) (*[]Contributor, error) {
 	var obj *[]Contributor
-	isSet, err := GetUnknownField(ContributorsField, issue, func() interface{} {
+	isSet, err := GetUnknownField(ContributorsField, issue, func() any {
 		obj = &[]Contributor{}
 		return obj
 	})

@@ -334,7 +334,7 @@ type githubClient interface {
 	AddLabel(owner, repo string, number int, label string) error
 	RemoveLabel(owner, repo string, number int, label string) error
 	WasLabelAddedByHuman(org, repo string, num int, label string) (bool, error)
-	QueryWithGitHubAppsSupport(ctx context.Context, q interface{}, vars map[string]interface{}, org string) error
+	QueryWithGitHubAppsSupport(ctx context.Context, q any, vars map[string]any, org string) error
 	BotUserChecker() (func(candidate string) bool, error)
 }
 
@@ -585,7 +585,7 @@ func handle(jc jiraclient.Client, ghc githubClient, repoOptions map[string]JiraB
 					} else {
 						query := &emailToLoginQuery{}
 						email := qaContactDetail.EmailAddress
-						queryVars := map[string]interface{}{
+						queryVars := map[string]any{
 							"email": githubql.String(email),
 						}
 						err := ghc.QueryWithGitHubAppsSupport(context.Background(), query, queryVars, e.org)
@@ -1955,7 +1955,7 @@ func createCherryPickBug(jc jiraclient.Client, bug *jira.Issue, branch string, o
 	}
 	response := fmt.Sprintf("%s has been cloned as %s. Will retitle bug to link to clone.", oldLink, cloneLink)
 	// jira has automation to set the assignee to a default based on component; we wait up to 1 minute to avoid a race
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		if issue, err := jc.GetIssue(clone.Key); err == nil && issue.Fields.Assignee != nil && issue.Fields.Assignee.Name != "" {
 			break
 		}
@@ -2047,11 +2047,8 @@ func handleBackport(e event, gc githubClient, jc jiraclient.Client, repoOptions 
 		}
 		for _, dependentBranches := range existingBranchesForTargetVersions {
 			var branchExists bool
-			for _, dependentBranch := range dependentBranches {
-				if existingBranchesSet.Has(dependentBranch) {
-					branchExists = true
-					break
-				}
+			if slices.ContainsFunc(dependentBranches, existingBranchesSet.Has) {
+				branchExists = true
 			}
 			if !branchExists {
 				message := dependentBranches[0]
@@ -2144,9 +2141,7 @@ func createLinkedJiras(jc jiraclient.Client, parentIssue *jira.Issue, parentBran
 		if err != nil {
 			return nil, err
 		}
-		for key, branch := range childIssues {
-			createdIssues[key] = branch
-		}
+		maps.Copy(createdIssues, childIssues)
 	}
 	log.Infof("Created issues: %+v", createdIssues)
 	return createdIssues, nil
@@ -2330,13 +2325,7 @@ func isBugAllowed(issue *jira.Issue, allowedSecurityLevel []string) (bool, error
 		// default security level is empty; make a temporary "default" security level for this check
 		level = &helpers.SecurityLevel{Name: "default"}
 	}
-	found := false
-	for _, allowed := range allowedSecurityLevel {
-		if level.Name == allowed {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(allowedSecurityLevel, level.Name)
 	// This is a special case, for RedHat, to handle the case where a Jira issue has been marked "Restricted"
 	// to allow for contributors from "other" locations the ability to cherrypick, etc.
 	if !found && level.Name == "Restricted" {
@@ -2363,13 +2352,7 @@ func checkTargetVersion(options JiraBranchOptions) bool {
 // If both of these conditions are true, then allow further processing of the issue.
 // If not, do not process the issue any further.
 func checkRHRestrictedIssue(issue *jira.Issue, allowedSecurityLevel []string) (bool, error) {
-	isRHEmployeeAllowed := false
-	for _, allowed := range allowedSecurityLevel {
-		if allowed == "Red Hat Employee" {
-			isRHEmployeeAllowed = true
-			break
-		}
-	}
+	isRHEmployeeAllowed := slices.Contains(allowedSecurityLevel, "Red Hat Employee")
 	if isRHEmployeeAllowed {
 		if issue == nil {
 			return false, fmt.Errorf("jira issue is nil")

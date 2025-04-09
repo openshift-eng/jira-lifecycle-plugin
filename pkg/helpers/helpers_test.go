@@ -14,18 +14,18 @@ func TestGetActiveSprintIDs(t *testing.T) {
 	closed2 := "com.atlassian.greenhopper.service.sprint.Sprint@21c6823a[id=57540,rapidViewId=5254,state=CLOSED,name=SDN Sprint 247,startDate=2023-12-25T08:00:00.000Z,endDate=2024-01-13T08:00:00.000Z,completeDate=2024-01-15T10:54:35.488Z,activatedDate=2024-01-08T11:20:24.310Z,sequence=57540,goal=,autoStartStop=false,synced=false]"
 	var testCases = []struct {
 		name     string
-		issue    interface{}
+		issue    any
 		expected int
 	}{{
 		name:     "Empty",
 		expected: -1,
 	}, {
 		name:     "One active, one closed",
-		issue:    []interface{}{closed1, active1},
+		issue:    []any{closed1, active1},
 		expected: 57955,
 	}, {
 		name:     "Two closed",
-		issue:    []interface{}{closed1, closed2},
+		issue:    []any{closed1, closed2},
 		expected: -1,
 	}}
 	for _, tc := range testCases {
