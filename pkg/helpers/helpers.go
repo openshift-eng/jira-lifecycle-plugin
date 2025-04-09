@@ -175,7 +175,7 @@ func GetActiveSprintID(sprintField interface{}) (int, error) {
 				sprintID, err := strconv.Atoi(submatch[1])
 				if err != nil {
 					// should be impossible based on the regex
-					return -1, fmt.Errorf("Failed to parse sprint ID. Err: %w", err)
+					return -1, fmt.Errorf("failed to parse sprint ID. Err: %w", err)
 				}
 				return sprintID, nil
 			}

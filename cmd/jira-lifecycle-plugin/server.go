@@ -19,11 +19,13 @@ import (
 
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/prow/pkg/config"
-	prowconfig "sigs.k8s.io/prow/pkg/config"
 	"sigs.k8s.io/prow/pkg/github"
 	jiraclient "sigs.k8s.io/prow/pkg/jira"
 	"sigs.k8s.io/prow/pkg/pluginhelp"
 	"sigs.k8s.io/prow/pkg/plugins"
+
+	"maps"
+	"slices"
 
 	"github.com/openshift-eng/jira-lifecycle-plugin/pkg/helpers"
 	"github.com/openshift-eng/jira-lifecycle-plugin/pkg/labels"
@@ -73,7 +75,7 @@ type dependent struct {
 type server struct {
 	config func() *Config
 
-	prowConfigAgent *prowconfig.Agent
+	prowConfigAgent *config.Agent
 	ghc             githubClient
 	jc              jiraclient.Client
 }
@@ -790,7 +792,7 @@ To reference a jira issue, add 'XYZ-NNN:' to the title of this pull request and 
 func getSimplifiedSeverity(issue *jira.Issue) (string, error) {
 	severity, err := helpers.GetIssueSeverity(issue)
 	if err != nil {
-		return "", fmt.Errorf("Failed to get severity of issue %s", issue.Key)
+		return "", fmt.Errorf("failed to get severity of issue %s", issue.Key)
 	}
 	if severity == nil {
 		return "unset", nil
@@ -1002,7 +1004,7 @@ func getCherryPickMatch(pre github.PullRequestEvent) (bool, int, error) {
 		cherrypickOf, err := strconv.Atoi(cherrypickMatch[1])
 		if err != nil {
 			// should be impossible based on the regex
-			return false, 0, fmt.Errorf("Failed to parse cherrypick jira issue - is the regex correct? Err: %w", err)
+			return false, 0, fmt.Errorf("failed to parse cherrypick jira issue - is the regex correct? Err: %w", err)
 		}
 		return true, cherrypickOf, nil
 	}
@@ -1623,7 +1625,7 @@ func handleMerge(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 				// this is not a github link
 				continue
 			}
-			if len(parts) != 4 && !(len(parts) == 5 && (parts[4] == "" || parts[4] == "files")) && !(len(parts) == 6 && ((parts[4] == "files" && parts[5] == "") || parts[4] == "commits")) {
+			if len(parts) != 4 && (len(parts) != 5 || parts[4] != "" && parts[4] != "files") && (len(parts) != 6 || ((parts[4] != "files" || parts[5] != "") && parts[4] != "commits")) {
 				log.WithError(err).Warn("Unexpected error splitting github URL for Jira external link.")
 				msg += formatError(fmt.Sprintf("invalid pull identifier with %d parts: %q", len(parts), identifier), jc.JiraURL(), refIssue.Key(), err)
 				continue

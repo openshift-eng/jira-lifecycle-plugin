@@ -68,7 +68,7 @@ func TestValidateConfig(t *testing.T) {
     - status: ASSIGNED
     - status: ON_DEV
     - status: POST`,
-		expected: errors.New(`Failed to read config: error unmarshaling JSON: while decoding JSON: json: unknown field "valid_states_INVALID_CONFIG"`),
+		expected: errors.New(`failed to read config: error unmarshaling JSON: while decoding JSON: json: unknown field "valid_states_INVALID_CONFIG"`),
 	}}
 	for _, tc := range testCases {
 		err := validateConfig([]byte(tc.config))
@@ -154,7 +154,7 @@ func TestValidateStatuses(t *testing.T) {
 			},
 		},
 		expectedErr: []string{
-			"Invalid statuses in `default`: my-branch has invalid status for `state_after_close`: `CLOSER`",
+			"invalid statuses in `default`: my-branch has invalid status for `state_after_close`: `CLOSER`",
 		},
 	}, {
 		name: "Invalid state in org default",
@@ -189,7 +189,7 @@ func TestValidateStatuses(t *testing.T) {
 			},
 		},
 		expectedErr: []string{
-			"Invalid statuses in `org1/default`: my-branch has invalid status for `state_after_close`: `CLOSER`",
+			"invalid statuses in `org1/default`: my-branch has invalid status for `state_after_close`: `CLOSER`",
 		},
 	}, {
 		name: "Invalid state in repo branch",
@@ -224,7 +224,7 @@ func TestValidateStatuses(t *testing.T) {
 			},
 		},
 		expectedErr: []string{
-			"Invalid statuses in `org1/my-repo`: my-branch has invalid status for `state_after_close`: `CLOSER`",
+			"invalid statuses in `org1/my-repo`: my-branch has invalid status for `state_after_close`: `CLOSER`",
 		},
 	}, {
 		name: "Multiple errors all reported",
@@ -259,10 +259,10 @@ func TestValidateStatuses(t *testing.T) {
 			},
 		},
 		expectedErr: []string{
-			"Invalid statuses in `default`: my-branch has invalid status for `state_after_close`: `HELLO`",
-			"Invalid statuses in `org1/default`: my-branch has invalid status for `state_after_close`: `WORLD`",
-			"Invalid statuses in `org1/my-repo`: my-branch has invalid status for `state_after_close`: `TEST`",
-			"Invalid statuses in `org2/default`: my-branch has invalid status for `state_after_close`: `INVALID`",
+			"invalid statuses in `default`: my-branch has invalid status for `state_after_close`: `HELLO`",
+			"invalid statuses in `org1/default`: my-branch has invalid status for `state_after_close`: `WORLD`",
+			"invalid statuses in `org1/my-repo`: my-branch has invalid status for `state_after_close`: `TEST`",
+			"invalid statuses in `org2/default`: my-branch has invalid status for `state_after_close`: `INVALID`",
 		},
 	}}
 	for _, tc := range testCases {
