@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/yaml"
 
+	"maps"
 	cherrypicker "sigs.k8s.io/prow/cmd/external-plugins/cherrypicker/lib"
 	prowconfig "sigs.k8s.io/prow/pkg/config"
 	"sigs.k8s.io/prow/pkg/github"
@@ -32,7 +33,7 @@ type fakeGHClient struct {
 	*fakegithub.FakeClient
 }
 
-func (f fakeGHClient) QueryWithGitHubAppsSupport(ctx context.Context, q interface{}, vars map[string]interface{}, org string) error {
+func (f fakeGHClient) QueryWithGitHubAppsSupport(ctx context.Context, q any, vars map[string]any, org string) error {
 	return nil
 }
 
@@ -994,7 +995,7 @@ Instructions for interacting with me using PR comments are available [here](http
 					Name: "VALIDATED",
 				},
 				// due to the way `Unknowns` works, this has to be provided as a map[string]interface{}
-				Unknowns: tcontainer.MarshalMap{helpers.SeverityField: map[string]interface{}{"Value": string(`<img alt="" src="/images/icons/priorities/low.svg" width="16" height="16"> Low`)}},
+				Unknowns: tcontainer.MarshalMap{helpers.SeverityField: map[string]any{"Value": string(`<img alt="" src="/images/icons/priorities/low.svg" width="16" height="16"> Low`)}},
 			}}},
 		},
 		{
@@ -2048,8 +2049,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				Labels:     []string{"good_label"},
 				IssueLinks: []*jira.IssueLink{&cloneOutward1, &blockInward1},
 				Unknowns: tcontainer.MarshalMap{
-					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
-					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
+					helpers.SeverityField:      map[string]any{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
+					helpers.TargetVersionField: []any{map[string]any{"name": v1Str}},
 				},
 			}}},
 		},
@@ -2069,7 +2070,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      severityCritical,
 					helpers.TargetVersionField: &v2,
-					helpers.SprintField:        []interface{}{active1, closed1},
+					helpers.SprintField:        []any{active1, closed1},
 				},
 			}}},
 			prs:                 []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}, {Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] " + base.title}},
@@ -2102,8 +2103,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 				IssueLinks: []*jira.IssueLink{&cloneOutward1, &blockInward1},
 				Unknowns: tcontainer.MarshalMap{
-					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
-					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
+					helpers.SeverityField:      map[string]any{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
+					helpers.TargetVersionField: []any{map[string]any{"name": v1Str}},
 					helpers.SprintField:        float64(57955),
 				},
 			}}},
@@ -2172,8 +2173,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 				IssueLinks: []*jira.IssueLink{&cloneOutward1, &blockInward1},
 				Unknowns: tcontainer.MarshalMap{
-					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
-					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
+					helpers.SeverityField:      map[string]any{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
+					helpers.TargetVersionField: []any{map[string]any{"name": v1Str}},
 				},
 			}}, {ID: "4", Key: "OCPBUGS-126", Fields: &jira.IssueFields{
 				Assignee:    &jira.User{Name: "testUser"},
@@ -2202,8 +2203,8 @@ Instructions for interacting with me using PR comments are available [here](http
 					InwardIssue: &jira.Issue{ID: "2"},
 				}},
 				Unknowns: tcontainer.MarshalMap{
-					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
-					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
+					helpers.SeverityField:      map[string]any{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
+					helpers.TargetVersionField: []any{map[string]any{"name": v1Str}},
 				},
 			}}},
 		},
@@ -2281,8 +2282,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 				IssueLinks: []*jira.IssueLink{&cloneOutward1, &blockInward1},
 				Unknowns: tcontainer.MarshalMap{
-					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
-					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v2Str}},
+					helpers.SeverityField:      map[string]any{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
+					helpers.TargetVersionField: []any{map[string]any{"name": v2Str}},
 				},
 			}}, {ID: "4", Key: "OCPBUGS-126", Fields: &jira.IssueFields{
 				Assignee:    &jira.User{Name: "testUser"},
@@ -2311,8 +2312,8 @@ Instructions for interacting with me using PR comments are available [here](http
 					InwardIssue: &jira.Issue{ID: "2"},
 				}},
 				Unknowns: tcontainer.MarshalMap{
-					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
-					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
+					helpers.SeverityField:      map[string]any{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
+					helpers.TargetVersionField: []any{map[string]any{"name": v1Str}},
 				},
 			}}},
 		},
@@ -2365,8 +2366,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 				IssueLinks: []*jira.IssueLink{&cloneOutward1, &blockInward1},
 				Unknowns: tcontainer.MarshalMap{
-					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
-					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
+					helpers.SeverityField:      map[string]any{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
+					helpers.TargetVersionField: []any{map[string]any{"name": v1Str}},
 				},
 			}}},
 		},
@@ -2436,8 +2437,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 				IssueLinks: []*jira.IssueLink{&cloneOutward1, &blockInward1},
 				Unknowns: tcontainer.MarshalMap{
-					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
-					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
+					helpers.SeverityField:      map[string]any{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
+					helpers.TargetVersionField: []any{map[string]any{"name": v1Str}},
 				},
 			}}, {ID: "4", Key: "OCPBUGS-126", Fields: &jira.IssueFields{
 				Assignee:    &jira.User{Name: "testUser"},
@@ -2466,8 +2467,8 @@ Instructions for interacting with me using PR comments are available [here](http
 					InwardIssue: &jira.Issue{ID: "2"},
 				}},
 				Unknowns: tcontainer.MarshalMap{
-					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
-					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
+					helpers.SeverityField:      map[string]any{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
+					helpers.TargetVersionField: []any{map[string]any{"name": v1Str}},
 				},
 			}}},
 		},
@@ -2522,8 +2523,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 				IssueLinks: []*jira.IssueLink{&cloneOutward1, &blockInward1},
 				Unknowns: tcontainer.MarshalMap{
-					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
-					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
+					helpers.SeverityField:      map[string]any{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
+					helpers.TargetVersionField: []any{map[string]any{"name": v1Str}},
 				},
 			}}},
 		},
@@ -2787,8 +2788,8 @@ Instructions for interacting with me using PR comments are available [here](http
 					InwardIssue: &jira.Issue{ID: "3"},
 				}},
 				Unknowns: tcontainer.MarshalMap{
-					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
-					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
+					helpers.SeverityField:      map[string]any{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
+					helpers.TargetVersionField: []any{map[string]any{"name": v1Str}},
 				},
 			}}},
 		}, {
@@ -2846,8 +2847,8 @@ Instructions for interacting with me using PR comments are available [here](http
 					Key:  "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
-					helpers.SeverityField:      map[string]interface{}{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
-					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1Str}},
+					helpers.SeverityField:      map[string]any{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
+					helpers.TargetVersionField: []any{map[string]any{"name": v1Str}},
 				},
 			}}},
 		}, {
@@ -3094,7 +3095,7 @@ Instructions for interacting with me using PR comments are available [here](http
 					Key:  "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
-					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v5Str}},
+					helpers.TargetVersionField: []any{map[string]any{"name": v5Str}},
 				},
 			}}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				Assignee:    &jira.User{Name: "testUser"},
@@ -3109,7 +3110,7 @@ Instructions for interacting with me using PR comments are available [here](http
 					Key:  "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
-					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v4zStr}},
+					helpers.TargetVersionField: []any{map[string]any{"name": v4zStr}},
 				},
 			}}, {ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
 				Assignee:    &jira.User{Name: "testUser"},
@@ -3124,7 +3125,7 @@ Instructions for interacting with me using PR comments are available [here](http
 					Key:  "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
-					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v3zStr}},
+					helpers.TargetVersionField: []any{map[string]any{"name": v3zStr}},
 				},
 			}}, {ID: "4", Key: "OCPBUGS-126", Fields: &jira.IssueFields{
 				Assignee:    &jira.User{Name: "testUser"},
@@ -3139,7 +3140,7 @@ Instructions for interacting with me using PR comments are available [here](http
 					Key:  "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
-					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v2zStr}},
+					helpers.TargetVersionField: []any{map[string]any{"name": v2zStr}},
 				},
 			}}, {ID: "5", Key: "OCPBUGS-127", Fields: &jira.IssueFields{
 				Assignee:    &jira.User{Name: "testUser"},
@@ -3154,7 +3155,7 @@ Instructions for interacting with me using PR comments are available [here](http
 					Key:  "OCPBUGS",
 				},
 				Unknowns: tcontainer.MarshalMap{
-					helpers.TargetVersionField: []interface{}{map[string]interface{}{"name": v1zStr}},
+					helpers.TargetVersionField: []any{map[string]any{"name": v1zStr}},
 				},
 			}},
 			},
@@ -3255,9 +3256,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			gc := fakegithub.NewFakeClient()
 			gc.IssueLabelsExisting = []string{}
 			gc.IssueComments = map[int][]github.IssueComment{}
-			for key, comments := range tc.prComments {
-				gc.IssueComments[key] = comments
-			}
+			maps.Copy(gc.IssueComments, tc.prComments)
 			gc.PullRequests = map[int]*github.PullRequest{}
 			gc.WasLabelAddedByHumanVal = tc.humanLabelled
 			for _, label := range tc.labels {
@@ -5666,7 +5665,7 @@ func TestCheckRHRestrictedIssue(t *testing.T) {
 			bug: &jira.Issue{
 				Fields: &jira.IssueFields{
 					Unknowns: tcontainer.MarshalMap{
-						helpers.ContributorsField: []map[string]interface{}{
+						helpers.ContributorsField: []map[string]any{
 							{
 								"name": "Group A",
 							},
@@ -5682,7 +5681,7 @@ func TestCheckRHRestrictedIssue(t *testing.T) {
 			bug: &jira.Issue{
 				Fields: &jira.IssueFields{
 					Unknowns: tcontainer.MarshalMap{
-						helpers.ContributorsField: []map[string]interface{}{
+						helpers.ContributorsField: []map[string]any{
 							{
 								"name": "Red Hat Employee",
 							},

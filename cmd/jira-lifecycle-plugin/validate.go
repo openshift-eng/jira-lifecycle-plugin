@@ -12,7 +12,7 @@ import (
 func validateConfig(rawConfig []byte) error {
 	var config Config
 	if err := yaml.UnmarshalStrict(rawConfig, &config); err != nil {
-		return fmt.Errorf("Failed to read config: %v", err)
+		return fmt.Errorf("failed to read config: %v", err)
 	}
 	errors := []error{}
 	errors = append(errors, validateStatuses(&config)...)
@@ -26,7 +26,7 @@ func validateStatuses(c *Config) []error {
 		if len(newErrs) == 0 {
 			continue
 		}
-		errors = append(errors, fmt.Errorf("Invalid statuses in `default`: %v", utilerrors.NewAggregate(newErrs)))
+		errors = append(errors, fmt.Errorf("invalid statuses in `default`: %v", utilerrors.NewAggregate(newErrs)))
 	}
 	for orgName, orgOptions := range c.Orgs {
 		for orgBranchName, orgBranchOptions := range orgOptions.Default {
@@ -34,7 +34,7 @@ func validateStatuses(c *Config) []error {
 			if len(newErrs) == 0 {
 				continue
 			}
-			errors = append(errors, fmt.Errorf("Invalid statuses in `%s/default`: %v", orgName, utilerrors.NewAggregate(newErrs)))
+			errors = append(errors, fmt.Errorf("invalid statuses in `%s/default`: %v", orgName, utilerrors.NewAggregate(newErrs)))
 		}
 		for repoName, repoOptions := range orgOptions.Repos {
 			for branchName, branchOptions := range repoOptions.Branches {
@@ -42,7 +42,7 @@ func validateStatuses(c *Config) []error {
 				if len(newErrs) == 0 {
 					continue
 				}
-				errors = append(errors, fmt.Errorf("Invalid statuses in `%s/%s`: %v", orgName, repoName, utilerrors.NewAggregate(newErrs)))
+				errors = append(errors, fmt.Errorf("invalid statuses in `%s/%s`: %v", orgName, repoName, utilerrors.NewAggregate(newErrs)))
 			}
 		}
 	}
