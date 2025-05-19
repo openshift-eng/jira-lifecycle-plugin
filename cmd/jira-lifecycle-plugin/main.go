@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -9,7 +10,9 @@ import (
 	"sync"
 	"time"
 
+	"cloud.google.com/go/bigquery"
 	"github.com/sirupsen/logrus"
+	"google.golang.org/api/option"
 	prowconfig "sigs.k8s.io/prow/pkg/config"
 	"sigs.k8s.io/prow/pkg/config/secret"
 	prowflagutil "sigs.k8s.io/prow/pkg/flagutil"
@@ -26,6 +29,11 @@ type options struct {
 
 	configPath        string
 	webhookSecretFile string
+
+	bigqueryEnable     bool
+	bigquerySecretFile string
+	bigqueryProjectID  string
+	bigqueryDatasetID  string
 
 	config *Config
 
@@ -46,6 +54,11 @@ func gatherOptions() options {
 	fs.StringVar(&o.configPath, "config-path", "", "Path to jira lifecycle configuration.")
 	fs.StringVar(&o.validateConfig, "validate-config", "", "Validate config at specified directory and exit without running operator")
 	fs.StringVar(&o.webhookSecretFile, "hmac-secret-file", "", "Path to the file containing the GitHub HMAC secret.")
+
+	fs.BoolVar(&o.bigqueryEnable, "enable-bigquery", false, "Enable Big Query verification data uploading.")
+	fs.StringVar(&o.bigquerySecretFile, "bigquery-secret-file", "", "Path to credentials file for BigQuery service account.")
+	fs.StringVar(&o.bigqueryProjectID, "bigquery-project-id", "", "Name of BigQuery project to operate in.")
+	fs.StringVar(&o.bigqueryDatasetID, "bigquery-dataset-id", "", "Name of BigQuery dataset to operate on.")
 
 	o.github.AddFlags(fs)
 	o.githubEventServerOptions.Bind(fs)
@@ -84,6 +97,11 @@ func (o *options) Validate() error {
 
 	if err := o.githubEventServerOptions.DefaultAndValidate(); err != nil {
 		return err
+	}
+
+	if o.bigqueryEnable &&
+		(o.bigquerySecretFile == "" || o.bigqueryProjectID == "" || o.bigqueryDatasetID == "") {
+		return errors.New("All BigQuery flags must be set to enable Big Query uploading.")
 	}
 
 	return nil
@@ -177,6 +195,17 @@ func main() {
 		logrus.WithError(err).Fatal("Failed to construct Jira Client")
 	}
 
+	var bigqueryClient *bigquery.Client
+	if o.bigquerySecretFile != "" {
+		bigqueryClient, err = bigquery.NewClient(context.TODO(),
+			o.bigqueryProjectID,
+			option.WithCredentialsFile(o.bigquerySecretFile),
+		)
+		if err != nil {
+			logrus.WithError(err).Fatal("Failed to create Big Query client")
+		}
+	}
+
 	serv := &server{
 		config: func() *Config {
 			o.mut.Lock()
@@ -186,6 +215,8 @@ func main() {
 		ghc:             githubClient.WithFields(logger.Data).ForPlugin(PluginName),
 		jc:              jiraClient.WithFields(logger.Data).ForPlugin(PluginName),
 		prowConfigAgent: configAgent,
+
+		bigqueryInserter: bigqueryClient.Dataset(o.bigqueryDatasetID).Table(bigqueryTableName).Inserter(),
 	}
 
 	eventServer := githubeventserver.New(o.githubEventServerOptions, secret.GetTokenGenerator(o.webhookSecretFile), logger)
