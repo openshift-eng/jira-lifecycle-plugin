@@ -2411,7 +2411,7 @@ func handleVerification(e event, ghc githubClient, inserter BigQueryInserter, lo
 		// only usernames can be verified-later
 		for _, reason := range e.verifyLater {
 			if !strings.HasPrefix(reason, "@") {
-				return comment("Only users can be targets for the `verified later` command.")
+				return comment("Only users can be targets for the `/verified later` command.")
 			}
 		}
 		if !existingLabel {
@@ -2425,13 +2425,14 @@ func handleVerification(e event, ghc githubClient, inserter BigQueryInserter, lo
 		}
 		for _, reason := range e.verifyLater {
 			info := VerificationInfo{
-				User:   e.login,
-				Reason: reason,
-				Type:   verifyLaterType,
-				Org:    e.org,
-				Repo:   e.repo,
-				PRNum:  e.number,
-				Branch: e.baseRef,
+				User:      e.login,
+				Reason:    reason,
+				Type:      verifyLaterType,
+				Org:       e.org,
+				Repo:      e.repo,
+				PRNum:     e.number,
+				Branch:    e.baseRef,
+				Timestamp: time.Now(),
 			}
 			if err := inserter.Put(context.TODO(), info); err != nil {
 				log.WithError(err).Error("Failed to upload info to Big Query")
@@ -2463,13 +2464,14 @@ func handleVerification(e event, ghc githubClient, inserter BigQueryInserter, lo
 		}
 		for _, reason := range e.verify {
 			info := VerificationInfo{
-				User:   e.login,
-				Reason: reason,
-				Type:   verifyMergeType,
-				Org:    e.org,
-				Repo:   e.repo,
-				PRNum:  e.number,
-				Branch: e.baseRef,
+				User:      e.login,
+				Reason:    reason,
+				Type:      verifyMergeType,
+				Org:       e.org,
+				Repo:      e.repo,
+				PRNum:     e.number,
+				Branch:    e.baseRef,
+				Timestamp: time.Now(),
 			}
 			if err := inserter.Put(context.TODO(), info); err != nil {
 				log.WithError(err).Error("Failed to upload info to Big Query")

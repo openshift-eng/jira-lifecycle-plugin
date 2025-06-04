@@ -3309,7 +3309,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
-			expectedComment: `org/repo#1:@user: Only users can be targets for the ` + "`verified later`" + ` command.
+			expectedComment: `org/repo#1:@user: Only users can be targets for the ` + "`/verified later`" + ` command.
 
 <details>
 
