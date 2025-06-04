@@ -10,4 +10,6 @@ const (
 	SeverityModerate      = "jira/severity-moderate"
 	SeverityLow           = "jira/severity-low"
 	SeverityInformational = "jira/severity-informational"
+	Verified              = "verified"
+	VerifiedLater         = "verified-later"
 )

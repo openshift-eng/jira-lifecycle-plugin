@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -23,9 +25,6 @@ import (
 	jiraclient "sigs.k8s.io/prow/pkg/jira"
 	"sigs.k8s.io/prow/pkg/pluginhelp"
 	"sigs.k8s.io/prow/pkg/plugins"
-
-	"maps"
-	"slices"
 
 	"github.com/openshift-eng/jira-lifecycle-plugin/pkg/helpers"
 	"github.com/openshift-eng/jira-lifecycle-plugin/pkg/labels"
@@ -45,6 +44,8 @@ const (
 var (
 	jiraIssueRegexPart      = `[[:alnum:]]+-[[:digit:]]+`
 	titleMatchJiraIssue     = regexp.MustCompile(`(?i)(` + jiraIssueRegexPart + `,?[[:space:]]*)*(NO-JIRA|NO-ISSUE|` + jiraIssueRegexPart + `)+:`)
+	verifyCommandMatch      = regexp.MustCompile(`(?mi)^/verified by\s+(([^\s]+,)*([^\s]+))*$`)
+	verifyLaterCommandMatch = regexp.MustCompile(`(?mi)^/verified later\s+(([^\s]+,)*([^\s]+))*$`)
 	refreshCommandMatch     = regexp.MustCompile(`(?mi)^/jira refresh\s*$`)
 	qaReviewCommandMatch    = regexp.MustCompile(`(?mi)^/jira cc-qa\s*$`)
 	cherrypickCommandMatch  = regexp.MustCompile(`(?mi)^/jira cherry-?pick (` + jiraIssueRegexPart + `,?[[:space:]]*)*(` + jiraIssueRegexPart + `)+\s*$`)
@@ -52,7 +53,7 @@ var (
 	existingBackportMatch   = regexp.MustCompile(`jlp-[^:]+:[^:]+`)
 	cherrypickPRMatch       = regexp.MustCompile(`This is an automated cherry-pick of #([0-9]+)`)
 	jiraIssueReferenceMatch = regexp.MustCompile(`([[:alnum:]]+)-([[:digit:]]+)`)
-	bugProjects             = sets.New[string]("OCPBUGS", "DFBUGS")
+	bugProjects             = sets.New("OCPBUGS", "DFBUGS")
 )
 
 type referencedIssue struct {
@@ -78,6 +79,8 @@ type server struct {
 	prowConfigAgent *config.Agent
 	ghc             githubClient
 	jc              jiraclient.Client
+
+	bigqueryInserter BigQueryInserter
 }
 
 func (s *server) helpProvider(enabledRepos []config.OrgRepo) (*pluginhelp.PluginHelp, error) {
@@ -347,13 +350,13 @@ func (s *server) handleIssueComment(l *logrus.Entry, e github.IssueCommentEvent)
 	if event != nil {
 		branchOptions := cfg.OptionsForBranch(event.org, event.repo, event.baseRef)
 		repoOptions := cfg.OptionsForRepo(event.org, event.repo)
-		if err := handle(s.jc, s.ghc, repoOptions, branchOptions, l, *event, s.prowConfigAgent.Config().AllRepos); err != nil {
+		if err := handle(s.jc, s.ghc, s.bigqueryInserter, repoOptions, branchOptions, l, *event, s.prowConfigAgent.Config().AllRepos); err != nil {
 			l.Errorf("failed to handle comment: %v", err)
 		}
 	}
 }
 
-func handle(jc jiraclient.Client, ghc githubClient, repoOptions map[string]JiraBranchOptions, branchOptions JiraBranchOptions, log *logrus.Entry, e event, allRepos sets.Set[string]) error {
+func handle(jc jiraclient.Client, ghc githubClient, inserter BigQueryInserter, repoOptions map[string]JiraBranchOptions, branchOptions JiraBranchOptions, log *logrus.Entry, e event, allRepos sets.Set[string]) error {
 	comment := e.comment(ghc)
 	if !e.missing {
 		for _, refIssue := range e.issues {
@@ -399,6 +402,10 @@ func handle(jc jiraclient.Client, ghc githubClient, repoOptions map[string]JiraB
 	// close events follow a different pattern from the normal validation
 	if e.closed && !e.merged {
 		return handleClose(e, ghc, jc, branchOptions, log)
+	}
+	// verification commands follow a different pattern than normal validation
+	if len(e.verify) > 0 || len(e.verifyLater) > 0 {
+		return handleVerification(e, ghc, inserter, log)
 	}
 
 	var needsJiraValidRefLabel, needsJiraValidBugLabel, needsJiraInvalidBugLabel bool
@@ -830,6 +837,15 @@ func isPreMergeVerified(issue *jira.Issue, prLabels []github.Label) bool {
 	return hasLabel && hasFixVersions && hasAffectsVersions
 }
 
+func isCommentVerified(issue *jira.Issue, prLabels []github.Label) bool {
+	for _, label := range prLabels {
+		if label.Name == labels.Verified {
+			return true
+		}
+	}
+	return false
+}
+
 type line struct {
 	content   string
 	replacing bool
@@ -992,7 +1008,7 @@ func (s *server) handlePullRequest(l *logrus.Entry, pre github.PullRequestEvent)
 	}
 	if event != nil {
 		repoOptions := cfg.OptionsForRepo(event.org, event.repo)
-		if err := handle(s.jc, s.ghc, repoOptions, branchOptions, l, *event, s.prowConfigAgent.Config().AllRepos); err != nil {
+		if err := handle(s.jc, s.ghc, s.bigqueryInserter, repoOptions, branchOptions, l, *event, s.prowConfigAgent.Config().AllRepos); err != nil {
 			l.Errorf("failed to handle PR: %v", err)
 		}
 	}
@@ -1113,6 +1129,7 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 	}
 	// Make sure they are requesting a valid command
 	var refresh, cc, cherrypick, backport bool
+	var verified, verifyLater []string
 	switch {
 	case refreshCommandMatch.MatchString(ice.Comment.Body):
 		refresh = true
@@ -1122,6 +1139,18 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 		cherrypick = true
 	case backportCommandMatch.MatchString(ice.Comment.Body):
 		backport = true
+	case verifyCommandMatch.MatchString(ice.Comment.Body):
+		var err error
+		verified, err = verifyCommandMatches(ice.Comment.Body)
+		if err != nil {
+			return nil, err
+		}
+	case verifyLaterCommandMatch.MatchString(ice.Comment.Body):
+		var err error
+		verifyLater, err = verifyLaterCommandMatches(ice.Comment.Body)
+		if err != nil {
+			return nil, err
+		}
 	default:
 		return nil, nil
 	}
@@ -1143,7 +1172,22 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 		return nil, err
 	}
 
-	e := &event{org: org, repo: repo, baseRef: pr.Base.Ref, number: number, merged: pr.Merged, state: pr.State, body: ice.Comment.Body, title: ice.Issue.Title, htmlUrl: ice.Comment.HTMLURL, login: ice.Comment.User.Login, refresh: refresh, cc: cc}
+	e := &event{
+		org:         org,
+		repo:        repo,
+		baseRef:     pr.Base.Ref,
+		number:      number,
+		merged:      pr.Merged,
+		state:       pr.State,
+		body:        ice.Comment.Body,
+		title:       ice.Issue.Title,
+		htmlUrl:     ice.Comment.HTMLURL,
+		login:       ice.Comment.User.Login,
+		refresh:     refresh,
+		cc:          cc,
+		verify:      verified,
+		verifyLater: verifyLater,
+	}
 
 	e.issues, e.missing, e.noJira = jiraKeyFromTitle(pr.Title)
 
@@ -1185,6 +1229,22 @@ func backportCommandMatches(body string) ([]string, error) {
 	return strings.Split(commandMatches[0][1], ","), nil
 }
 
+func verifyCommandMatches(body string) ([]string, error) {
+	commandMatches := verifyCommandMatch.FindAllStringSubmatch(body, -1)
+	if len(commandMatches) == 0 || len(commandMatches[0]) < 2 {
+		return nil, fmt.Errorf("body %q did not match verify regex, programmer error", body)
+	}
+	return strings.Split(commandMatches[0][1], ","), nil
+}
+
+func verifyLaterCommandMatches(body string) ([]string, error) {
+	commandMatches := verifyLaterCommandMatch.FindAllStringSubmatch(body, -1)
+	if len(commandMatches) == 0 || len(commandMatches[0]) < 2 {
+		return nil, fmt.Errorf("body %q did not match verify-later regex, programmer error", body)
+	}
+	return strings.Split(commandMatches[0][1], ","), nil
+}
+
 func referencedIssues(matchingText string) []referencedIssue {
 	matches := jiraIssueReferenceMatch.FindAllStringSubmatch(matchingText, -1)
 	var issues []referencedIssue
@@ -1211,6 +1271,7 @@ type event struct {
 	cherrypickFromPRNum             int
 	backport                        bool
 	backportBranches                []string
+	verify, verifyLater             []string
 }
 
 func (e *event) comment(gc githubClient) func(body string) error {
@@ -1708,11 +1769,25 @@ These pull request must merge or be unlinked from the Jira bug in order for it t
 		}
 
 		if shouldMigrate {
-			labels, err := gc.GetIssueLabels(e.org, e.repo, e.number)
-			if err != nil {
+			var commentVerified, premergeVerified bool
+			if labels, err := gc.GetIssueLabels(e.org, e.repo, e.number); err != nil {
 				log.WithError(err).Warn("Could not list labels on PR")
+			} else {
+				premergeVerified = isPreMergeVerified(bug, labels)
+				commentVerified = isCommentVerified(bug, labels)
 			}
-			if isPreMergeVerified(bug, labels) {
+			if commentVerified {
+				outcomeMessage = func(action string) string {
+					return fmt.Sprintf(issueLink+" has %sbeen moved to the `VERIFIED` state.", refIssue.Key(), jc.JiraURL(), refIssue.Key(), action)
+				}
+				if bug.Fields.Status == nil || !strings.EqualFold("VERIFIED", bug.Fields.Status.Name) {
+					if err := jc.UpdateStatus(bug.Key, "VERIFIED"); err != nil {
+						log.WithError(err).Warn("Unexpected error updating jira issue.")
+						msg += formatError(fmt.Sprintf("updating to the %s state", options.PreMergeStateAfterClose.Status), jc.JiraURL(), refIssue.Key(), err) + "\n\n"
+						continue
+					}
+				}
+			} else if premergeVerified {
 				outcomeMessage = func(action string) string {
 					return fmt.Sprintf(issueLink+" has %sbeen moved to the %s state.", refIssue.Key(), jc.JiraURL(), refIssue.Key(), action, options.PreMergeStateAfterMerge)
 				}
@@ -2306,6 +2381,105 @@ func handleClose(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 	}
 	if len(msg) != 0 {
 		msg = strings.TrimSuffix(msg, "\n\n")
+		return comment(msg)
+	}
+	return nil
+}
+
+func handleVerification(e event, ghc githubClient, inserter BigQueryInserter, log *logrus.Entry) error {
+	comment := e.comment(ghc)
+	if len(e.verifyLater) > 0 && len(e.verify) > 0 {
+		return comment("The `/verified` and `/verified later` commands cannot be used in the same comment.")
+	}
+	msg := ""
+	if len(e.verifyLater) > 0 {
+		// make sure the PR is not already marked as verified
+		var existingLabel bool
+		if prLabels, err := ghc.GetIssueLabels(e.org, e.repo, e.number); err != nil {
+			log.WithError(err).Warn("Could not list labels on PR")
+			return comment("Failed to check labels for this PR. Please try again.")
+		} else {
+			for _, label := range prLabels {
+				if label.Name == labels.Verified {
+					return comment("PR is already has `verified` label. Cannot change PR to `verify-later`")
+				}
+				if label.Name == labels.VerifiedLater {
+					existingLabel = true
+				}
+			}
+		}
+		// only usernames can be verified-later
+		for _, reason := range e.verifyLater {
+			if !strings.HasPrefix(reason, "@") {
+				return comment("Only users can be targets for the `/verified later` command.")
+			}
+		}
+		if !existingLabel {
+			if err := ghc.AddLabel(e.org, e.repo, e.number, labels.VerifiedLater); err != nil {
+				log.WithError(err).Error("Failed to add verified later label.")
+				return comment("Failed to add `verified-later` label. Please try again.")
+			}
+			msg = fmt.Sprintf("This PR has been marked to be verified later by `%s`. Jira issue(s) in the title of this PR will not be moved to the `VERIFIED` state on merge.", strings.Join(e.verifyLater, ","))
+		} else {
+			msg = fmt.Sprintf("`%s` has been added as a verify later reason for this PR. Jira issue(s) in the title of this PR will not be moved to the `VERIFIED` state on merge.", strings.Join(e.verifyLater, ","))
+		}
+		for _, reason := range e.verifyLater {
+			info := VerificationInfo{
+				User:      e.login,
+				Reason:    reason,
+				Type:      verifyLaterType,
+				Org:       e.org,
+				Repo:      e.repo,
+				PRNum:     e.number,
+				Branch:    e.baseRef,
+				Timestamp: time.Now(),
+			}
+			if err := inserter.Put(context.TODO(), info); err != nil {
+				log.WithError(err).Error("Failed to upload info to Big Query")
+				// TODO: consider adding comment to PR with warning; maybe don't mark as verified and ask the user to try again?
+			}
+		}
+	}
+	if len(e.verify) > 0 {
+		var existingLabel bool
+		if prLabels, err := ghc.GetIssueLabels(e.org, e.repo, e.number); err != nil {
+			log.WithError(err).Warn("Could not list labels on PR")
+			return comment("Failed to check labels for this PR. Please try again.")
+		} else {
+			for _, label := range prLabels {
+				if label.Name == labels.Verified {
+					existingLabel = true
+					break
+				}
+			}
+		}
+		if !existingLabel {
+			if err := ghc.AddLabel(e.org, e.repo, e.number, labels.Verified); err != nil {
+				log.WithError(err).Error("Failed to add verified label.")
+				return comment("Failed to add `verified` label. Please try again.")
+			}
+			msg = fmt.Sprintf("This PR has been marked as verified by `%s`. Jira issue(s) in the title of this PR will be moved to the `VERIFIED` state on merge.", strings.Join(e.verify, ","))
+		} else {
+			msg = fmt.Sprintf("`%s` has been added as a verification reason for this PR. Jira issue(s) in the title of this PR will be moved to the `VERIFIED` state on merge.", strings.Join(e.verify, ","))
+		}
+		for _, reason := range e.verify {
+			info := VerificationInfo{
+				User:      e.login,
+				Reason:    reason,
+				Type:      verifyMergeType,
+				Org:       e.org,
+				Repo:      e.repo,
+				PRNum:     e.number,
+				Branch:    e.baseRef,
+				Timestamp: time.Now(),
+			}
+			if err := inserter.Put(context.TODO(), info); err != nil {
+				log.WithError(err).Error("Failed to upload info to Big Query")
+				// TODO: consider adding comment to PR with warning; maybe don't mark as verified and ask the user to try again?
+			}
+		}
+	}
+	if len(msg) != 0 {
 		return comment(msg)
 	}
 	return nil
