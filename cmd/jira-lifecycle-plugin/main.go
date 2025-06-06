@@ -206,6 +206,13 @@ func main() {
 		}
 	}
 
+	var bigqueryInserter BigQueryInserter
+	if bigqueryClient != nil {
+		bigqueryInserter = bigqueryClient.Dataset(o.bigqueryDatasetID).Table(bigqueryTableName).Inserter()
+	} else {
+		bigqueryInserter = &fakeBigQueryInserter{}
+	}
+
 	serv := &server{
 		config: func() *Config {
 			o.mut.Lock()
@@ -216,7 +223,7 @@ func main() {
 		jc:              jiraClient.WithFields(logger.Data).ForPlugin(PluginName),
 		prowConfigAgent: configAgent,
 
-		bigqueryInserter: bigqueryClient.Dataset(o.bigqueryDatasetID).Table(bigqueryTableName).Inserter(),
+		bigqueryInserter: bigqueryInserter,
 	}
 
 	eventServer := githubeventserver.New(o.githubEventServerOptions, secret.GetTokenGenerator(o.webhookSecretFile), logger)
