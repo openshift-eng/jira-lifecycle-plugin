@@ -195,22 +195,16 @@ func main() {
 		logrus.WithError(err).Fatal("Failed to construct Jira Client")
 	}
 
-	var bigqueryClient *bigquery.Client
+	var bigqueryInserter BigQueryInserter
 	if o.bigquerySecretFile != "" {
-		bigqueryClient, err = bigquery.NewClient(context.TODO(),
+		bigqueryClient, err := bigquery.NewClient(context.TODO(),
 			o.bigqueryProjectID,
 			option.WithCredentialsFile(o.bigquerySecretFile),
 		)
 		if err != nil {
 			logrus.WithError(err).Fatal("Failed to create Big Query client")
 		}
-	}
-
-	var bigqueryInserter BigQueryInserter
-	if bigqueryClient != nil {
 		bigqueryInserter = bigqueryClient.Dataset(o.bigqueryDatasetID).Table(bigqueryTableName).Inserter()
-	} else {
-		bigqueryInserter = &fakeBigQueryInserter{}
 	}
 
 	serv := &server{

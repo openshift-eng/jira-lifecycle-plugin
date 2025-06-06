@@ -368,6 +368,7 @@ func TestHandle(t *testing.T) {
 		verified               []string
 		verifiedLater          []string
 		verificationInfo       []VerificationInfo
+		nilBigQuery            bool
 	}{
 		{
 			name:    "Unrelated event gets no action",
@@ -3349,6 +3350,27 @@ Instructions for interacting with me using PR comments are available [here](http
 				Unknowns: tcontainer.MarshalMap{helpers.SeverityField: struct{ Value string }{Value: `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`}},
 			}}},
 		},
+		{
+			name:           "verified comment without bigquery succeeds",
+			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
+			body:           "/verified by @tester",
+			verified:       []string{"@tester"},
+			nilBigQuery:    true,
+			options:        JiraBranchOptions{}, // no requirements --> always valid
+			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
+			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
+			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `. Jira issue(s) in the title of this PR will be moved to the ` + "`VERIFIED`" + ` state on merge.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>/verified by @tester
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -3419,8 +3441,13 @@ Instructions for interacting with me using PR comments are available [here](http
 			// client with a custom one that has an empty Query function
 			// TODO: implement a basic fake query function in test-infra fakegithub library and start unit testing the query path
 			fakeClient := fakeGHClient{gc}
+			// create separate inserter variable to test nil inserter case
+			var inserter BigQueryInserter
 			fakeInserter := fakeBigQueryInserter{}
-			if err := handle(&jiraClient, fakeClient, &fakeInserter, tc.fullConfig.OptionsForRepo("org", "repo"), tc.options, logrus.WithField("testCase", tc.name), testEvent, sets.New("org/repo")); err != nil {
+			if !tc.nilBigQuery {
+				inserter = &fakeInserter
+			}
+			if err := handle(&jiraClient, fakeClient, inserter, tc.fullConfig.OptionsForRepo("org", "repo"), tc.options, logrus.WithField("testCase", tc.name), testEvent, sets.New("org/repo")); err != nil {
 				t.Fatalf("handle failed: %v", err)
 			}
 
@@ -3467,12 +3494,14 @@ Instructions for interacting with me using PR comments are available [here](http
 				}
 			}
 
-			if len(tc.verificationInfo) != len(fakeInserter.insertedData) {
-				t.Errorf("%s: length of verification info does not match: %d != %d", tc.name, len(fakeInserter.insertedData), len(tc.verificationInfo))
-			} else {
-				for index, verificationInfo := range tc.verificationInfo {
-					if !reflect.DeepEqual(fakeInserter.insertedData[index], verificationInfo) {
-						t.Errorf("%s: Got incorrect verification info: %s", tc.name, cmp.Diff(fakeInserter.insertedData[index], verificationInfo, allowEventAndDate))
+			if !tc.nilBigQuery {
+				if len(tc.verificationInfo) != len(fakeInserter.insertedData) {
+					t.Errorf("%s: length of verification info does not match: %d != %d", tc.name, len(fakeInserter.insertedData), len(tc.verificationInfo))
+				} else {
+					for index, verificationInfo := range tc.verificationInfo {
+						if !reflect.DeepEqual(fakeInserter.insertedData[index], verificationInfo) {
+							t.Errorf("%s: Got incorrect verification info: %s", tc.name, cmp.Diff(fakeInserter.insertedData[index], verificationInfo, allowEventAndDate))
+						}
 					}
 				}
 			}
