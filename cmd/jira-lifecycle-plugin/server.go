@@ -2423,20 +2423,22 @@ func handleVerification(e event, ghc githubClient, inserter BigQueryInserter, lo
 		} else {
 			msg = fmt.Sprintf("`%s` has been added as a verify later reason for this PR. Jira issue(s) in the title of this PR will not be moved to the `VERIFIED` state on merge.", strings.Join(e.verifyLater, ","))
 		}
-		for _, reason := range e.verifyLater {
-			info := VerificationInfo{
-				User:      e.login,
-				Reason:    reason,
-				Type:      verifyLaterType,
-				Org:       e.org,
-				Repo:      e.repo,
-				PRNum:     e.number,
-				Branch:    e.baseRef,
-				Timestamp: time.Now(),
-			}
-			if err := inserter.Put(context.TODO(), info); err != nil {
-				log.WithError(err).Error("Failed to upload info to Big Query")
-				// TODO: consider adding comment to PR with warning; maybe don't mark as verified and ask the user to try again?
+		if inserter != nil {
+			for _, reason := range e.verifyLater {
+				info := VerificationInfo{
+					User:      e.login,
+					Reason:    reason,
+					Type:      verifyLaterType,
+					Org:       e.org,
+					Repo:      e.repo,
+					PRNum:     e.number,
+					Branch:    e.baseRef,
+					Timestamp: time.Now(),
+				}
+				if err := inserter.Put(context.TODO(), info); err != nil {
+					log.WithError(err).Error("Failed to upload info to Big Query")
+					// TODO: consider adding comment to PR with warning; maybe don't mark as verified and ask the user to try again?
+				}
 			}
 		}
 	}
@@ -2462,20 +2464,23 @@ func handleVerification(e event, ghc githubClient, inserter BigQueryInserter, lo
 		} else {
 			msg = fmt.Sprintf("`%s` has been added as a verification reason for this PR. Jira issue(s) in the title of this PR will be moved to the `VERIFIED` state on merge.", strings.Join(e.verify, ","))
 		}
-		for _, reason := range e.verify {
-			info := VerificationInfo{
-				User:      e.login,
-				Reason:    reason,
-				Type:      verifyMergeType,
-				Org:       e.org,
-				Repo:      e.repo,
-				PRNum:     e.number,
-				Branch:    e.baseRef,
-				Timestamp: time.Now(),
-			}
-			if err := inserter.Put(context.TODO(), info); err != nil {
-				log.WithError(err).Error("Failed to upload info to Big Query")
-				// TODO: consider adding comment to PR with warning; maybe don't mark as verified and ask the user to try again?
+		if inserter != nil {
+			fmt.Printf("Inserter value is %v\n", inserter)
+			for _, reason := range e.verify {
+				info := VerificationInfo{
+					User:      e.login,
+					Reason:    reason,
+					Type:      verifyMergeType,
+					Org:       e.org,
+					Repo:      e.repo,
+					PRNum:     e.number,
+					Branch:    e.baseRef,
+					Timestamp: time.Now(),
+				}
+				if err := inserter.Put(context.TODO(), info); err != nil {
+					log.WithError(err).Error("Failed to upload info to Big Query")
+					// TODO: consider adding comment to PR with warning; maybe don't mark as verified and ask the user to try again?
+				}
 			}
 		}
 	}
