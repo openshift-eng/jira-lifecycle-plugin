@@ -9,6 +9,7 @@ git_commit=$(shell git describe --tags --always --dirty)
 build_date=$(shell date -u '+%Y%m%d')
 version=v${build_date}-${git_commit}
 
+
 SOURCE_GIT_TAG=v1.0.0+$(shell git rev-parse --short=7 HEAD)
 
 GO_LD_EXTRAFLAGS=-X github.com/openshift-eng/jira-lifecycle-plugin/vendor/k8s.io/client-go/pkg/version.gitCommit=$(shell git rev-parse HEAD) -X github.com/openshift-eng/jira-lifecycle-plugin/vendor/k8s.io/client-go/pkg/version.gitVersion=${SOURCE_GIT_TAG} -X sigs.k8s.io/prow/pkg/version.Name=jira-lifecycle-plugin -X sigs.k8s.io/prow/pkg/version.Version=${version}
