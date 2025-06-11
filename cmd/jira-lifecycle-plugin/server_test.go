@@ -448,27 +448,15 @@ Instructions for interacting with me using PR comments are available [here](http
 </details>`,
 		},
 		{
-			name:           "valid bug removes invalid label, adds valid/severity labels and comments",
-			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
-			options:        JiraBranchOptions{}, // no requirements --> always valid
-			labels:         []string{labels.JiraInvalidBug},
-			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
-
-<details><summary>No validations were run on this bug</summary></details>
-
-<details>
-
-In response to [this](https://github.com/org/repo/pull/1):
-
->This PR fixes OCPBUGS-123
-
-
-Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+			name:            "valid bug removes invalid label, adds valid/severity labels and no comment",
+			issues:          []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
+			options:         JiraBranchOptions{}, // no requirements --> always valid
+			labels:          []string{labels.JiraInvalidBug},
+			expectedLabels:  []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
+			expectedComment: "",
 		},
 		{
-			name:           "valid DFBUGS bug removes invalid label, adds valid/severity labels and comments",
+			name:           "valid DFBUGS bug removes invalid label, adds valid/severity labels and no comment",
 			issues:         []jira.Issue{{ID: "1", Key: "DFBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "DFBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraInvalidBug},
@@ -476,19 +464,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			overrideEvent: &event{
 				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "DFBUGS", ID: "123", IsBug: true}}, body: "This PR fixes DFBUGS-123", title: "DFBUGS-123: fixed it!", htmlUrl: "https://github.com/org/repo/pull/1", login: "user",
 			},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue DFBUGS-123](https://my-jira.com/browse/DFBUGS-123), which is valid.
-
-<details><summary>No validations were run on this bug</summary></details>
-
-<details>
-
-In response to [this](https://github.com/org/repo/pull/1):
-
->This PR fixes DFBUGS-123
-
-
-Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+			expectedComment: "",
 		},
 		{
 			name:           "invalid bug adds invalid label, removes valid label and comments",
@@ -582,11 +558,7 @@ Instructions for interacting with me using PR comments are available [here](http
 
 Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jira bug are made, or edit the title of this pull request to link to a different bug.
 
-This pull request references [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124), which is valid.
 
-<details><summary>1 validation(s) were run on this bug</summary>
-
-* bug is open, matching expected state (open)</details>
 
 <details>
 
@@ -608,13 +580,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:               JiraBranchOptions{IsOpen: &open},
 			labels:                []string{},
 			expectedLabels:        []string{labels.JiraValidRef, labels.JiraInvalidBug, labels.SeverityCritical},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
-
-<details><summary>1 validation(s) were run on this bug</summary>
-
-* bug is open, matching expected state (open)</details>
-
-This pull request references [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124), which is invalid:
+			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124), which is invalid:
  - expected the bug to be open, but it isn't
 
 Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jira bug are made, or edit the title of this pull request to link to a different bug.
@@ -630,7 +596,7 @@ Instructions for interacting with me using PR comments are available [here](http
 </details>`,
 		},
 		{
-			name: "two valid bugs valid/severity labels and comments",
+			name: "two valid bugs valid/severity labels and no comment",
 			issues: []jira.Issue{
 				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
 				{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
@@ -639,30 +605,10 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:               JiraBranchOptions{IsOpen: &open},
 			labels:                []string{},
 			expectedLabels:        []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
-
-<details><summary>1 validation(s) were run on this bug</summary>
-
-* bug is open, matching expected state (open)</details>
-
-This pull request references [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124), which is valid.
-
-<details><summary>1 validation(s) were run on this bug</summary>
-
-* bug is open, matching expected state (open)</details>
-
-<details>
-
-In response to [this](https://github.com/org/repo/pull/1):
-
->This PR fixes OCPBUGS-123
-
-
-Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+			expectedComment:       "",
 		},
 		{
-			name: "two valid bugs with different severities set valid and higher severity labels and comments",
+			name: "two valid bugs with different severities set valid and higher severity labels and no comment",
 			issues: []jira.Issue{
 				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
 				{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityImportant}}},
@@ -671,27 +617,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:               JiraBranchOptions{IsOpen: &open},
 			labels:                []string{},
 			expectedLabels:        []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
-
-<details><summary>1 validation(s) were run on this bug</summary>
-
-* bug is open, matching expected state (open)</details>
-
-This pull request references [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124), which is valid.
-
-<details><summary>1 validation(s) were run on this bug</summary>
-
-* bug is open, matching expected state (open)</details>
-
-<details>
-
-In response to [this](https://github.com/org/repo/pull/1):
-
->This PR fixes OCPBUGS-123
-
-
-Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+			expectedComment:       "",
 		},
 		{
 			name:           "invalid bug adds keeps human-added valid bug label",
@@ -754,7 +680,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{StateAfterValidation: &updated, PreMergeStateAfterValidation: &updated2}, // no requirements --> always valid
 			labels:         []string{labels.QEApproved},
 			expectedLabels: []string{labels.JiraValidRef, labels.QEApproved},
-			expectedComment: `org/repo#1:@user: This pull request references OCPBUGS-123 which is a valid jira issue. The bug has been moved to the UPDATED2 state.
+			expectedComment: `org/repo#1:@user: This pull request references OCPBUGS-123. The bug has been moved to the UPDATED2 state.
 
 <details>
 
@@ -788,7 +714,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{StateAfterValidation: &updated}, // no requirements --> always valid
 			labels:         []string{labels.JiraInvalidBug},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityModerate},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid. The bug has been moved to the UPDATED state.
+			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123). The bug has been moved to the UPDATED state.
 
 <details><summary>No validations were run on this bug</summary></details>
 
@@ -808,22 +734,12 @@ Instructions for interacting with me using PR comments are available [here](http
 			}}},
 		},
 		{
-			name:                  "valid jira removes invalid label, adds valid label, comments",
+			name:                  "valid jira removes invalid label, adds valid label, no comment",
 			replaceReferencedBugs: []referencedIssue{{Project: "JIRA", ID: "123", IsBug: false}},
 			issues:                []jira.Issue{{ID: "1", Key: "JIRA-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "JIRA"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityModerate}}}},
 			labels:                []string{labels.JiraInvalidBug},
 			expectedLabels:        []string{labels.JiraValidRef},
-			expectedComment: `org/repo#1:@user: This pull request references JIRA-123 which is a valid jira issue.
-
-<details>
-
-In response to [this](https://github.com/org/repo/pull/1):
-
->This PR fixes OCPBUGS-123
-
-
-Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+			expectedComment:       "",
 		},
 		{
 			name:                  "valid jira with incorrect version removes invalid label, adds valid label,comments",
@@ -832,7 +748,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			labels:                []string{labels.JiraInvalidBug},
 			expectedLabels:        []string{labels.JiraValidRef},
 			options:               JiraBranchOptions{TargetVersion: &v1Str},
-			expectedComment: `org/repo#1:@user: This pull request references JIRA-123 which is a valid jira issue.
+			expectedComment: `org/repo#1:@user: This pull request references JIRA-123.
 
 Warning: The referenced jira issue has an invalid target version for the target branch this PR targets: expected the issue to target the "v1" version, but no target version was set.
 
@@ -847,7 +763,7 @@ Instructions for interacting with me using PR comments are available [here](http
 </details>`,
 		},
 		{
-			name: "valid bug and valid jira ref adds valid/severity labels and comments",
+			name: "valid bug and valid jira ref adds valid/severity labels and no comment",
 			issues: []jira.Issue{
 				{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Status: &jira.Status{Name: status.Post}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}},
 				{ID: "2", Key: "JIRA-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "JIRA"}}},
@@ -856,23 +772,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:               JiraBranchOptions{IsOpen: &open},
 			labels:                []string{},
 			expectedLabels:        []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
-
-<details><summary>1 validation(s) were run on this bug</summary>
-
-* bug is open, matching expected state (open)</details>
-
-This pull request references JIRA-123 which is a valid jira issue.
-
-<details>
-
-In response to [this](https://github.com/org/repo/pull/1):
-
->This PR fixes OCPBUGS-123
-
-
-Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+			expectedComment:       "",
 		},
 		{
 			name:                  "invalid jira with status update removes valid label, comments",
@@ -893,39 +793,19 @@ Instructions for interacting with me using PR comments are available [here](http
 </details>`,
 		},
 		{
-			name:           "valid no-jira removes invalid label, adds valid label, comments",
-			noJira:         true,
-			labels:         []string{labels.JiraInvalidBug},
-			expectedLabels: []string{labels.JiraValidRef},
-			expectedComment: `org/repo#1:@user: This pull request explicitly references no jira issue.
-
-<details>
-
-In response to [this](https://github.com/org/repo/pull/1):
-
->This PR fixes OCPBUGS-123
-
-
-Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+			name:            "valid no-jira removes invalid label, adds valid label, comments",
+			noJira:          true,
+			labels:          []string{labels.JiraInvalidBug},
+			expectedLabels:  []string{labels.JiraValidRef},
+			expectedComment: "",
 		},
 		{
-			name:           "valid no-jira with no changes comments if there is no previous matching comment",
-			prComments:     map[int][]github.IssueComment{1: {{Body: "Hello", User: github.User{Login: "alex"}}, {Body: "Hello again", User: github.User{Login: fakegithub.Bot}}}},
-			noJira:         true,
-			labels:         []string{labels.JiraValidRef},
-			expectedLabels: []string{labels.JiraValidRef},
-			expectedComment: `org/repo#1:@user: This pull request explicitly references no jira issue.
-
-<details>
-
-In response to [this](https://github.com/org/repo/pull/1):
-
->This PR fixes OCPBUGS-123
-
-
-Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+			name:            "valid no-jira with no changes comments if there is no previous matching comment",
+			prComments:      map[int][]github.IssueComment{1: {{Body: "Hello", User: github.User{Login: "alex"}}, {Body: "Hello again", User: github.User{Login: fakegithub.Bot}}}},
+			noJira:          true,
+			labels:          []string{labels.JiraValidRef},
+			expectedLabels:  []string{labels.JiraValidRef},
+			expectedComment: "",
 		},
 		{
 			name: "valid no-jira with no changes comments if there if latest bot comment does not match",
@@ -940,20 +820,10 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`, User: github.User{Login: fakegithub.Bot}}, {Body: "different comment", User: github.User{Login: fakegithub.Bot}}}},
-			noJira:         true,
-			labels:         []string{labels.JiraValidRef},
-			expectedLabels: []string{labels.JiraValidRef},
-			expectedComment: `org/repo#1:@user: This pull request explicitly references no jira issue.
-
-<details>
-
-In response to [this](https://github.com/org/repo/pull/1):
-
->This PR fixes OCPBUGS-123
-
-
-Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+			noJira:          true,
+			labels:          []string{labels.JiraValidRef},
+			expectedLabels:  []string{labels.JiraValidRef},
+			expectedComment: "",
 		},
 		{
 			name: "valid no-jira with no changes does not comments if latest bot comment matches",
@@ -978,7 +848,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{StateAfterValidation: &JiraBugState{Status: "CLOSED", Resolution: "VALIDATED"}}, // no requirements --> always valid
 			labels:         []string{labels.JiraInvalidBug},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityLow},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid. The bug has been moved to the CLOSED (VALIDATED) state.
+			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123). The bug has been moved to the CLOSED (VALIDATED) state.
 
 <details><summary>No validations were run on this bug</summary></details>
 
@@ -1004,48 +874,22 @@ Instructions for interacting with me using PR comments are available [here](http
 			}}},
 		},
 		{
-			name:           "valid bug with status update removes invalid label, adds valid label, comments and does not update status when it is already correct",
-			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Status: &jira.Status{Name: "UPDATED"}}}},
-			options:        JiraBranchOptions{StateAfterValidation: &updated}, // no requirements --> always valid
-			labels:         []string{labels.JiraInvalidBug},
-			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
-
-<details><summary>No validations were run on this bug</summary></details>
-
-<details>
-
-In response to [this](https://github.com/org/repo/pull/1):
-
->This PR fixes OCPBUGS-123
-
-
-Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
-			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Status: &jira.Status{Name: "UPDATED"}}}},
+			name:            "valid bug with status update removes invalid label, adds valid label and does not update status when it is already correct",
+			issues:          []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Status: &jira.Status{Name: "UPDATED"}}}},
+			options:         JiraBranchOptions{StateAfterValidation: &updated}, // no requirements --> always valid
+			labels:          []string{labels.JiraInvalidBug},
+			expectedLabels:  []string{labels.JiraValidRef, labels.JiraValidBug},
+			expectedComment: "",
+			expectedIssues:  []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Status: &jira.Status{Name: "UPDATED"}}}},
 		},
 		{
-			name:           "valid bug with external link removes invalid label, adds valid label, comments, makes an external bug link",
-			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123"}},
-			options:        JiraBranchOptions{AddExternalLink: &yes}, // no requirements --> always valid
-			labels:         []string{labels.JiraInvalidBug},
-			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
-
-<details><summary>No validations were run on this bug</summary></details>
-
-The bug has been updated to refer to the pull request using the external bug tracker.
-
-<details>
-
-In response to [this](https://github.com/org/repo/pull/1):
-
->This PR fixes OCPBUGS-123
-
-
-Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
-			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123"}},
+			name:            "valid bug with external link removes invalid label, adds valid label, makes an external bug link",
+			issues:          []jira.Issue{{ID: "1", Key: "OCPBUGS-123"}},
+			options:         JiraBranchOptions{AddExternalLink: &yes}, // no requirements --> always valid
+			labels:          []string{labels.JiraInvalidBug},
+			expectedLabels:  []string{labels.JiraValidRef, labels.JiraValidBug},
+			expectedComment: "",
+			expectedIssues:  []*jira.Issue{{ID: "1", Key: "OCPBUGS-123"}},
 			expectedNewRemoteLinks: []jira.RemoteLink{{Object: &jira.RemoteLinkObject{
 				URL:   "https://github.com/org/repo/pull/1",
 				Title: "org/repo#1: OCPBUGS-123: fixed it!",
@@ -1057,7 +901,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			}},
 		},
 		{
-			name:   "valid bug with already existing external link removes invalid label, adds valid label, comments to say nothing changed",
+			name:   "valid bug with already existing external link removes invalid label, adds valid label, no comments",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123"}},
 			remoteLinks: map[string][]jira.RemoteLink{"OCPBUGS-123": {{ID: 1, Object: &jira.RemoteLinkObject{
 				URL:   "https://github.com/org/repo/pull/1",
@@ -1068,23 +912,11 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			}},
 			}},
-			options:        JiraBranchOptions{AddExternalLink: &yes}, // no requirements --> always valid
-			labels:         []string{labels.JiraInvalidBug},
-			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
-
-<details><summary>No validations were run on this bug</summary></details>
-
-<details>
-
-In response to [this](https://github.com/org/repo/pull/1):
-
->This PR fixes OCPBUGS-123
-
-
-Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
-			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123"}},
+			options:         JiraBranchOptions{AddExternalLink: &yes}, // no requirements --> always valid
+			labels:          []string{labels.JiraInvalidBug},
+			expectedLabels:  []string{labels.JiraValidRef, labels.JiraValidBug},
+			expectedComment: "",
+			expectedIssues:  []*jira.Issue{{ID: "1", Key: "OCPBUGS-123"}},
 		},
 		{
 			name: "failure to fetch dependent bug results in a comment",
@@ -1120,7 +952,7 @@ Instructions for interacting with me using PR comments are available [here](http
 </details>`,
 		},
 		{
-			name: "valid bug with dependent bugs removes invalid label, adds valid label, comments",
+			name: "valid bug with dependent bugs removes invalid label, adds valid label, no comment",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Project:    jira.Project{Key: "OCPBUGS"},
 				Status:     &jira.Status{Name: "VERIFIED"},
@@ -1144,25 +976,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:            JiraBranchOptions{IsOpen: &yes, TargetVersion: &v1Str, DependentBugStates: &verified, DependentBugTargetVersions: &[]string{v2Str}},
 			labels:             []string{labels.JiraInvalidBug},
 			expectedLabels:     []string{labels.JiraValidRef, labels.JiraValidBug},
-			expectedComment: `org/repo#2:@user: This pull request references [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124), which is valid.
-
-<details><summary>5 validation(s) were run on this bug</summary>
-
-* bug is open, matching expected state (open)
-* bug target version (v1) matches configured target version for branch (v1)
-* dependent bug [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) is in the state VERIFIED, which is one of the valid states (VERIFIED)
-* dependent [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) targets the "v2" version, which is one of the valid target versions: v2
-* bug has dependents</details>
-
-<details>
-
-In response to [this](https://github.com/org/repo/pull/2):
-
->This PR fixes OCPBUGS-124
-
-
-Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+			expectedComment:    "",
 		},
 		{
 			name:   "valid bug on merged PR with one external link migrates to new state with resolution and comments",
@@ -2863,59 +2677,13 @@ Instructions for interacting with me using PR comments are available [here](http
 			prs:     []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}},
 			// there should be no comment returned in this test case
 		}, {
-			name:           "Bug with security level on repo with no allowed security levels results in comment on /jira refresh",
-			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{"security": jiraclient.SecurityLevel{Name: "security"}}}}},
-			prs:            []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}},
-			refresh:        true,
-			body:           "/jira refresh",
-			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
-
-<details><summary>No validations were run on this bug</summary></details>
-
-<details>
-
-In response to [this](https://github.com/org/repo/pull/1):
-
->/jira refresh
-
-
-Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
-		}, {
-			name: "Bug matching previous bot comment still comments on /jira refresh with no changes",
-			prComments: map[int][]github.IssueComment{1: {{Body: "Hello", User: github.User{Login: "alex"}}, {Body: `@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
-
-<details><summary>No validations were run on this bug</summary></details>
-
-<details>
-
-In response to [this](https://github.com/org/repo/pull/1):
-
->/jira refresh
-
-
-Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`, User: github.User{Login: fakegithub.Bot}}}},
-			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{"security": jiraclient.SecurityLevel{Name: "security"}}}}},
-			prs:            []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}},
-			refresh:        true,
-			body:           "/jira refresh",
-			labels:         []string{labels.JiraValidRef, labels.JiraValidBug},
-			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
-
-<details><summary>No validations were run on this bug</summary></details>
-
-<details>
-
-In response to [this](https://github.com/org/repo/pull/1):
-
->/jira refresh
-
-
-Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+			name:            "Bug with security level on repo with no allowed security levels results in no comment on /jira refresh",
+			issues:          []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{"security": jiraclient.SecurityLevel{Name: "security"}}}}},
+			prs:             []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}},
+			refresh:         true,
+			body:            "/jira refresh",
+			expectedLabels:  []string{labels.JiraValidRef, labels.JiraValidBug},
+			expectedComment: "",
 		}, {
 			name:    "Bug with non-allowed security level results in comment on /jira refresh",
 			issues:  []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{"security": jiraclient.SecurityLevel{Name: "security"}}}}},
@@ -2964,7 +2732,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{StateAfterValidation: &updated, AllowedSecurityLevels: []string{"security"}},
 			labels:         []string{labels.JiraInvalidBug},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityModerate},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid. The bug has been moved to the UPDATED state.
+			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123). The bug has been moved to the UPDATED state.
 
 <details><summary>No validations were run on this bug</summary></details>
 
