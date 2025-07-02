@@ -362,13 +362,14 @@ func TestHandle(t *testing.T) {
 		expectedRemovedRemoteLinks []jira.RemoteLink
 		existingIssueLinks         []*jira.IssueLink
 		// most of the tests can be handled by a single event struct with small modifications; for tests with more extensive differences, allow override
-		overrideEvent          *event
-		disabledProjects       []string
-		expectedCommentUpdates []string
-		verified               []string
-		verifiedLater          []string
-		verificationInfo       []VerificationInfo
-		nilBigQuery            bool
+		overrideEvent               *event
+		disabledProjects            []string
+		expectedCommentUpdates      []string
+		verified                    []string
+		verifiedLater               []string
+		verifiedRemove, fileChanged bool
+		verificationInfo            []VerificationInfo
+		nilBigQuery                 bool
 	}{
 		{
 			name:    "Unrelated event gets no action",
@@ -3371,6 +3372,98 @@ In response to [this](https://github.com/org/repo/pull/1):
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
+		{
+			name:           "verified remove comment results in verified label being removed and bigquery data being uploaded",
+			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
+			body:           "/verified remove",
+			verifiedRemove: true,
+			verificationInfo: []VerificationInfo{{
+				User:   "user",
+				Reason: "comment",
+				Type:   verifyRemoveType,
+				Org:    "org",
+				Repo:   "repo",
+				PRNum:  1,
+				Branch: "branch",
+			}},
+			options:        JiraBranchOptions{}, // no requirements --> always valid
+			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
+			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
+			expectedComment: `org/repo#1:@user: The ` + "`verified`" + ` label has been removed.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>/verified remove
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+		},
+		{
+			name:           "verified remove comment results in verified later label being removed and bigquery data being uploaded",
+			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
+			body:           "/verified remove",
+			verifiedRemove: true,
+			verificationInfo: []VerificationInfo{{
+				User:   "user",
+				Reason: "comment",
+				Type:   verifyRemoveLaterType,
+				Org:    "org",
+				Repo:   "repo",
+				PRNum:  1,
+				Branch: "branch",
+			}},
+			options:        JiraBranchOptions{}, // no requirements --> always valid
+			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.VerifiedLater},
+			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
+			expectedComment: `org/repo#1:@user: The ` + "`verified-later`" + ` label has been removed.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>/verified remove
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+		},
+		{
+			name:        "PR change results in verified label being removed and bigquery data being uploaded",
+			issues:      []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
+			fileChanged: true,
+			verificationInfo: []VerificationInfo{{
+				User:   "user",
+				Reason: "modified",
+				Type:   verifyRemoveType,
+				Org:    "org",
+				Repo:   "repo",
+				PRNum:  1,
+				Branch: "branch",
+			}},
+			options:        JiraBranchOptions{}, // no requirements --> always valid
+			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
+			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
+		},
+		{
+			name:        "PR change results in verified-later label being removed and bigquery data being uploaded",
+			issues:      []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
+			fileChanged: true,
+			verificationInfo: []VerificationInfo{{
+				User:   "user",
+				Reason: "modified",
+				Type:   verifyRemoveLaterType,
+				Org:    "org",
+				Repo:   "repo",
+				PRNum:  1,
+				Branch: "branch",
+			}},
+			options:        JiraBranchOptions{}, // no requirements --> always valid
+			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.VerifiedLater},
+			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -3403,6 +3496,8 @@ Instructions for interacting with me using PR comments are available [here](http
 			testEvent.opened = tc.opened
 			testEvent.verify = tc.verified
 			testEvent.verifyLater = tc.verifiedLater
+			testEvent.verifiedRemove = tc.verifiedRemove
+			testEvent.fileChanged = tc.fileChanged
 			if tc.replaceReferencedBugs != nil {
 				newEvent := testEvent
 				newEvent.issues = []referencedIssue{}
@@ -4406,6 +4501,33 @@ func TestDigestPR(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "pull request synchronized action adds fileChanged to event",
+			pre: github.PullRequestEvent{
+				Action: github.PullRequestActionSynchronize,
+				PullRequest: github.PullRequest{
+					Base: github.PullRequestBranch{
+						Repo: github.Repo{
+							Owner: github.User{
+								Login: "org",
+							},
+							Name: "repo",
+						},
+						Ref: "branch",
+					},
+					Number:  1,
+					Title:   "OCPBUGS-123: fixed it!",
+					State:   "open",
+					HTMLURL: "http.com",
+					User: github.User{
+						Login: "user",
+					},
+				},
+			},
+			expected: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: false, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, title: "OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user", fileChanged: true,
+			},
+		},
 	}
 
 	for _, testCase := range testCases {
@@ -4970,6 +5092,33 @@ Instructions for interacting with me using PR comments are available [here](http
 			title: "OCPBUGS-123: oopsie doopsie",
 			expected: &event{
 				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified later @tester", htmlUrl: "www.com", login: "user", verifyLater: []string{"@tester"},
+			},
+		},
+		{
+			name: "verified remove comment creates verified remove event",
+			e: github.IssueCommentEvent{
+				Action: github.IssueCommentActionCreated,
+				Issue: github.Issue{
+					Number:      1,
+					PullRequest: &struct{}{},
+				},
+				Comment: github.IssueComment{
+					Body: "/verified remove",
+					User: github.User{
+						Login: "user",
+					},
+					HTMLURL: "www.com",
+				},
+				Repo: github.Repo{
+					Owner: github.User{
+						Login: "org",
+					},
+					Name: "repo",
+				},
+			},
+			title: "OCPBUGS-123: oopsie doopsie",
+			expected: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified remove", htmlUrl: "www.com", login: "user", verifiedRemove: true,
 			},
 		},
 	}

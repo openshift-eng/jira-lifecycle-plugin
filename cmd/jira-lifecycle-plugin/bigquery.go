@@ -8,9 +8,13 @@ import (
 	"cloud.google.com/go/bigquery"
 )
 
-const bigqueryTableName = "verified"
-const verifyMergeType = "merge"
-const verifyLaterType = "later"
+const (
+	bigqueryTableName     = "verified"
+	verifyMergeType       = "merge"
+	verifyLaterType       = "later"
+	verifyRemoveType      = "remove"
+	verifyRemoveLaterType = "removeLater"
+)
 
 type BigQueryInserter interface {
 	Put(ctx context.Context, src any) (err error)
