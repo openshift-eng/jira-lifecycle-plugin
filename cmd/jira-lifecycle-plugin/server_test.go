@@ -368,6 +368,7 @@ func TestHandle(t *testing.T) {
 		verified                    []string
 		verifiedLater               []string
 		verifiedRemove, fileChanged bool
+		login                       string
 		verificationInfo            []VerificationInfo
 		nilBigQuery                 bool
 	}{
@@ -3493,6 +3494,27 @@ In response to [this](https://github.com/org/repo/pull/1):
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
+		{
+			name:           "verified comment fails for non-collaborators",
+			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
+			body:           "/verified by @tester",
+			login:          "tester",
+			verified:       []string{"@tester"},
+			options:        JiraBranchOptions{}, // no requirements --> always valid
+			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
+			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
+			expectedComment: `org/repo#1:@tester: Jira verification commands are restricted to collaborators for this repo.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>/verified by @tester
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -3527,6 +3549,9 @@ Instructions for interacting with me using PR comments are available [here](http
 			testEvent.verifyLater = tc.verifiedLater
 			testEvent.verifiedRemove = tc.verifiedRemove
 			testEvent.fileChanged = tc.fileChanged
+			if tc.login != "" {
+				testEvent.login = tc.login
+			}
 			if tc.replaceReferencedBugs != nil {
 				newEvent := testEvent
 				newEvent.issues = []referencedIssue{}
@@ -3561,6 +3586,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				pr := pr
 				gc.PullRequests[pr.Number] = &pr
 			}
+			gc.Collaborators = []string{"user"}
 			// the test-infra fake github client does not implement a Query function; we don't test the query functionality here, so we can just wrap the test-infra
 			// client with a custom one that has an empty Query function
 			// TODO: implement a basic fake query function in test-infra fakegithub library and start unit testing the query path

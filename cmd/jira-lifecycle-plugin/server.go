@@ -328,6 +328,7 @@ func (s *server) helpProvider(enabledRepos []config.OrgRepo) (*pluginhelp.Plugin
 }
 
 type githubClient interface {
+	IsCollaborator(owner, repo, login string) (bool, error)
 	EditComment(org, repo string, id int, comment string) error
 	GetIssue(org, repo string, number int) (*github.Issue, error)
 	EditIssue(org, repo string, number int, issue *github.Issue) (*github.Issue, error)
@@ -2441,6 +2442,11 @@ func handleVerification(e event, ghc githubClient, inserter BigQueryInserter, lo
 	comment := e.comment(ghc)
 	if len(e.verifyLater) > 0 && len(e.verify) > 0 && e.verifiedRemove {
 		return comment("The `/verified`, `/verified later`, and `/verified remove` commands cannot be used in the same comment.")
+	}
+	if ok, err := ghc.IsCollaborator(e.org, e.repo, e.login); !ok {
+		return comment("Jira verification commands are restricted to collaborators for this repo.")
+	} else if err != nil {
+		return comment(fmt.Sprintf("Failed to determine wheter user %s is a collaborator for the %s/%s repo. Please try again.", e.login, e.org, e.repo))
 	}
 	msg := ""
 	prLabels, err := ghc.GetIssueLabels(e.org, e.repo, e.number)
