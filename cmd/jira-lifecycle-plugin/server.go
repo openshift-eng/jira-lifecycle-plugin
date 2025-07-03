@@ -1731,6 +1731,7 @@ func handleMerge(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 		shouldMigrate := true
 		var mergedPRs []prParts
 		unmergedPrStates := map[prParts]string{}
+		prsVerified := true // track whether external PRs are all verified; this is changed to false if a PR does not have the verified label
 		for _, link := range links {
 			identifier := strings.TrimPrefix(link.Object.URL, "https://github.com/")
 			parts := strings.Split(identifier, "/")
@@ -1774,6 +1775,7 @@ func handleMerge(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 				}
 				merged = pr.Merged
 				state = pr.State
+				prsVerified = prsVerified && isCommentVerified(pr.Labels)
 			}
 			if merged {
 				mergedPRs = append(mergedPRs, item)
@@ -1826,11 +1828,11 @@ These pull request must merge or be unlinked from the Jira bug in order for it t
 				log.WithError(err).Warn("Could not list labels on PR")
 			} else {
 				premergeVerified = isPreMergeVerified(bug, labels)
-				commentVerified = isCommentVerified(labels)
+				commentVerified = prsVerified && isCommentVerified(labels)
 			}
 			if commentVerified {
 				outcomeMessage = func(action string) string {
-					return fmt.Sprintf(issueLink+" has %sbeen moved to the `VERIFIED` state.", refIssue.Key(), jc.JiraURL(), refIssue.Key(), action)
+					return fmt.Sprintf("All linked pull requests have the `verified` tag. "+issueLink+" has %sbeen moved to the `VERIFIED` state.", refIssue.Key(), jc.JiraURL(), refIssue.Key(), action)
 				}
 				if bug.Fields.Status == nil || !strings.EqualFold("VERIFIED", bug.Fields.Status.Name) {
 					if err := jc.UpdateStatus(bug.Key, "VERIFIED"); err != nil {

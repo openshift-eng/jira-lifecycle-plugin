@@ -3335,7 +3335,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
 
 
-[Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been moved to the ` + "`VERIFIED`" + ` state.
+All linked pull requests have the ` + "`verified`" + ` tag. [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been moved to the ` + "`VERIFIED`" + ` state.
 
 <details>
 
@@ -3514,6 +3514,122 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
+		},
+		{
+			name:   "valid bug on merged PR with many verified external links migrates to VERIFIED and comments",
+			merged: true,
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{}}},
+			remoteLinks: map[string][]jira.RemoteLink{"OCPBUGS-123": {{
+				ID: 1,
+				Object: &jira.RemoteLinkObject{
+					URL:   "https://github.com/org/repo/pull/1",
+					Title: "org/repo#1: OCPBUGS-123: fixed it!",
+					Icon: &jira.RemoteLinkIcon{
+						Url16x16: "https://github.com/favicon.ico",
+						Title:    "GitHub",
+					},
+				},
+			}, {
+				ID: 2,
+				Object: &jira.RemoteLinkObject{
+					URL:   "https://github.com/org/repo/pull/22/commits/1234567890",
+					Title: "org/repo#22: OCPBUGS-123: fixed it!",
+					Icon: &jira.RemoteLinkIcon{
+						Url16x16: "https://github.com/favicon.ico",
+						Title:    "GitHub",
+					},
+				},
+			}, {
+				ID: 2,
+				Object: &jira.RemoteLinkObject{
+					URL:   "https://github.com/org/repo/pull/23/files",
+					Title: "org/repo#23: OCPBUGS-123: fixed it!",
+					Icon: &jira.RemoteLinkIcon{
+						Url16x16: "https://github.com/favicon.ico",
+						Title:    "GitHub",
+					},
+				},
+			},
+			}},
+			labels:         []string{"verified"},
+			expectedLabels: []string{"verified"},
+			prs:            []github.PullRequest{{Number: base.number, Merged: true, Labels: []github.Label{{Name: "verified"}}}, {Number: 22, Merged: true, Labels: []github.Label{{Name: "verified"}}}, {Number: 23, Merged: true, Labels: []github.Label{{Name: "verified"}}}},
+			options:        JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
+			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
+ * [org/repo#1](https://github.com/org/repo/pull/1)
+ * [org/repo#22](https://github.com/org/repo/pull/22)
+ * [org/repo#23](https://github.com/org/repo/pull/23)
+
+All linked pull requests have the ` + "`verified`" + ` tag. [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been moved to the ` + "`VERIFIED`" + ` state.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: "VERIFIED"}}}},
+		},
+		{
+			name:   "valid bug on merged PR with 2 verified and one verified-later external links migrates to MODIFIED and comments",
+			merged: true,
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{}}},
+			remoteLinks: map[string][]jira.RemoteLink{"OCPBUGS-123": {{
+				ID: 1,
+				Object: &jira.RemoteLinkObject{
+					URL:   "https://github.com/org/repo/pull/1",
+					Title: "org/repo#1: OCPBUGS-123: fixed it!",
+					Icon: &jira.RemoteLinkIcon{
+						Url16x16: "https://github.com/favicon.ico",
+						Title:    "GitHub",
+					},
+				},
+			}, {
+				ID: 2,
+				Object: &jira.RemoteLinkObject{
+					URL:   "https://github.com/org/repo/pull/22/commits/1234567890",
+					Title: "org/repo#22: OCPBUGS-123: fixed it!",
+					Icon: &jira.RemoteLinkIcon{
+						Url16x16: "https://github.com/favicon.ico",
+						Title:    "GitHub",
+					},
+				},
+			}, {
+				ID: 2,
+				Object: &jira.RemoteLinkObject{
+					URL:   "https://github.com/org/repo/pull/23/files",
+					Title: "org/repo#23: OCPBUGS-123: fixed it!",
+					Icon: &jira.RemoteLinkIcon{
+						Url16x16: "https://github.com/favicon.ico",
+						Title:    "GitHub",
+					},
+				},
+			},
+			}},
+			labels:         []string{"verified"},
+			expectedLabels: []string{"verified"},
+			prs:            []github.PullRequest{{Number: base.number, Merged: true, Labels: []github.Label{{Name: "verified"}}}, {Number: 22, Merged: true, Labels: []github.Label{{Name: "verified"}}}, {Number: 23, Merged: true, Labels: []github.Label{{Name: "verified-later"}}}},
+			options:        JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
+			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
+ * [org/repo#1](https://github.com/org/repo/pull/1)
+ * [org/repo#22](https://github.com/org/repo/pull/22)
+ * [org/repo#23](https://github.com/org/repo/pull/23)
+
+[Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been moved to the MODIFIED state.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: "MODIFIED"}}}},
 		},
 	}
 
