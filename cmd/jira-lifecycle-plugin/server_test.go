@@ -3464,6 +3464,35 @@ Instructions for interacting with me using PR comments are available [here](http
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.VerifiedLater},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 		},
+		{
+			name:     "verified comment with existing verified-later label results in verified label being added, verified-later label being removed, and bigquery data being uploaded",
+			issues:   []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
+			body:     "/verified by @tester",
+			verified: []string{"@tester"},
+			verificationInfo: []VerificationInfo{{
+				User:   "user",
+				Reason: "@tester",
+				Type:   verifyMergeType,
+				Org:    "org",
+				Repo:   "repo",
+				PRNum:  1,
+				Branch: "branch",
+			}},
+			options:        JiraBranchOptions{}, // no requirements --> always valid
+			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.VerifiedLater},
+			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
+			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `. Jira issue(s) in the title of this PR will be moved to the ` + "`VERIFIED`" + ` state on merge.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>/verified by @tester
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+		},
 	}
 
 	for _, tc := range testCases {
