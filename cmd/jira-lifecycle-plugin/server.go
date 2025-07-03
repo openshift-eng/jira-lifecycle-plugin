@@ -2494,14 +2494,15 @@ func handleVerification(e event, ghc githubClient, inserter BigQueryInserter, lo
 		}
 	}
 	if len(e.verify) > 0 {
-		var existingLabel bool
+		var verifyLabel, laterLabel bool
 		for _, label := range prLabels {
 			if label.Name == labels.Verified {
-				existingLabel = true
-				break
+				verifyLabel = true
+			} else if label.Name == labels.VerifiedLater {
+				laterLabel = true
 			}
 		}
-		if !existingLabel {
+		if !verifyLabel {
 			if err := ghc.AddLabel(e.org, e.repo, e.number, labels.Verified); err != nil {
 				log.WithError(err).Error("Failed to add verified label.")
 				return comment("Failed to add `verified` label. Please try again.")
@@ -2509,6 +2510,11 @@ func handleVerification(e event, ghc githubClient, inserter BigQueryInserter, lo
 			msg = fmt.Sprintf("This PR has been marked as verified by `%s`. Jira issue(s) in the title of this PR will be moved to the `VERIFIED` state on merge.", strings.Join(e.verify, ","))
 		} else {
 			msg = fmt.Sprintf("`%s` has been added as a verification reason for this PR. Jira issue(s) in the title of this PR will be moved to the `VERIFIED` state on merge.", strings.Join(e.verify, ","))
+		}
+		if laterLabel {
+			if err := ghc.RemoveLabel(e.org, e.repo, e.number, labels.VerifiedLater); err != nil {
+				log.WithError(err).Error("Failed to remove verified-later label.")
+			}
 		}
 		if inserter != nil {
 			for _, reason := range e.verify {
