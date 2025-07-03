@@ -42,18 +42,19 @@ const (
 )
 
 var (
-	jiraIssueRegexPart      = `[[:alnum:]]+-[[:digit:]]+`
-	titleMatchJiraIssue     = regexp.MustCompile(`(?i)(` + jiraIssueRegexPart + `,?[[:space:]]*)*(NO-JIRA|NO-ISSUE|` + jiraIssueRegexPart + `)+:`)
-	verifyCommandMatch      = regexp.MustCompile(`(?mi)^/verified by\s+(([^\s]+,)*([^\s]+))*$`)
-	verifyLaterCommandMatch = regexp.MustCompile(`(?mi)^/verified later\s+(([^\s]+,)*([^\s]+))*$`)
-	refreshCommandMatch     = regexp.MustCompile(`(?mi)^/jira refresh\s*$`)
-	qaReviewCommandMatch    = regexp.MustCompile(`(?mi)^/jira cc-qa\s*$`)
-	cherrypickCommandMatch  = regexp.MustCompile(`(?mi)^/jira cherry-?pick (` + jiraIssueRegexPart + `,?[[:space:]]*)*(` + jiraIssueRegexPart + `)+\s*$`)
-	backportCommandMatch    = regexp.MustCompile(`(?mi)^/jira backport\s+(([^\s]+,)*([^\s]+))$`)
-	existingBackportMatch   = regexp.MustCompile(`jlp-[^:]+:[^:]+`)
-	cherrypickPRMatch       = regexp.MustCompile(`This is an automated cherry-pick of #([0-9]+)`)
-	jiraIssueReferenceMatch = regexp.MustCompile(`([[:alnum:]]+)-([[:digit:]]+)`)
-	bugProjects             = sets.New("OCPBUGS", "DFBUGS")
+	jiraIssueRegexPart       = `[[:alnum:]]+-[[:digit:]]+`
+	titleMatchJiraIssue      = regexp.MustCompile(`(?i)(` + jiraIssueRegexPart + `,?[[:space:]]*)*(NO-JIRA|NO-ISSUE|` + jiraIssueRegexPart + `)+:`)
+	verifyCommandMatch       = regexp.MustCompile(`(?mi)^/verified by\s+(([^\s]+,)*([^\s]+))*$`)
+	verifyRemoveCommandMatch = regexp.MustCompile(`(?mi)^/verified remove$`)
+	verifyLaterCommandMatch  = regexp.MustCompile(`(?mi)^/verified later\s+(([^\s]+,)*([^\s]+))*$`)
+	refreshCommandMatch      = regexp.MustCompile(`(?mi)^/jira refresh\s*$`)
+	qaReviewCommandMatch     = regexp.MustCompile(`(?mi)^/jira cc-qa\s*$`)
+	cherrypickCommandMatch   = regexp.MustCompile(`(?mi)^/jira cherry-?pick (` + jiraIssueRegexPart + `,?[[:space:]]*)*(` + jiraIssueRegexPart + `)+\s*$`)
+	backportCommandMatch     = regexp.MustCompile(`(?mi)^/jira backport\s+(([^\s]+,)*([^\s]+))$`)
+	existingBackportMatch    = regexp.MustCompile(`jlp-[^:]+:[^:]+`)
+	cherrypickPRMatch        = regexp.MustCompile(`This is an automated cherry-pick of #([0-9]+)`)
+	jiraIssueReferenceMatch  = regexp.MustCompile(`([[:alnum:]]+)-([[:digit:]]+)`)
+	bugProjects              = sets.New("OCPBUGS", "DFBUGS")
 )
 
 type referencedIssue struct {
@@ -388,6 +389,51 @@ func handle(jc jiraclient.Client, ghc githubClient, inserter BigQueryInserter, r
 			}
 		}
 	}
+	// just remove verified label if files were changed
+	if e.fileChanged {
+		currentLabels, err := ghc.GetIssueLabels(e.org, e.repo, e.number)
+		if err != nil {
+			log.WithError(err).Warn("Could not list labels on PR")
+		}
+		for _, label := range currentLabels {
+			if label.Name == labels.Verified {
+				if err := ghc.RemoveLabel(e.org, e.repo, e.number, labels.Verified); err != nil {
+					log.WithError(err).Error("Failed to remove verified label.")
+				}
+				info := VerificationInfo{
+					User:      e.login,
+					Reason:    "modified",
+					Type:      verifyRemoveType,
+					Org:       e.org,
+					Repo:      e.repo,
+					PRNum:     e.number,
+					Branch:    e.baseRef,
+					Timestamp: time.Now(),
+				}
+				if err := inserter.Put(context.TODO(), info); err != nil {
+					log.WithError(err).Error("Failed to upload info to Big Query")
+				}
+			} else if label.Name == labels.VerifiedLater {
+				if err := ghc.RemoveLabel(e.org, e.repo, e.number, labels.VerifiedLater); err != nil {
+					log.WithError(err).Error("Failed to remove verified-later label.")
+				}
+				info := VerificationInfo{
+					User:      e.login,
+					Reason:    "modified",
+					Type:      verifyRemoveLaterType,
+					Org:       e.org,
+					Repo:      e.repo,
+					PRNum:     e.number,
+					Branch:    e.baseRef,
+					Timestamp: time.Now(),
+				}
+				if err := inserter.Put(context.TODO(), info); err != nil {
+					log.WithError(err).Error("Failed to upload info to Big Query")
+				}
+			}
+		}
+		return nil
+	}
 	// cherrypicks follow a different pattern than normal validation
 	if e.cherrypick {
 		return handleCherrypick(e, ghc, jc, branchOptions, log)
@@ -404,7 +450,7 @@ func handle(jc jiraclient.Client, ghc githubClient, inserter BigQueryInserter, r
 		return handleClose(e, ghc, jc, branchOptions, log)
 	}
 	// verification commands follow a different pattern than normal validation
-	if len(e.verify) > 0 || len(e.verifyLater) > 0 {
+	if len(e.verify) > 0 || len(e.verifyLater) > 0 || e.verifiedRemove {
 		return handleVerification(e, ghc, inserter, log)
 	}
 
@@ -837,7 +883,7 @@ func isPreMergeVerified(issue *jira.Issue, prLabels []github.Label) bool {
 	return hasLabel && hasFixVersions && hasAffectsVersions
 }
 
-func isCommentVerified(issue *jira.Issue, prLabels []github.Label) bool {
+func isCommentVerified(prLabels []github.Label) bool {
 	for _, label := range prLabels {
 		if label.Name == labels.Verified {
 			return true
@@ -1035,7 +1081,8 @@ func digestPR(log *logrus.Entry, pre github.PullRequestEvent, validateByDefault 
 		pre.Action != github.PullRequestActionEdited &&
 		pre.Action != github.PullRequestActionClosed &&
 		pre.Action != github.PullRequestActionLabeled &&
-		pre.Action != github.PullRequestActionUnlabeled {
+		pre.Action != github.PullRequestActionUnlabeled &&
+		pre.Action != github.PullRequestActionSynchronize {
 		return nil, nil
 	}
 
@@ -1052,7 +1099,7 @@ func digestPR(log *logrus.Entry, pre github.PullRequestEvent, validateByDefault 
 		body    = pre.PullRequest.Body
 	)
 
-	e := &event{org: org, repo: repo, baseRef: baseRef, number: number, merged: pre.PullRequest.Merged, closed: pre.Action == github.PullRequestActionClosed, opened: pre.Action == github.PullRequestActionOpened, state: pre.PullRequest.State, body: body, title: title, htmlUrl: pre.PullRequest.HTMLURL, login: pre.PullRequest.User.Login}
+	e := &event{org: org, repo: repo, baseRef: baseRef, number: number, merged: pre.PullRequest.Merged, closed: pre.Action == github.PullRequestActionClosed, opened: pre.Action == github.PullRequestActionOpened, state: pre.PullRequest.State, body: body, title: title, htmlUrl: pre.PullRequest.HTMLURL, login: pre.PullRequest.User.Login, fileChanged: pre.Action == github.PullRequestActionSynchronize}
 	// Make sure the PR title is referencing a bug
 	var err error
 	e.issues, e.missing, e.noJira = jiraKeyFromTitle(title)
@@ -1128,7 +1175,7 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 		return nil, nil
 	}
 	// Make sure they are requesting a valid command
-	var refresh, cc, cherrypick, backport bool
+	var refresh, cc, cherrypick, backport, verifiedRemove bool
 	var verified, verifyLater []string
 	switch {
 	case refreshCommandMatch.MatchString(ice.Comment.Body):
@@ -1151,6 +1198,8 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 		if err != nil {
 			return nil, err
 		}
+	case verifyRemoveCommandMatch.MatchString(ice.Comment.Body):
+		verifiedRemove = true
 	default:
 		return nil, nil
 	}
@@ -1173,20 +1222,21 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 	}
 
 	e := &event{
-		org:         org,
-		repo:        repo,
-		baseRef:     pr.Base.Ref,
-		number:      number,
-		merged:      pr.Merged,
-		state:       pr.State,
-		body:        ice.Comment.Body,
-		title:       ice.Issue.Title,
-		htmlUrl:     ice.Comment.HTMLURL,
-		login:       ice.Comment.User.Login,
-		refresh:     refresh,
-		cc:          cc,
-		verify:      verified,
-		verifyLater: verifyLater,
+		org:            org,
+		repo:           repo,
+		baseRef:        pr.Base.Ref,
+		number:         number,
+		merged:         pr.Merged,
+		state:          pr.State,
+		body:           ice.Comment.Body,
+		title:          ice.Issue.Title,
+		htmlUrl:        ice.Comment.HTMLURL,
+		login:          ice.Comment.User.Login,
+		refresh:        refresh,
+		cc:             cc,
+		verify:         verified,
+		verifyLater:    verifyLater,
+		verifiedRemove: verifiedRemove,
 	}
 
 	e.issues, e.missing, e.noJira = jiraKeyFromTitle(pr.Title)
@@ -1272,6 +1322,7 @@ type event struct {
 	backport                        bool
 	backportBranches                []string
 	verify, verifyLater             []string
+	verifiedRemove, fileChanged     bool
 }
 
 func (e *event) comment(gc githubClient) func(body string) error {
@@ -1774,7 +1825,7 @@ These pull request must merge or be unlinked from the Jira bug in order for it t
 				log.WithError(err).Warn("Could not list labels on PR")
 			} else {
 				premergeVerified = isPreMergeVerified(bug, labels)
-				commentVerified = isCommentVerified(bug, labels)
+				commentVerified = isCommentVerified(labels)
 			}
 			if commentVerified {
 				outcomeMessage = func(action string) string {
@@ -2388,24 +2439,24 @@ func handleClose(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 
 func handleVerification(e event, ghc githubClient, inserter BigQueryInserter, log *logrus.Entry) error {
 	comment := e.comment(ghc)
-	if len(e.verifyLater) > 0 && len(e.verify) > 0 {
-		return comment("The `/verified` and `/verified later` commands cannot be used in the same comment.")
+	if len(e.verifyLater) > 0 && len(e.verify) > 0 && e.verifiedRemove {
+		return comment("The `/verified`, `/verified later`, and `/verified remove` commands cannot be used in the same comment.")
 	}
 	msg := ""
+	prLabels, err := ghc.GetIssueLabels(e.org, e.repo, e.number)
+	if err != nil {
+		log.WithError(err).Warn("Could not list labels on PR")
+		return comment("Failed to check labels for this PR. Please try again.")
+	}
 	if len(e.verifyLater) > 0 {
 		// make sure the PR is not already marked as verified
 		var existingLabel bool
-		if prLabels, err := ghc.GetIssueLabels(e.org, e.repo, e.number); err != nil {
-			log.WithError(err).Warn("Could not list labels on PR")
-			return comment("Failed to check labels for this PR. Please try again.")
-		} else {
-			for _, label := range prLabels {
-				if label.Name == labels.Verified {
-					return comment("PR is already has `verified` label. Cannot change PR to `verify-later`")
-				}
-				if label.Name == labels.VerifiedLater {
-					existingLabel = true
-				}
+		for _, label := range prLabels {
+			if label.Name == labels.Verified {
+				return comment("PR is already has `verified` label. Cannot change PR to `verify-later`")
+			}
+			if label.Name == labels.VerifiedLater {
+				existingLabel = true
 			}
 		}
 		// only usernames can be verified-later
@@ -2444,15 +2495,10 @@ func handleVerification(e event, ghc githubClient, inserter BigQueryInserter, lo
 	}
 	if len(e.verify) > 0 {
 		var existingLabel bool
-		if prLabels, err := ghc.GetIssueLabels(e.org, e.repo, e.number); err != nil {
-			log.WithError(err).Warn("Could not list labels on PR")
-			return comment("Failed to check labels for this PR. Please try again.")
-		} else {
-			for _, label := range prLabels {
-				if label.Name == labels.Verified {
-					existingLabel = true
-					break
-				}
+		for _, label := range prLabels {
+			if label.Name == labels.Verified {
+				existingLabel = true
+				break
 			}
 		}
 		if !existingLabel {
@@ -2465,7 +2511,6 @@ func handleVerification(e event, ghc githubClient, inserter BigQueryInserter, lo
 			msg = fmt.Sprintf("`%s` has been added as a verification reason for this PR. Jira issue(s) in the title of this PR will be moved to the `VERIFIED` state on merge.", strings.Join(e.verify, ","))
 		}
 		if inserter != nil {
-			fmt.Printf("Inserter value is %v\n", inserter)
 			for _, reason := range e.verify {
 				info := VerificationInfo{
 					User:      e.login,
@@ -2482,6 +2527,56 @@ func handleVerification(e event, ghc githubClient, inserter BigQueryInserter, lo
 					// TODO: consider adding comment to PR with warning; maybe don't mark as verified and ask the user to try again?
 				}
 			}
+		}
+	}
+	if e.verifiedRemove {
+		var verifyLabel, laterLabel bool
+		for _, label := range prLabels {
+			if label.Name == labels.Verified {
+				verifyLabel = true
+			} else if label.Name == labels.VerifiedLater {
+				laterLabel = true
+			}
+		}
+		if verifyLabel {
+			if err := ghc.RemoveLabel(e.org, e.repo, e.number, labels.Verified); err != nil {
+				log.WithError(err).Error("Failed to remove verified label.")
+				return comment("Failed to remove `verified` label. Please try again.")
+			}
+			info := VerificationInfo{
+				User:      e.login,
+				Reason:    "comment",
+				Type:      verifyRemoveType,
+				Org:       e.org,
+				Repo:      e.repo,
+				PRNum:     e.number,
+				Branch:    e.baseRef,
+				Timestamp: time.Now(),
+			}
+			if err := inserter.Put(context.TODO(), info); err != nil {
+				log.WithError(err).Error("Failed to upload info to Big Query")
+			}
+			msg += "The `verified` label has been removed."
+		}
+		if laterLabel {
+			if err := ghc.RemoveLabel(e.org, e.repo, e.number, labels.VerifiedLater); err != nil {
+				log.WithError(err).Error("Failed to remove verified-later label.")
+				return comment("Failed to remove `verified-later` label. Please try again.")
+			}
+			info := VerificationInfo{
+				User:      e.login,
+				Reason:    "comment",
+				Type:      verifyRemoveLaterType,
+				Org:       e.org,
+				Repo:      e.repo,
+				PRNum:     e.number,
+				Branch:    e.baseRef,
+				Timestamp: time.Now(),
+			}
+			if err := inserter.Put(context.TODO(), info); err != nil {
+				log.WithError(err).Error("Failed to upload info to Big Query")
+			}
+			msg += "The `verified-later` label has been removed."
 		}
 	}
 	if len(msg) != 0 {
