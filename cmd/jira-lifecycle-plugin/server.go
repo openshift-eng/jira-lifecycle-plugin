@@ -1111,7 +1111,8 @@ func digestPR(log *logrus.Entry, pre github.PullRequestEvent, validateByDefault 
 		log.WithError(err).Debug("Failed to identify if PR is a cherrypick")
 		return nil, err
 	} else if cherrypick {
-		if pre.Action == github.PullRequestActionOpened {
+		// Skip automated cherry-pick creation for DFBUGS project (or red-hat-storage org).
+		if org != "red-hat-storage" && pre.Action == github.PullRequestActionOpened {
 			e.cherrypick = true
 			e.cherrypickFromPRNum = cherrypickFromPRNum
 			return e, nil
