@@ -657,3 +657,55 @@ func TestJiraStatesMatch(t *testing.T) {
 		})
 	}
 }
+
+func TestPreMergeVerificationOptionsExcluded(t *testing.T) {
+	testCases := []struct {
+		name      string
+		options   PreMergeVerificationOptions
+		org, repo string
+		expected  bool
+	}{
+		{
+			name:     "nil options",
+			options:  PreMergeVerificationOptions{},
+			org:      "org1",
+			repo:     "repo1",
+			expected: false,
+		},
+		{
+			name: "no match",
+			options: PreMergeVerificationOptions{
+				ExcludedRepositories: []string{
+					"org1/repo1",
+					"org2/repo2",
+					"org3/repo3",
+				},
+			},
+			org:      "org4",
+			repo:     "repo4",
+			expected: false,
+		},
+		{
+			name: "match",
+			options: PreMergeVerificationOptions{
+				ExcludedRepositories: []string{
+					"org1/repo1",
+					"org2/repo2",
+					"org3/repo3",
+				},
+			},
+			org:      "org2",
+			repo:     "repo2",
+			expected: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			actual := tc.options.Excluded(tc.org, tc.repo)
+			if actual != tc.expected {
+				t.Errorf("%s: expected %t, got %t", tc.name, tc.expected, actual)
+			}
+		})
+	}
+}
