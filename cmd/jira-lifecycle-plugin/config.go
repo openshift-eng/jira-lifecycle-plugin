@@ -6,17 +6,20 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
-// Jira holds the config for the jira plugin.
+// Config holds the config for the jira plugin.
 type Config struct {
 	// Default settings mapped by branch in any repo in any org.
 	// The `*` wildcard will apply to all branches.
 	Default map[string]JiraBranchOptions `json:"default,omitempty"`
 	// Options for specific orgs. The `*` wildcard will apply to all orgs.
 	Orgs map[string]JiraOrgOptions `json:"orgs,omitempty"`
+	// PreMergeVerification options for Pre-Merge Verification.
+	PreMergeVerification PreMergeVerificationOptions `json:"premerge_verification,omitempty"`
 }
 
 // JiraOrgOptions holds options for checking Jira bugs for an org.
@@ -208,7 +211,7 @@ func (o JiraBranchOptions) matches(other JiraBranchOptions) bool {
 
 const JiraOptionsWildcard = `*`
 
-// OptionsForItem resolves a set of options for an item, honoring
+// JiraOptionsForItem resolves a set of options for an item, honoring
 // the `*` wildcard and doing defaulting if it is present with the
 // item itself.
 func JiraOptionsForItem(item string, config map[string]JiraBranchOptions) JiraBranchOptions {
@@ -428,4 +431,24 @@ func ReadBytesMaybeGZIP(data []byte) ([]byte, error) {
 		return nil, err
 	}
 	return io.ReadAll(gzipReader)
+}
+
+type PreMergeVerificationOptions struct {
+	// ExcludedRepositories is a list of repositories that do not contribute images to the
+	// release payload.  These repositories will have their Jira issues automatically moved
+	// into the VERIFIED state, by the jira-lifecycle-plugin, if/when all associated PR links
+	// have been labeled as "verified".
+	ExcludedRepositories []string `json:"excluded_repositories,omitempty"`
+}
+
+func (b *Config) OptionsForPreMergeVerification() PreMergeVerificationOptions {
+	return b.PreMergeVerification
+}
+
+// Excluded checks whether the specified repository is excluded from pre-merge validation
+func (o *PreMergeVerificationOptions) Excluded(org, repo string) bool {
+	if slices.Contains(o.ExcludedRepositories, fmt.Sprintf("%s/%s", org, repo)) {
+		return true
+	}
+	return false
 }

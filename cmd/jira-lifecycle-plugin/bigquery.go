@@ -14,6 +14,7 @@ const (
 	verifyLaterType       = "later"
 	verifyRemoveType      = "remove"
 	verifyRemoveLaterType = "removeLater"
+	verifyBypassType      = "bypass"
 )
 
 type BigQueryInserter interface {
