@@ -346,6 +346,10 @@ type githubClient interface {
 }
 
 func (s *server) handleIssueComment(l *logrus.Entry, e github.IssueCommentEvent) {
+	// logging to investigate nonresponsive comments bug
+	if e.Repo.Owner.Login == "openshift" && e.Repo.Name == "origin" && e.Issue.Number == 30096 {
+		l.Infof("Comment event for verfified test: %+v", e)
+	}
 	cfg := s.config()
 	event, err := digestComment(s.ghc, l, e)
 	if err != nil {
@@ -1020,6 +1024,10 @@ func upsertGitHubLinkToIssue(log *logrus.Entry, issueID string, jc jiraclient.Cl
 }
 
 func (s *server) handlePullRequest(l *logrus.Entry, pre github.PullRequestEvent) {
+	// logging to investigate nonresponsive comments bug
+	if pre.PullRequest.Base.Repo.Owner.Login == "openshift" && pre.PullRequest.Base.Repo.Name == "origin" && pre.PullRequest.Number == 30096 {
+		l.Infof("Pull Request event for verfified test: %+v", pre)
+	}
 	cfg := s.config()
 	branchOptions := cfg.OptionsForBranch(pre.PullRequest.Base.Repo.Owner.Login, pre.PullRequest.Base.Repo.Name, pre.PullRequest.Base.Ref)
 	verificationOptions := cfg.OptionsForPreMergeVerification()
