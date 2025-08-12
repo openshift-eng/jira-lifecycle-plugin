@@ -5654,7 +5654,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 		},
 		{
-			name: "verified later comment verification later event",
+			name: "verified later comment creates verification later event",
 			e: github.IssueCommentEvent{
 				Action: github.IssueCommentActionCreated,
 				Issue: github.Issue{
@@ -5678,6 +5678,60 @@ Instructions for interacting with me using PR comments are available [here](http
 			title: "OCPBUGS-123: oopsie doopsie",
 			expected: &event{
 				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified later @tester", htmlUrl: "www.com", login: "user", verifyLater: []string{"@tester"},
+			},
+		},
+		{
+			name: "verified later comment with trailing spaces creates verification later event",
+			e: github.IssueCommentEvent{
+				Action: github.IssueCommentActionCreated,
+				Issue: github.Issue{
+					Number:      1,
+					PullRequest: &struct{}{},
+				},
+				Comment: github.IssueComment{
+					Body: "/verified later @tester ",
+					User: github.User{
+						Login: "user",
+					},
+					HTMLURL: "www.com",
+				},
+				Repo: github.Repo{
+					Owner: github.User{
+						Login: "org",
+					},
+					Name: "repo",
+				},
+			},
+			title: "OCPBUGS-123: oopsie doopsie",
+			expected: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified later @tester ", htmlUrl: "www.com", login: "user", verifyLater: []string{"@tester"},
+			},
+		},
+		{
+			name: "verified later comment with preceding spaces creates verification later event",
+			e: github.IssueCommentEvent{
+				Action: github.IssueCommentActionCreated,
+				Issue: github.Issue{
+					Number:      1,
+					PullRequest: &struct{}{},
+				},
+				Comment: github.IssueComment{
+					Body: " /verified later @tester",
+					User: github.User{
+						Login: "user",
+					},
+					HTMLURL: "www.com",
+				},
+				Repo: github.Repo{
+					Owner: github.User{
+						Login: "org",
+					},
+					Name: "repo",
+				},
+			},
+			title: "OCPBUGS-123: oopsie doopsie",
+			expected: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: " /verified later @tester", htmlUrl: "www.com", login: "user", verifyLater: []string{"@tester"},
 			},
 		},
 		{
