@@ -3227,7 +3227,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `. Jira issue(s) in the title of this PR will be moved to the ` + "`VERIFIED`" + ` state when the change is available in an accepted nightly payload.
+			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `.
 
 <details>
 
@@ -3256,7 +3256,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `. Jira issue(s) in the title of this PR will be moved to the ` + "`VERIFIED`" + ` state on merge.
+			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `.
 
 <details>
 
@@ -3294,7 +3294,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester,@tester2`" + `. Jira issue(s) in the title of this PR will be moved to the ` + "`VERIFIED`" + ` state when the change is available in an accepted nightly payload.
+			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester,@tester2`" + `.
 
 <details>
 
@@ -3331,7 +3331,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester,@tester2`" + `. Jira issue(s) in the title of this PR will be moved to the ` + "`VERIFIED`" + ` state on merge.
+			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester,@tester2`" + `.
 
 <details>
 
@@ -3369,7 +3369,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified, labels.VerifiedLater},
-			expectedComment: `org/repo#1:@user: This PR has been marked to be verified later by ` + "`@tester`" + `. Jira issue(s) in the title of this PR will require post-merge verification. After testing, it must be manually moved to the ` + "`VERIFIED`" + ` state.
+			expectedComment: `org/repo#1:@user: This PR has been marked to be verified later by ` + "`@tester`" + `.
 
 <details>
 
@@ -3468,7 +3468,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `. Jira issue(s) in the title of this PR will be moved to the ` + "`VERIFIED`" + ` state when the change is available in an accepted nightly payload.
+			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `.
 
 <details>
 
@@ -3489,7 +3489,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `. Jira issue(s) in the title of this PR will be moved to the ` + "`VERIFIED`" + ` state on merge.
+			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `.
 
 <details>
 
@@ -3680,7 +3680,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.VerifiedLater},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `. Jira issue(s) in the title of this PR will be moved to the ` + "`VERIFIED`" + ` state when the change is available in an accepted nightly payload.
+			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `.
 
 <details>
 
@@ -3717,7 +3717,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.VerifiedLater},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `. Jira issue(s) in the title of this PR will be moved to the ` + "`VERIFIED`" + ` state on merge.
+			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `.
 
 <details>
 

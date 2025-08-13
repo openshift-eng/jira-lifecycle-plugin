@@ -2697,14 +2697,14 @@ func insertBigQueryEntry(e event, inserter BigQueryInserter, log *logrus.Entry, 
 
 func getVerifiedMessage(e event, verificationOptions PreMergeVerificationOptions) string {
 	if verificationOptions.Excluded(e.org, e.repo) {
-		return fmt.Sprintf("This PR has been marked as verified by `%s`. Jira issue(s) in the title of this PR will be moved to the `VERIFIED` state on merge.", strings.Join(e.verify, ","))
+		return fmt.Sprintf("This PR has been marked as verified by `%s`.", strings.Join(e.verify, ","))
 	}
-	return fmt.Sprintf("This PR has been marked as verified by `%s`. Jira issue(s) in the title of this PR will be moved to the `VERIFIED` state when the change is available in an accepted nightly payload.", strings.Join(e.verify, ","))
+	return fmt.Sprintf("This PR has been marked as verified by `%s`.", strings.Join(e.verify, ","))
 }
 
 func getVerifiedLaterMessage(e event, verificationOptions PreMergeVerificationOptions) string {
 	if verificationOptions.Excluded(e.org, e.repo) {
-		return fmt.Sprintf("This PR has been marked to be verified later by `%s`. Jira issue(s) in the title of this PR will not be moved to the `VERIFIED` state on merge.", strings.Join(e.verifyLater, ","))
+		return fmt.Sprintf("This PR has been marked to be verified later by `%s`.", strings.Join(e.verifyLater, ","))
 	}
-	return fmt.Sprintf("This PR has been marked to be verified later by `%s`. Jira issue(s) in the title of this PR will require post-merge verification. After testing, it must be manually moved to the `VERIFIED` state.", strings.Join(e.verifyLater, ","))
+	return fmt.Sprintf("This PR has been marked to be verified later by `%s`.", strings.Join(e.verifyLater, ","))
 }
