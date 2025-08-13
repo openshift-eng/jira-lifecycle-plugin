@@ -3681,6 +3681,35 @@ Instructions for interacting with me using PR comments are available [here](http
 </details>`,
 		},
 		{
+			name:           "verified remove comment with no verified labels results in comment and bigquery data being uploaded",
+			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
+			body:           "/verified remove",
+			verifiedRemove: true,
+			verificationInfo: []VerificationInfo{{
+				User:   "user",
+				Reason: "comment",
+				Type:   verifyRemoveType,
+				Org:    "org",
+				Repo:   "repo",
+				PRNum:  1,
+				Branch: "branch",
+			}},
+			options:        JiraBranchOptions{}, // no requirements --> always valid
+			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
+			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
+			expectedComment: `org/repo#1:@user: This PR does not have ` + "`verified`" + ` or ` + "`verified-later`" + ` labels.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>/verified remove
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+		},
+		{
 			name:        "PR change results in verified label being removed and bigquery data being uploaded",
 			issues:      []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
 			fileChanged: true,

@@ -2609,6 +2609,9 @@ func handleVerification(e event, ghc githubClient, verificationOptions PreMergeV
 			}
 			msg += "The `verified-later` label has been removed."
 		}
+		if msg == "" {
+			msg += "This PR does not have `verified` or `verified-later` labels."
+		}
 		return comment(msg)
 	}
 
