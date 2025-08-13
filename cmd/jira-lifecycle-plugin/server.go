@@ -862,8 +862,22 @@ func isPreMergeVerified(issue *jira.Issue, prLabels []github.Label) bool {
 }
 
 func isCommentVerified(prLabels []github.Label) bool {
+	var hasVerified bool
 	for _, label := range prLabels {
 		if label.Name == labels.Verified {
+			hasVerified = true
+			continue
+		}
+		if label.Name == labels.VerifiedLater {
+			return false
+		}
+	}
+	return hasVerified
+}
+
+func isVerifiedLater(prLabels []github.Label) bool {
+	for _, label := range prLabels {
+		if label.Name == labels.VerifiedLater {
 			return true
 		}
 	}
@@ -1817,14 +1831,13 @@ These pull request must merge or be unlinked from the Jira bug in order for it t
 			return fmt.Sprintf(issueLink+" has %sbeen moved to the %s state.", refIssue.Key(), jc.JiraURL(), refIssue.Key(), action, options.StateAfterMerge)
 		}
 
+		prLabels, err := gc.GetIssueLabels(e.org, e.repo, e.number)
+		if err != nil {
+			log.WithError(err).Warn("Could not list labels on PR")
+		}
 		if shouldMigrate {
-			var commentVerified, premergeVerified bool
-			if labels, err := gc.GetIssueLabels(e.org, e.repo, e.number); err != nil {
-				log.WithError(err).Warn("Could not list labels on PR")
-			} else {
-				premergeVerified = isPreMergeVerified(bug, labels)
-				commentVerified = prsVerified && isCommentVerified(labels)
-			}
+			premergeVerified := isPreMergeVerified(bug, prLabels)
+			commentVerified := prsVerified && isCommentVerified(prLabels)
 			if commentVerified {
 				// This logic means that the merged PR has been commit verified, and we need to handle it accordingly...
 				if verificationOptions.Excluded(e.org, e.repo) {
@@ -1852,6 +1865,29 @@ These pull request must merge or be unlinked from the Jira bug in order for it t
 
 					msg += outcomeMessage("")
 					continue
+				}
+			} else if isVerifiedLater(prLabels) {
+				// This logic means that the merged PR has been commit verified-later, and we need to handle it accordingly...
+				outcomeMessage = func(action string) string {
+					return fmt.Sprintf("This pull request has the `verified-later` tag and will need to be manually moved to VERIFIED after testing. "+issueLink+" has %sbeen moved to the `%s` state.", refIssue.Key(), jc.JiraURL(), refIssue.Key(), action, options.StateAfterMerge)
+				}
+
+				if options.StateAfterMerge != nil {
+					if options.StateAfterMerge.Status != "" && (bug.Fields.Status == nil || !strings.EqualFold(options.StateAfterMerge.Status, bug.Fields.Status.Name)) {
+						if err := jc.UpdateStatus(refIssue.Key(), options.StateAfterMerge.Status); err != nil {
+							log.WithError(err).Warn("Unexpected error updating jira issue.")
+							msg += formatError(fmt.Sprintf("updating to the %s state", options.StateAfterMerge.Status), jc.JiraURL(), refIssue.Key(), err)
+							continue
+						}
+						if options.StateAfterMerge.Resolution != "" && (bug.Fields.Resolution == nil || !strings.EqualFold(options.StateAfterMerge.Resolution, bug.Fields.Resolution.Name)) {
+							updateIssue := jira.Issue{Key: bug.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterMerge.Resolution}}}
+							if _, err := jc.UpdateIssue(&updateIssue); err != nil {
+								log.WithError(err).Warn("Unexpected error updating jira issue.")
+								msg += formatError(fmt.Sprintf("updating to the %s resolution", options.StateAfterMerge.Resolution), jc.JiraURL(), refIssue.Key(), err)
+								continue
+							}
+						}
+					}
 				}
 			} else if premergeVerified {
 				outcomeMessage = func(action string) string {
@@ -1894,6 +1930,20 @@ These pull request must merge or be unlinked from the Jira bug in order for it t
 				}
 			}
 			msg += fmt.Sprintf(issueLink+": %s%s", refIssue.Key(), jc.JiraURL(), refIssue.Key(), mergedMessage("All"), outcomeMessage(""))
+			continue
+		}
+		if isCommentVerified(prLabels) {
+			unmergedVerifiedPart := "\n\nThis PR is marked as verified. If the remaining PRs listed above are marked as verified before merging, "
+			if verificationOptions.Excluded(e.org, e.repo) {
+				unmergedVerifiedPart += "the issue will automatically be moved to VERIFIED after all of the PRs merge."
+			} else {
+				unmergedVerifiedPart += "the issue will automatically be moved to VERIFIED after all of the changes from the PRs are available in an accepted nightly payload."
+			}
+			msg += fmt.Sprintf(issueLink+": %s%s%s%s", refIssue.Key(), jc.JiraURL(), refIssue.Key(), mergedMessage("Some"), unmergedMessage, outcomeMessage("not "), unmergedVerifiedPart)
+			continue
+		} else if isVerifiedLater(prLabels) {
+			unmergedVerifiedPart := "\n\nThis PR is marked as verified-later. Jira issue(s) in the title of this PR will require post-merge verification. After testing, it must be manually moved to the `VERIFIED` state."
+			msg += fmt.Sprintf(issueLink+": %s%s%s%s", refIssue.Key(), jc.JiraURL(), refIssue.Key(), mergedMessage("Some"), unmergedMessage, outcomeMessage("not "), unmergedVerifiedPart)
 			continue
 		}
 		msg += fmt.Sprintf(issueLink+": %s%s%s", refIssue.Key(), jc.JiraURL(), refIssue.Key(), mergedMessage("Some"), unmergedMessage, outcomeMessage("not "))
