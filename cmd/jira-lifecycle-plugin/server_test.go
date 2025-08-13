@@ -368,6 +368,7 @@ func TestHandle(t *testing.T) {
 		verified                       []string
 		verifiedLater                  []string
 		verifiedRemove, verifiedBypass bool
+		verifiedHelp                   bool
 		fileChanged                    bool
 		login                          string
 		verificationInfo               []VerificationInfo
@@ -4387,6 +4388,26 @@ In response to [this](https://github.com/org/repo/pull/1):
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
+		{
+			name:           "verified comment with no action prints help text",
+			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
+			body:           "/verified",
+			verifiedHelp:   true,
+			options:        JiraBranchOptions{}, // no requirements --> always valid
+			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
+			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
+			expectedComment: `org/repo#1:@user: The ` + "`/verified`" + ` command must be used with one of the following actions: ` + "`by`, `later`, `remove`, or `bypass`" + `. See https://docs.ci.openshift.org/docs/architecture/jira/#premerge-verification for more information.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>/verified
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -4421,6 +4442,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			testEvent.verifyLater = tc.verifiedLater
 			testEvent.verifiedRemove = tc.verifiedRemove
 			testEvent.verifiedBypass = tc.verifiedBypass
+			testEvent.verifiedHelp = tc.verifiedHelp
 			testEvent.fileChanged = tc.fileChanged
 			if tc.login != "" {
 				testEvent.login = tc.login
@@ -6236,6 +6258,33 @@ Instructions for interacting with me using PR comments are available [here](http
 			title: "OCPBUGS-123: oopsie doopsie",
 			expected: &event{
 				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified bypass", htmlUrl: "www.com", login: "user", verifiedBypass: true,
+			},
+		},
+		{
+			name: "verified comment with no action creates verified help event",
+			e: github.IssueCommentEvent{
+				Action: github.IssueCommentActionCreated,
+				Issue: github.Issue{
+					Number:      1,
+					PullRequest: &struct{}{},
+				},
+				Comment: github.IssueComment{
+					Body: "/verified",
+					User: github.User{
+						Login: "user",
+					},
+					HTMLURL: "www.com",
+				},
+				Repo: github.Repo{
+					Owner: github.User{
+						Login: "org",
+					},
+					Name: "repo",
+				},
+			},
+			title: "OCPBUGS-123: oopsie doopsie",
+			expected: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified", htmlUrl: "www.com", login: "user", verifiedHelp: true,
 			},
 		},
 	}

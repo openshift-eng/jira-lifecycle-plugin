@@ -48,6 +48,7 @@ var (
 	verifyRemoveCommandMatch = regexp.MustCompile(`(?mi)^\s*/verified remove\s*$`)
 	verifyLaterCommandMatch  = regexp.MustCompile(`(?mi)^\s*/verified later\s+([^\r\n]+)\s*$`)
 	verifyBypassCommandMatch = regexp.MustCompile(`(?mi)^\s*/verified bypass\s*$`)
+	verifyHelpCommandMatch   = regexp.MustCompile(`(?mi)^\s*/verified(?:\s+.*)?$`)
 	refreshCommandMatch      = regexp.MustCompile(`(?mi)^\s*/jira refresh\s*$`)
 	qaReviewCommandMatch     = regexp.MustCompile(`(?mi)^\s*/jira cc-qa\s*$`)
 	cherrypickCommandMatch   = regexp.MustCompile(`(?mi)^\s*/jira cherry-?pick (` + jiraIssueRegexPart + `,?[[:space:]]*)*(` + jiraIssueRegexPart + `)+\s*$`)
@@ -396,6 +397,11 @@ func handle(jc jiraclient.Client, ghc githubClient, inserter BigQueryInserter, r
 				}
 			}
 		}
+	}
+	// just post verified help text
+	if e.verifiedHelp {
+		helpText := "The `/verified` command must be used with one of the following actions: `by`, `later`, `remove`, or `bypass`. See https://docs.ci.openshift.org/docs/architecture/jira/#premerge-verification for more information."
+		return comment(helpText)
 	}
 	// just remove verified label if files were changed
 	if e.fileChanged {
@@ -1173,7 +1179,7 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 		return nil, nil
 	}
 	// Make sure they are requesting a valid command
-	var refresh, cc, cherrypick, backport, verifiedRemove, verifiedBypass bool
+	var refresh, cc, cherrypick, backport, verifiedRemove, verifiedBypass, verifiedHelp bool
 	var verified, verifyLater []string
 	switch {
 	case refreshCommandMatch.MatchString(ice.Comment.Body):
@@ -1200,6 +1206,8 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 		verifiedRemove = true
 	case verifyBypassCommandMatch.MatchString(ice.Comment.Body):
 		verifiedBypass = true
+	case verifyHelpCommandMatch.MatchString(ice.Comment.Body):
+		verifiedHelp = true
 	default:
 		return nil, nil
 	}
@@ -1238,6 +1246,7 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 		verifyLater:    verifyLater,
 		verifiedRemove: verifiedRemove,
 		verifiedBypass: verifiedBypass,
+		verifiedHelp:   verifiedHelp,
 	}
 
 	e.issues, e.missing, e.noJira = jiraKeyFromTitle(pr.Title)
@@ -1333,6 +1342,7 @@ type event struct {
 	backportBranches                            []string
 	verify, verifyLater                         []string
 	verifiedRemove, verifiedBypass, fileChanged bool
+	verifiedHelp                                bool
 }
 
 func (e *event) comment(gc githubClient) func(body string) error {
