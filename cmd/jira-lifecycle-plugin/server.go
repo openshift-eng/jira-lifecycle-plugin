@@ -44,14 +44,14 @@ const (
 var (
 	jiraIssueRegexPart       = `[[:alnum:]]+-[[:digit:]]+`
 	titleMatchJiraIssue      = regexp.MustCompile(`(?i)(` + jiraIssueRegexPart + `,?[[:space:]]*)*(NO-JIRA|NO-ISSUE|` + jiraIssueRegexPart + `)+:`)
-	verifyCommandMatch       = regexp.MustCompile(`(?mi)^\s*/verified by\s+(([^\s]+,)*([^\s]+))*\s*$`)
+	verifyCommandMatch       = regexp.MustCompile(`(?mi)^\s*/verified by\s+([^\r\n]+)\s*$`)
 	verifyRemoveCommandMatch = regexp.MustCompile(`(?mi)^\s*/verified remove\s*$`)
-	verifyLaterCommandMatch  = regexp.MustCompile(`(?mi)^\s*/verified later\s+(([^\s]+,)*([^\s]+))*\s*$`)
+	verifyLaterCommandMatch  = regexp.MustCompile(`(?mi)^\s*/verified later\s+([^\r\n]+)\s*$`)
 	verifyBypassCommandMatch = regexp.MustCompile(`(?mi)^\s*/verified bypass\s*$`)
 	refreshCommandMatch      = regexp.MustCompile(`(?mi)^\s*/jira refresh\s*$`)
 	qaReviewCommandMatch     = regexp.MustCompile(`(?mi)^\s*/jira cc-qa\s*$`)
 	cherrypickCommandMatch   = regexp.MustCompile(`(?mi)^\s*/jira cherry-?pick (` + jiraIssueRegexPart + `,?[[:space:]]*)*(` + jiraIssueRegexPart + `)+\s*$`)
-	backportCommandMatch     = regexp.MustCompile(`(?mi)^\s*/jira backport\s+(([^\s]+,)*([^\s]+))\s*$`)
+	backportCommandMatch     = regexp.MustCompile(`(?mi)^\s*/jira backport\s+([^\r\n]+)\s*$`)
 	existingBackportMatch    = regexp.MustCompile(`jlp-[^:]+:[^:]+`)
 	cherrypickPRMatch        = regexp.MustCompile(`This is an automated cherry-pick of #([0-9]+)`)
 	jiraIssueReferenceMatch  = regexp.MustCompile(`([[:alnum:]]+)-([[:digit:]]+)`)
@@ -1258,12 +1258,21 @@ func cherryPickCommandMatches(body string) ([]referencedIssue, error) {
 	return referencedIssues(commandMatches[0]), nil
 }
 
+func splitAndTrimList(line string) []string {
+	rawItems := strings.Split(line, ",")
+	trimmedItems := make([]string, 0, len(rawItems))
+	for _, item := range rawItems {
+		trimmedItems = append(trimmedItems, strings.TrimSpace(item))
+	}
+	return trimmedItems
+}
+
 func backportCommandMatches(body string) ([]string, error) {
 	commandMatches := backportCommandMatch.FindAllStringSubmatch(body, -1)
 	if len(commandMatches) == 0 || len(commandMatches[0]) < 2 {
 		return nil, fmt.Errorf("body %q did not match backport regex, programmer error", body)
 	}
-	return strings.Split(commandMatches[0][1], ","), nil
+	return splitAndTrimList(commandMatches[0][1]), nil
 }
 
 func verifyCommandMatches(body string) ([]string, error) {
@@ -1271,7 +1280,7 @@ func verifyCommandMatches(body string) ([]string, error) {
 	if len(commandMatches) == 0 || len(commandMatches[0]) < 2 {
 		return nil, fmt.Errorf("body %q did not match verify regex, programmer error", body)
 	}
-	return strings.Split(commandMatches[0][1], ","), nil
+	return splitAndTrimList(commandMatches[0][1]), nil
 }
 
 func verifyLaterCommandMatches(body string) ([]string, error) {
@@ -1279,7 +1288,7 @@ func verifyLaterCommandMatches(body string) ([]string, error) {
 	if len(commandMatches) == 0 || len(commandMatches[0]) < 2 {
 		return nil, fmt.Errorf("body %q did not match verify-later regex, programmer error", body)
 	}
-	return strings.Split(commandMatches[0][1], ","), nil
+	return splitAndTrimList(commandMatches[0][1]), nil
 }
 
 func referencedIssues(matchingText string) []referencedIssue {
