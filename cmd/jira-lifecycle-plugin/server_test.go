@@ -368,6 +368,7 @@ func TestHandle(t *testing.T) {
 		verified                       []string
 		verifiedLater                  []string
 		verifiedRemove, verifiedBypass bool
+		verifiedHelp                   bool
 		fileChanged                    bool
 		login                          string
 		verificationInfo               []VerificationInfo
@@ -3227,7 +3228,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `. Jira issue(s) in the title of this PR will be moved to the ` + "`VERIFIED`" + ` state when the change is available in an accepted nightly payload.
+			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `.
 
 <details>
 
@@ -3256,7 +3257,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `. Jira issue(s) in the title of this PR will be moved to the ` + "`VERIFIED`" + ` state on merge.
+			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `.
 
 <details>
 
@@ -3294,7 +3295,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester,@tester2`" + `. Jira issue(s) in the title of this PR will be moved to the ` + "`VERIFIED`" + ` state when the change is available in an accepted nightly payload.
+			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester,@tester2`" + `.
 
 <details>
 
@@ -3331,7 +3332,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester,@tester2`" + `. Jira issue(s) in the title of this PR will be moved to the ` + "`VERIFIED`" + ` state on merge.
+			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester,@tester2`" + `.
 
 <details>
 
@@ -3369,7 +3370,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified, labels.VerifiedLater},
-			expectedComment: `org/repo#1:@user: This PR has been marked to be verified later by ` + "`@tester`" + `. Jira issue(s) in the title of this PR will require post-merge verification. After testing, it must be manually moved to the ` + "`VERIFIED`" + ` state.
+			expectedComment: `org/repo#1:@user: This PR has been marked to be verified later by ` + "`@tester`" + `.
 
 <details>
 
@@ -3431,7 +3432,36 @@ Instructions for interacting with me using PR comments are available [here](http
 			}}},
 		},
 		{
-			name:           "verified PR not excluded repo moves issue to VERIFIED on merge",
+			name:           "verified-later PR from payload repo does not move issue to VERIFIED on merge and comments accordingly",
+			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
+			merged:         true,
+			prs:            []github.PullRequest{{Number: base.number, Merged: true}},
+			options:        JiraBranchOptions{StateAfterMerge: &JiraBugState{Status: "CLOSED", Resolution: "MERGED"}}, // no requirements --> always valid
+			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.VerifiedLater},
+			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.VerifiedLater},
+			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
+
+
+This pull request has the ` + "`verified-later`" + ` tag and will need to be manually moved to VERIFIED after testing. [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been moved to the ` + "`CLOSED (MERGED)`" + ` state.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Project:    jira.Project{Key: "OCPBUGS"},
+				Resolution: &jira.Resolution{Name: "MERGED"},
+				Status:     &jira.Status{Name: "CLOSED"},
+				Unknowns:   tcontainer.MarshalMap{helpers.SeverityField: map[string]any{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`}},
+			}}},
+		},
+		{
+			name:           "verified PR from excluded repo moves issue to VERIFIED on merge",
 			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
 			merged:         true,
 			prs:            []github.PullRequest{{Number: base.number, Merged: true}},
@@ -3460,6 +3490,36 @@ Instructions for interacting with me using PR comments are available [here](http
 			fullConfig: Config{PreMergeVerification: PreMergeVerificationOptions{ExcludedRepositories: []string{"org/repo"}}},
 		},
 		{
+			name:           "verified-later PR from excluded repo does not move issue to VERIFIED on merge and comments accordingly",
+			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
+			merged:         true,
+			prs:            []github.PullRequest{{Number: base.number, Merged: true}},
+			options:        JiraBranchOptions{StateAfterMerge: &JiraBugState{Status: "CLOSED", Resolution: "MERGED"}}, // no requirements --> always valid
+			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.VerifiedLater},
+			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.VerifiedLater},
+			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
+
+
+This pull request has the ` + "`verified-later`" + ` tag and will need to be manually moved to VERIFIED after testing. [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been moved to the ` + "`CLOSED (MERGED)`" + ` state.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Project:    jira.Project{Key: "OCPBUGS"},
+				Resolution: &jira.Resolution{Name: "MERGED"},
+				Status:     &jira.Status{Name: "CLOSED"},
+				Unknowns:   tcontainer.MarshalMap{helpers.SeverityField: map[string]any{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`}},
+			}}},
+			fullConfig: Config{PreMergeVerification: PreMergeVerificationOptions{ExcludedRepositories: []string{"org/repo"}}},
+		},
+		{
 			name:           "verified comment in product pr without bigquery succeeds",
 			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
 			body:           "/verified by @tester",
@@ -3468,7 +3528,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `. Jira issue(s) in the title of this PR will be moved to the ` + "`VERIFIED`" + ` state when the change is available in an accepted nightly payload.
+			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `.
 
 <details>
 
@@ -3489,7 +3549,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `. Jira issue(s) in the title of this PR will be moved to the ` + "`VERIFIED`" + ` state on merge.
+			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `.
 
 <details>
 
@@ -3622,6 +3682,35 @@ Instructions for interacting with me using PR comments are available [here](http
 </details>`,
 		},
 		{
+			name:           "verified remove comment with no verified labels results in comment and bigquery data being uploaded",
+			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
+			body:           "/verified remove",
+			verifiedRemove: true,
+			verificationInfo: []VerificationInfo{{
+				User:   "user",
+				Reason: "comment",
+				Type:   verifyRemoveType,
+				Org:    "org",
+				Repo:   "repo",
+				PRNum:  1,
+				Branch: "branch",
+			}},
+			options:        JiraBranchOptions{}, // no requirements --> always valid
+			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
+			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
+			expectedComment: `org/repo#1:@user: This PR does not have ` + "`verified`" + ` or ` + "`verified-later`" + ` labels.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>/verified remove
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+		},
+		{
 			name:        "PR change results in verified label being removed and bigquery data being uploaded",
 			issues:      []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
 			fileChanged: true,
@@ -3680,7 +3769,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.VerifiedLater},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `. Jira issue(s) in the title of this PR will be moved to the ` + "`VERIFIED`" + ` state when the change is available in an accepted nightly payload.
+			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `.
 
 <details>
 
@@ -3717,7 +3806,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.VerifiedLater},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `. Jira issue(s) in the title of this PR will be moved to the ` + "`VERIFIED`" + ` state on merge.
+			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `.
 
 <details>
 
@@ -3810,6 +3899,132 @@ Instructions for interacting with me using PR comments are available [here](http
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{}}},
 		},
 		{
+			name:   "valid verified bug on merged PR from payload repo with unmerged external links does not migrate to VERIFIED and comments",
+			merged: true,
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{}}},
+			remoteLinks: map[string][]jira.RemoteLink{"OCPBUGS-123": {{
+				ID: 1,
+				Object: &jira.RemoteLinkObject{
+					URL:   "https://github.com/org/repo/pull/1",
+					Title: "org/repo#1: OCPBUGS-123: fixed it!",
+					Icon: &jira.RemoteLinkIcon{
+						Url16x16: "https://github.com/favicon.ico",
+						Title:    "GitHub",
+					},
+				},
+			}, {
+				ID: 2,
+				Object: &jira.RemoteLinkObject{
+					URL:   "https://github.com/org/repo/pull/22/commits/1234567890",
+					Title: "org/repo#22: OCPBUGS-123: fixed it!",
+					Icon: &jira.RemoteLinkIcon{
+						Url16x16: "https://github.com/favicon.ico",
+						Title:    "GitHub",
+					},
+				},
+			}, {
+				ID: 2,
+				Object: &jira.RemoteLinkObject{
+					URL:   "https://github.com/org/repo/pull/23/files",
+					Title: "org/repo#23: OCPBUGS-123: fixed it!",
+					Icon: &jira.RemoteLinkIcon{
+						Url16x16: "https://github.com/favicon.ico",
+						Title:    "GitHub",
+					},
+				},
+			},
+			}},
+			labels:         []string{"verified"},
+			expectedLabels: []string{"verified"},
+			prs:            []github.PullRequest{{Number: base.number, Merged: true, Labels: []github.Label{{Name: "verified"}}}, {Number: 22, Merged: false, State: "open", Labels: []github.Label{{Name: "verified"}}}, {Number: 23, Merged: true, Labels: []github.Label{{Name: "verified"}}}},
+			options:        JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
+			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): Some pull requests linked via external trackers have merged:
+ * [org/repo#1](https://github.com/org/repo/pull/1)
+
+The following pull requests linked via external trackers have not merged:
+ * [org/repo#22](https://github.com/org/repo/pull/22) is open
+
+These pull request must merge or be unlinked from the Jira bug in order for it to move to the next state. Once unlinked, request a bug refresh with <code>/jira refresh</code>.
+
+[Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has not been moved to the MODIFIED state.
+
+This PR is marked as verified. If the remaining PRs listed above are marked as verified before merging, the issue will automatically be moved to VERIFIED after all of the changes from the PRs are available in an accepted nightly payload.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{}}},
+		},
+		{
+			name:   "valid verified-later bug on merged PR from payload repo with unmerged external links does not migrate to VERIFIED and comments",
+			merged: true,
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{}}},
+			remoteLinks: map[string][]jira.RemoteLink{"OCPBUGS-123": {{
+				ID: 1,
+				Object: &jira.RemoteLinkObject{
+					URL:   "https://github.com/org/repo/pull/1",
+					Title: "org/repo#1: OCPBUGS-123: fixed it!",
+					Icon: &jira.RemoteLinkIcon{
+						Url16x16: "https://github.com/favicon.ico",
+						Title:    "GitHub",
+					},
+				},
+			}, {
+				ID: 2,
+				Object: &jira.RemoteLinkObject{
+					URL:   "https://github.com/org/repo/pull/22/commits/1234567890",
+					Title: "org/repo#22: OCPBUGS-123: fixed it!",
+					Icon: &jira.RemoteLinkIcon{
+						Url16x16: "https://github.com/favicon.ico",
+						Title:    "GitHub",
+					},
+				},
+			}, {
+				ID: 2,
+				Object: &jira.RemoteLinkObject{
+					URL:   "https://github.com/org/repo/pull/23/files",
+					Title: "org/repo#23: OCPBUGS-123: fixed it!",
+					Icon: &jira.RemoteLinkIcon{
+						Url16x16: "https://github.com/favicon.ico",
+						Title:    "GitHub",
+					},
+				},
+			},
+			}},
+			labels:         []string{"verified-later"},
+			expectedLabels: []string{"verified-later"},
+			prs:            []github.PullRequest{{Number: base.number, Merged: true, Labels: []github.Label{{Name: "verified"}}}, {Number: 22, Merged: false, State: "open", Labels: []github.Label{{Name: "verified"}}}, {Number: 23, Merged: true, Labels: []github.Label{{Name: "verified"}}}},
+			options:        JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
+			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): Some pull requests linked via external trackers have merged:
+ * [org/repo#1](https://github.com/org/repo/pull/1)
+
+The following pull requests linked via external trackers have not merged:
+ * [org/repo#22](https://github.com/org/repo/pull/22) is open
+
+These pull request must merge or be unlinked from the Jira bug in order for it to move to the next state. Once unlinked, request a bug refresh with <code>/jira refresh</code>.
+
+[Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has not been moved to the MODIFIED state.
+
+This PR is marked as verified-later. Jira issue(s) in the title of this PR will require post-merge verification. After testing, it must be manually moved to the ` + "`VERIFIED`" + ` state.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{}}},
+		},
+		{
 			name:   "valid bug on merged PR from excluded repo with many verified external links migrates to VERIFIED and comments",
 			merged: true,
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{}}},
@@ -3866,6 +4081,134 @@ In response to [this](https://github.com/org/repo/pull/1):
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: "VERIFIED"}}}},
+			fullConfig:     Config{PreMergeVerification: PreMergeVerificationOptions{ExcludedRepositories: []string{"org/repo"}}},
+		},
+		{
+			name:   "valid verified bug on merged PR from excluded repo with unmerged external links does not migrate to VERIFIED and comments",
+			merged: true,
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{}}},
+			remoteLinks: map[string][]jira.RemoteLink{"OCPBUGS-123": {{
+				ID: 1,
+				Object: &jira.RemoteLinkObject{
+					URL:   "https://github.com/org/repo/pull/1",
+					Title: "org/repo#1: OCPBUGS-123: fixed it!",
+					Icon: &jira.RemoteLinkIcon{
+						Url16x16: "https://github.com/favicon.ico",
+						Title:    "GitHub",
+					},
+				},
+			}, {
+				ID: 2,
+				Object: &jira.RemoteLinkObject{
+					URL:   "https://github.com/org/repo/pull/22/commits/1234567890",
+					Title: "org/repo#22: OCPBUGS-123: fixed it!",
+					Icon: &jira.RemoteLinkIcon{
+						Url16x16: "https://github.com/favicon.ico",
+						Title:    "GitHub",
+					},
+				},
+			}, {
+				ID: 2,
+				Object: &jira.RemoteLinkObject{
+					URL:   "https://github.com/org/repo/pull/23/files",
+					Title: "org/repo#23: OCPBUGS-123: fixed it!",
+					Icon: &jira.RemoteLinkIcon{
+						Url16x16: "https://github.com/favicon.ico",
+						Title:    "GitHub",
+					},
+				},
+			},
+			}},
+			labels:         []string{"verified"},
+			expectedLabels: []string{"verified"},
+			prs:            []github.PullRequest{{Number: base.number, Merged: true, Labels: []github.Label{{Name: "verified"}}}, {Number: 22, Merged: false, State: "open", Labels: []github.Label{{Name: "verified"}}}, {Number: 23, Merged: true, Labels: []github.Label{{Name: "verified"}}}},
+			options:        JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
+			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): Some pull requests linked via external trackers have merged:
+ * [org/repo#1](https://github.com/org/repo/pull/1)
+
+The following pull requests linked via external trackers have not merged:
+ * [org/repo#22](https://github.com/org/repo/pull/22) is open
+
+These pull request must merge or be unlinked from the Jira bug in order for it to move to the next state. Once unlinked, request a bug refresh with <code>/jira refresh</code>.
+
+[Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has not been moved to the MODIFIED state.
+
+This PR is marked as verified. If the remaining PRs listed above are marked as verified before merging, the issue will automatically be moved to VERIFIED after all of the PRs merge.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{}}},
+			fullConfig:     Config{PreMergeVerification: PreMergeVerificationOptions{ExcludedRepositories: []string{"org/repo"}}},
+		},
+		{
+			name:   "valid verified-later bug on merged PR from excluded repo with unmerged external links does not migrate to VERIFIED and comments",
+			merged: true,
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{}}},
+			remoteLinks: map[string][]jira.RemoteLink{"OCPBUGS-123": {{
+				ID: 1,
+				Object: &jira.RemoteLinkObject{
+					URL:   "https://github.com/org/repo/pull/1",
+					Title: "org/repo#1: OCPBUGS-123: fixed it!",
+					Icon: &jira.RemoteLinkIcon{
+						Url16x16: "https://github.com/favicon.ico",
+						Title:    "GitHub",
+					},
+				},
+			}, {
+				ID: 2,
+				Object: &jira.RemoteLinkObject{
+					URL:   "https://github.com/org/repo/pull/22/commits/1234567890",
+					Title: "org/repo#22: OCPBUGS-123: fixed it!",
+					Icon: &jira.RemoteLinkIcon{
+						Url16x16: "https://github.com/favicon.ico",
+						Title:    "GitHub",
+					},
+				},
+			}, {
+				ID: 2,
+				Object: &jira.RemoteLinkObject{
+					URL:   "https://github.com/org/repo/pull/23/files",
+					Title: "org/repo#23: OCPBUGS-123: fixed it!",
+					Icon: &jira.RemoteLinkIcon{
+						Url16x16: "https://github.com/favicon.ico",
+						Title:    "GitHub",
+					},
+				},
+			},
+			}},
+			labels:         []string{"verified-later"},
+			expectedLabels: []string{"verified-later"},
+			prs:            []github.PullRequest{{Number: base.number, Merged: true, Labels: []github.Label{{Name: "verified"}}}, {Number: 22, Merged: false, State: "open", Labels: []github.Label{{Name: "verified"}}}, {Number: 23, Merged: true, Labels: []github.Label{{Name: "verified"}}}},
+			options:        JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
+			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): Some pull requests linked via external trackers have merged:
+ * [org/repo#1](https://github.com/org/repo/pull/1)
+
+The following pull requests linked via external trackers have not merged:
+ * [org/repo#22](https://github.com/org/repo/pull/22) is open
+
+These pull request must merge or be unlinked from the Jira bug in order for it to move to the next state. Once unlinked, request a bug refresh with <code>/jira refresh</code>.
+
+[Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has not been moved to the MODIFIED state.
+
+This PR is marked as verified-later. Jira issue(s) in the title of this PR will require post-merge verification. After testing, it must be manually moved to the ` + "`VERIFIED`" + ` state.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{}}},
 			fullConfig:     Config{PreMergeVerification: PreMergeVerificationOptions{ExcludedRepositories: []string{"org/repo"}}},
 		},
 		{
@@ -4045,6 +4388,26 @@ In response to [this](https://github.com/org/repo/pull/1):
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
+		{
+			name:           "verified comment with no action prints help text",
+			issues:         []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
+			body:           "/verified",
+			verifiedHelp:   true,
+			options:        JiraBranchOptions{}, // no requirements --> always valid
+			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
+			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
+			expectedComment: `org/repo#1:@user: The ` + "`/verified`" + ` command must be used with one of the following actions: ` + "`by`, `later`, `remove`, or `bypass`" + `. See https://docs.ci.openshift.org/docs/architecture/jira/#premerge-verification for more information.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>/verified
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -4079,6 +4442,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			testEvent.verifyLater = tc.verifiedLater
 			testEvent.verifiedRemove = tc.verifiedRemove
 			testEvent.verifiedBypass = tc.verifiedBypass
+			testEvent.verifiedHelp = tc.verifiedHelp
 			testEvent.fileChanged = tc.fileChanged
 			if tc.login != "" {
 				testEvent.login = tc.login
@@ -5894,6 +6258,33 @@ Instructions for interacting with me using PR comments are available [here](http
 			title: "OCPBUGS-123: oopsie doopsie",
 			expected: &event{
 				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified bypass", htmlUrl: "www.com", login: "user", verifiedBypass: true,
+			},
+		},
+		{
+			name: "verified comment with no action creates verified help event",
+			e: github.IssueCommentEvent{
+				Action: github.IssueCommentActionCreated,
+				Issue: github.Issue{
+					Number:      1,
+					PullRequest: &struct{}{},
+				},
+				Comment: github.IssueComment{
+					Body: "/verified",
+					User: github.User{
+						Login: "user",
+					},
+					HTMLURL: "www.com",
+				},
+				Repo: github.Repo{
+					Owner: github.User{
+						Login: "org",
+					},
+					Name: "repo",
+				},
+			},
+			title: "OCPBUGS-123: oopsie doopsie",
+			expected: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified", htmlUrl: "www.com", login: "user", verifiedHelp: true,
 			},
 		},
 	}
