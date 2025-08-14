@@ -1870,7 +1870,12 @@ These pull request must merge or be unlinked from the Jira bug in order for it t
     :heavy_check_mark:  All associated pull requests have merged.
     :heavy_check_mark:  All associated, merged pull requests were pre-merge verified.
 
-`+issueLink+` will move to the VERIFIED state when the change is available in an accepted nightly payload. :clock4:`, refIssue.Key(), jc.JiraURL(), refIssue.Key(), refIssue.Key(), jc.JiraURL(), refIssue.Key())
+`+issueLink+` has been moved to the %s state and will move to the VERIFIED state when the change is available in an accepted nightly payload. :clock4:`, refIssue.Key(), jc.JiraURL(), refIssue.Key(), refIssue.Key(), jc.JiraURL(), refIssue.Key(), options.StateAfterMerge)
+					}
+
+					if updateMsg := updateMergedBugStatus(jc, bug, options, log); updateMsg != "" {
+						msg += updateMsg
+						continue
 					}
 
 					msg += outcomeMessage("")
@@ -1881,23 +1886,9 @@ These pull request must merge or be unlinked from the Jira bug in order for it t
 				outcomeMessage = func(action string) string {
 					return fmt.Sprintf("This pull request has the `verified-later` tag and will need to be manually moved to VERIFIED after testing. "+issueLink+" has %sbeen moved to the `%s` state.", refIssue.Key(), jc.JiraURL(), refIssue.Key(), action, options.StateAfterMerge)
 				}
-
-				if options.StateAfterMerge != nil {
-					if options.StateAfterMerge.Status != "" && (bug.Fields.Status == nil || !strings.EqualFold(options.StateAfterMerge.Status, bug.Fields.Status.Name)) {
-						if err := jc.UpdateStatus(refIssue.Key(), options.StateAfterMerge.Status); err != nil {
-							log.WithError(err).Warn("Unexpected error updating jira issue.")
-							msg += formatError(fmt.Sprintf("updating to the %s state", options.StateAfterMerge.Status), jc.JiraURL(), refIssue.Key(), err)
-							continue
-						}
-						if options.StateAfterMerge.Resolution != "" && (bug.Fields.Resolution == nil || !strings.EqualFold(options.StateAfterMerge.Resolution, bug.Fields.Resolution.Name)) {
-							updateIssue := jira.Issue{Key: bug.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterMerge.Resolution}}}
-							if _, err := jc.UpdateIssue(&updateIssue); err != nil {
-								log.WithError(err).Warn("Unexpected error updating jira issue.")
-								msg += formatError(fmt.Sprintf("updating to the %s resolution", options.StateAfterMerge.Resolution), jc.JiraURL(), refIssue.Key(), err)
-								continue
-							}
-						}
-					}
+				if updateMsg := updateMergedBugStatus(jc, bug, options, log); updateMsg != "" {
+					msg += updateMsg
+					continue
 				}
 			} else if premergeVerified {
 				outcomeMessage = func(action string) string {
@@ -1921,22 +1912,9 @@ These pull request must merge or be unlinked from the Jira bug in order for it t
 					}
 				}
 			} else {
-				if options.StateAfterMerge != nil {
-					if options.StateAfterMerge.Status != "" && (bug.Fields.Status == nil || !strings.EqualFold(options.StateAfterMerge.Status, bug.Fields.Status.Name)) {
-						if err := jc.UpdateStatus(refIssue.Key(), options.StateAfterMerge.Status); err != nil {
-							log.WithError(err).Warn("Unexpected error updating jira issue.")
-							msg += formatError(fmt.Sprintf("updating to the %s state", options.StateAfterMerge.Status), jc.JiraURL(), refIssue.Key(), err)
-							continue
-						}
-						if options.StateAfterMerge.Resolution != "" && (bug.Fields.Resolution == nil || !strings.EqualFold(options.StateAfterMerge.Resolution, bug.Fields.Resolution.Name)) {
-							updateIssue := jira.Issue{Key: bug.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterMerge.Resolution}}}
-							if _, err := jc.UpdateIssue(&updateIssue); err != nil {
-								log.WithError(err).Warn("Unexpected error updating jira issue.")
-								msg += formatError(fmt.Sprintf("updating to the %s resolution", options.StateAfterMerge.Resolution), jc.JiraURL(), refIssue.Key(), err)
-								continue
-							}
-						}
-					}
+				if updateMsg := updateMergedBugStatus(jc, bug, options, log); updateMsg != "" {
+					msg += updateMsg
+					continue
 				}
 			}
 			msg += fmt.Sprintf(issueLink+": %s%s", refIssue.Key(), jc.JiraURL(), refIssue.Key(), mergedMessage("All"), outcomeMessage(""))
@@ -1963,6 +1941,25 @@ These pull request must merge or be unlinked from the Jira bug in order for it t
 	} else {
 		return comment(msg)
 	}
+}
+
+func updateMergedBugStatus(jc jiraclient.Client, bug *jira.Issue, options JiraBranchOptions, log *logrus.Entry) string {
+	if options.StateAfterMerge != nil {
+		if options.StateAfterMerge.Status != "" && (bug.Fields.Status == nil || !strings.EqualFold(options.StateAfterMerge.Status, bug.Fields.Status.Name)) {
+			if err := jc.UpdateStatus(bug.Key, options.StateAfterMerge.Status); err != nil {
+				log.WithError(err).Warn("Unexpected error updating jira issue.")
+				return formatError(fmt.Sprintf("updating to the %s state", options.StateAfterMerge.Status), jc.JiraURL(), bug.Key, err)
+			}
+			if options.StateAfterMerge.Resolution != "" && (bug.Fields.Resolution == nil || !strings.EqualFold(options.StateAfterMerge.Resolution, bug.Fields.Resolution.Name)) {
+				updateIssue := jira.Issue{Key: bug.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterMerge.Resolution}}}
+				if _, err := jc.UpdateIssue(&updateIssue); err != nil {
+					log.WithError(err).Warn("Unexpected error updating jira issue.")
+					return formatError(fmt.Sprintf("updating to the %s resolution", options.StateAfterMerge.Resolution), jc.JiraURL(), bug.Key, err)
+				}
+			}
+		}
+	}
+	return ""
 }
 
 func identifyClones(issue *jira.Issue) []*jira.Issue {

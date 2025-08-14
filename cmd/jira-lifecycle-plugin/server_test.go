@@ -3415,7 +3415,7 @@ Instructions for interacting with me using PR comments are available [here](http
     :heavy_check_mark:  All associated pull requests have merged.
     :heavy_check_mark:  All associated, merged pull requests were pre-merge verified.
 
-[Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) will move to the VERIFIED state when the change is available in an accepted nightly payload. :clock4:
+[Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been moved to the CLOSED (MERGED) state and will move to the VERIFIED state when the change is available in an accepted nightly payload. :clock4:
 
 <details>
 
@@ -3427,8 +3427,10 @@ In response to [this](https://github.com/org/repo/pull/1):
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
-				Project:  jira.Project{Key: "OCPBUGS"},
-				Unknowns: tcontainer.MarshalMap{helpers.SeverityField: struct{ Value string }{Value: `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`}},
+				Project:    jira.Project{Key: "OCPBUGS"},
+				Resolution: &jira.Resolution{Name: "MERGED"},
+				Status:     &jira.Status{Name: "CLOSED"},
+				Unknowns:   tcontainer.MarshalMap{helpers.SeverityField: map[string]any{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`}},
 			}}},
 		},
 		{
@@ -3885,7 +3887,7 @@ Instructions for interacting with me using PR comments are available [here](http
     :heavy_check_mark:  All associated pull requests have merged.
     :heavy_check_mark:  All associated, merged pull requests were pre-merge verified.
 
-[Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) will move to the VERIFIED state when the change is available in an accepted nightly payload. :clock4:
+[Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been moved to the MODIFIED state and will move to the VERIFIED state when the change is available in an accepted nightly payload. :clock4:
 
 <details>
 
@@ -3896,7 +3898,9 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
-			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{}}},
+			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Status: &jira.Status{Name: "MODIFIED"},
+			}}},
 		},
 		{
 			name:   "valid verified bug on merged PR from payload repo with unmerged external links does not migrate to VERIFIED and comments",
