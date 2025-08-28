@@ -1830,10 +1830,11 @@ func handleMerge(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 		for bug, state := range unmergedPrStates {
 			statements = append(statements, fmt.Sprintf(" * %s is %s", link(bug), state))
 		}
-		unmergedMessage := fmt.Sprintf(`The following pull requests linked via external trackers have not merged:
+		// There is short-circuit logic above that limits the number of unmergedPrStates to only 1...
+		unmergedMessage := fmt.Sprintf(`The following pull request, linked via external tracker, has not merged:
 %s
 
-These pull request must merge or be unlinked from the Jira bug in order for it to move to the next state. Once unlinked, request a bug refresh with <code>/jira refresh</code>.
+All associated pull requests must be merged or unlinked from the Jira bug in order for it to move to the next state. Once unlinked, request a bug refresh with <code>/jira refresh</code>.
 
 `, strings.Join(statements, "\n"))
 

@@ -1428,10 +1428,10 @@ Instructions for interacting with me using PR comments are available [here](http
 			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): Some pull requests linked via external trackers have merged:
  * [org/repo#1](https://github.com/org/repo/pull/1)
 
-The following pull requests linked via external trackers have not merged:
+The following pull request, linked via external tracker, has not merged:
  * [org/repo#22](https://github.com/org/repo/pull/22) is open
 
-These pull request must merge or be unlinked from the Jira bug in order for it to move to the next state. Once unlinked, request a bug refresh with <code>/jira refresh</code>.
+All associated pull requests must be merged or unlinked from the Jira bug in order for it to move to the next state. Once unlinked, request a bug refresh with <code>/jira refresh</code>.
 
 [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has not been moved to the MODIFIED state.
 
@@ -1487,10 +1487,10 @@ Instructions for interacting with me using PR comments are available [here](http
 			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): Some pull requests linked via external trackers have merged:
  * [org/repo#1](https://github.com/org/repo/pull/1)
 
-The following pull requests linked via external trackers have not merged:
+The following pull request, linked via external tracker, has not merged:
  * [org/repo#22](https://github.com/org/repo/pull/22) is open
 
-These pull request must merge or be unlinked from the Jira bug in order for it to move to the next state. Once unlinked, request a bug refresh with <code>/jira refresh</code>.
+All associated pull requests must be merged or unlinked from the Jira bug in order for it to move to the next state. Once unlinked, request a bug refresh with <code>/jira refresh</code>.
 
 [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has not been moved to the CLOSED (MERGED) state.
 
@@ -3945,10 +3945,10 @@ Instructions for interacting with me using PR comments are available [here](http
 			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): Some pull requests linked via external trackers have merged:
  * [org/repo#1](https://github.com/org/repo/pull/1)
 
-The following pull requests linked via external trackers have not merged:
+The following pull request, linked via external tracker, has not merged:
  * [org/repo#22](https://github.com/org/repo/pull/22) is open
 
-These pull request must merge or be unlinked from the Jira bug in order for it to move to the next state. Once unlinked, request a bug refresh with <code>/jira refresh</code>.
+All associated pull requests must be merged or unlinked from the Jira bug in order for it to move to the next state. Once unlinked, request a bug refresh with <code>/jira refresh</code>.
 
 [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has not been moved to the MODIFIED state.
 
@@ -4008,10 +4008,10 @@ Instructions for interacting with me using PR comments are available [here](http
 			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): Some pull requests linked via external trackers have merged:
  * [org/repo#1](https://github.com/org/repo/pull/1)
 
-The following pull requests linked via external trackers have not merged:
+The following pull request, linked via external tracker, has not merged:
  * [org/repo#22](https://github.com/org/repo/pull/22) is open
 
-These pull request must merge or be unlinked from the Jira bug in order for it to move to the next state. Once unlinked, request a bug refresh with <code>/jira refresh</code>.
+All associated pull requests must be merged or unlinked from the Jira bug in order for it to move to the next state. Once unlinked, request a bug refresh with <code>/jira refresh</code>.
 
 [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has not been moved to the MODIFIED state.
 
@@ -4130,10 +4130,10 @@ Instructions for interacting with me using PR comments are available [here](http
 			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): Some pull requests linked via external trackers have merged:
  * [org/repo#1](https://github.com/org/repo/pull/1)
 
-The following pull requests linked via external trackers have not merged:
+The following pull request, linked via external tracker, has not merged:
  * [org/repo#22](https://github.com/org/repo/pull/22) is open
 
-These pull request must merge or be unlinked from the Jira bug in order for it to move to the next state. Once unlinked, request a bug refresh with <code>/jira refresh</code>.
+All associated pull requests must be merged or unlinked from the Jira bug in order for it to move to the next state. Once unlinked, request a bug refresh with <code>/jira refresh</code>.
 
 [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has not been moved to the MODIFIED state.
 
@@ -4194,10 +4194,10 @@ Instructions for interacting with me using PR comments are available [here](http
 			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): Some pull requests linked via external trackers have merged:
  * [org/repo#1](https://github.com/org/repo/pull/1)
 
-The following pull requests linked via external trackers have not merged:
+The following pull request, linked via external tracker, has not merged:
  * [org/repo#22](https://github.com/org/repo/pull/22) is open
 
-These pull request must merge or be unlinked from the Jira bug in order for it to move to the next state. Once unlinked, request a bug refresh with <code>/jira refresh</code>.
+All associated pull requests must be merged or unlinked from the Jira bug in order for it to move to the next state. Once unlinked, request a bug refresh with <code>/jira refresh</code>.
 
 [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has not been moved to the MODIFIED state.
 
