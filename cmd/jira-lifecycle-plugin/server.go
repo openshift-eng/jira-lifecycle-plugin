@@ -2748,6 +2748,7 @@ func insertBigQueryEntry(e event, inserter BigQueryInserter, log *logrus.Entry, 
 			PRNum:     e.number,
 			Branch:    e.baseRef,
 			Timestamp: time.Now(),
+			Link:      e.htmlUrl,
 		}
 		if err := inserter.Put(context.TODO(), info); err != nil {
 			log.WithError(err).Error("Failed to upload info to Big Query")
