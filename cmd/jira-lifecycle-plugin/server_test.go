@@ -4429,7 +4429,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
-			expectedComment: `org/repo#1:@user: The ` + "`/verified`" + ` command must be used with one of the following actions: ` + "`by`, `later`, `remove`, or `bypass`" + `. See https://docs.ci.openshift.org/docs/architecture/jira/#premerge-verification for more information.
+			expectedComment: `org/repo#1:@user: The ` + "`/verified`" + ` command must be used with one of the following actions: ` + "`by <\"test name\" | @username[, another reason]>`, `later <@username[, @another_user]>`, `remove`, or `bypass`" + `. See https://docs.ci.openshift.org/docs/architecture/jira/#premerge-verification for more information.
 
 <details>
 

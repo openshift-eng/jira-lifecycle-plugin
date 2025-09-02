@@ -400,7 +400,7 @@ func handle(jc jiraclient.Client, ghc githubClient, inserter BigQueryInserter, r
 	}
 	// just post verified help text
 	if e.verifiedHelp {
-		helpText := "The `/verified` command must be used with one of the following actions: `by`, `later`, `remove`, or `bypass`. See https://docs.ci.openshift.org/docs/architecture/jira/#premerge-verification for more information."
+		helpText := "The `/verified` command must be used with one of the following actions: `by <\"test name\" | @username[, another reason]>`, `later <@username[, @another_user]>`, `remove`, or `bypass`. See https://docs.ci.openshift.org/docs/architecture/jira/#premerge-verification for more information."
 		return comment(helpText)
 	}
 	// just remove verified label if files were changed
