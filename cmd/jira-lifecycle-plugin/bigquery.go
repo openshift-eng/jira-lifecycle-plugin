@@ -34,6 +34,7 @@ type VerificationInfo struct {
 	PRNum     int
 	Branch    string
 	Timestamp time.Time
+	Link      string
 }
 
 // Save implements the ValueSaver interface.
@@ -47,6 +48,7 @@ func (i *VerificationInfo) Save() (map[string]bigquery.Value, string, error) {
 		"PRNum":     i.PRNum,
 		"Branch":    i.Branch,
 		"Timestamp": i.Timestamp,
+		"Link":      i.Link,
 	}, "", nil
 }
 

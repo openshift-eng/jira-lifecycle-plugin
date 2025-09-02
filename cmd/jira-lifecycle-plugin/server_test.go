@@ -3224,6 +3224,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}},
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
@@ -3253,6 +3254,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}},
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
@@ -3283,6 +3285,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}, {
 				User:   "user",
 				Reason: "@tester2",
@@ -3291,6 +3294,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}},
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
@@ -3320,6 +3324,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}, {
 				User:   "user",
 				Reason: "@tester2",
@@ -3328,6 +3333,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}},
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
@@ -3358,6 +3364,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}, {
 				User:   "user",
 				Reason: "override",
@@ -3366,6 +3373,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}},
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
@@ -3577,6 +3585,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}, {
 				User:   "user",
 				Reason: "remove",
@@ -3585,6 +3594,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}},
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
@@ -3614,6 +3624,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}, {
 				User:   "user",
 				Reason: "remove",
@@ -3622,6 +3633,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}},
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.VerifiedLater},
@@ -3651,6 +3663,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}, {
 				User:   "user",
 				Reason: "remove",
@@ -3659,6 +3672,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}, {
 				User:   "user",
 				Reason: "remove",
@@ -3667,6 +3681,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}},
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified, labels.VerifiedLater},
@@ -3696,6 +3711,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}},
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
@@ -3724,6 +3740,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}},
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
@@ -3741,6 +3758,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}},
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.VerifiedLater},
@@ -3759,6 +3777,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}, {
 				User:   "user",
 				Reason: "verified",
@@ -3767,6 +3786,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}},
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.VerifiedLater},
@@ -3796,6 +3816,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}, {
 				User:   "user",
 				Reason: "verified",
@@ -3804,6 +3825,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}},
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.VerifiedLater},
@@ -4286,6 +4308,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}, {
 				User:   "user",
 				Reason: "bypass",
@@ -4294,6 +4317,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}},
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
@@ -4323,6 +4347,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}, {
 				User:   "user",
 				Reason: "bypass",
@@ -4331,6 +4356,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}, {
 				User:   "user",
 				Reason: "bypass",
@@ -4339,6 +4365,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}},
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.VerifiedLater},
@@ -4368,6 +4395,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}, {
 				User:   "user",
 				Reason: "bypass",
@@ -4376,6 +4404,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Repo:   "repo",
 				PRNum:  1,
 				Branch: "branch",
+				Link:   "https://github.com/org/repo/pull/1",
 			}},
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified, labels.VerifiedLater},
