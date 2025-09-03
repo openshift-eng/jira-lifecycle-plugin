@@ -48,7 +48,7 @@ var (
 	verifyRemoveCommandMatch = regexp.MustCompile(`(?mi)^\s*/verified remove\s*$`)
 	verifyLaterCommandMatch  = regexp.MustCompile(`(?mi)^\s*/verified later\s+([^\r\n]+)\s*$`)
 	verifyBypassCommandMatch = regexp.MustCompile(`(?mi)^\s*/verified bypass\s*$`)
-	verifyHelpCommandMatch   = regexp.MustCompile(`(?mi)^\s*/verified(?:\s+.*)?$`)
+	verifyHelpCommandMatch   = regexp.MustCompile(`(?mi)^\s*/verified(?:\s+(.*))?$`)
 	refreshCommandMatch      = regexp.MustCompile(`(?mi)^\s*/jira refresh\s*$`)
 	qaReviewCommandMatch     = regexp.MustCompile(`(?mi)^\s*/jira cc-qa\s*$`)
 	cherrypickCommandMatch   = regexp.MustCompile(`(?mi)^\s*/jira cherry-?pick (` + jiraIssueRegexPart + `,?[[:space:]]*)*(` + jiraIssueRegexPart + `)+\s*$`)
@@ -399,8 +399,17 @@ func handle(jc jiraclient.Client, ghc githubClient, inserter BigQueryInserter, r
 		}
 	}
 	// just post verified help text
-	if e.verifiedHelp {
+	if e.textAfterVerified != nil {
 		helpText := "The `/verified` command must be used with one of the following actions: `by`, `later`, `remove`, or `bypass`. See https://docs.ci.openshift.org/docs/architecture/jira/#premerge-verification for more information."
+		if len(e.textAfterVerified) > 0 {
+			if strings.Contains(e.textAfterVerified[0], "later") {
+				helpText = "`/verified later <@username>` requires at least one GitHub @username to be specified (it can be a comma delimited list). It indicates the engineer(s) that will be performing the verification. See https://docs.ci.openshift.org/docs/architecture/jira/#premerge-verification for more information."
+			} else if strings.Contains(e.textAfterVerified[0], "by") {
+				helpText = "`/verified by <reason>` requires at least one verification method to be identified (it can be a comma delimited list). It can specify a test name or a GitHub @username (an engineer that performed the pre-merge verification). See https://docs.ci.openshift.org/docs/architecture/jira/#premerge-verification for more information."
+			} else if strings.Contains(e.textAfterVerified[0], "remove") || strings.Contains(e.textAfterVerified[0], "bypass") {
+				helpText = "`/verified bypass` and `/verified remove` do not support arguments. See https://docs.ci.openshift.org/docs/architecture/jira/#premerge-verification for more information."
+			}
+		}
 		return comment(helpText)
 	}
 	// just remove verified label if files were changed
@@ -1179,8 +1188,8 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 		return nil, nil
 	}
 	// Make sure they are requesting a valid command
-	var refresh, cc, cherrypick, backport, verifiedRemove, verifiedBypass, verifiedHelp bool
-	var verified, verifyLater []string
+	var refresh, cc, cherrypick, backport, verifiedRemove, verifiedBypass bool
+	var verified, verifyLater, textAfterVerified []string
 	switch {
 	case refreshCommandMatch.MatchString(ice.Comment.Body):
 		refresh = true
@@ -1207,7 +1216,7 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 	case verifyBypassCommandMatch.MatchString(ice.Comment.Body):
 		verifiedBypass = true
 	case verifyHelpCommandMatch.MatchString(ice.Comment.Body):
-		verifiedHelp = true
+		textAfterVerified = verifyHelpCommandMatch.FindStringSubmatch(ice.Comment.Body)[1:]
 	default:
 		return nil, nil
 	}
@@ -1230,23 +1239,23 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 	}
 
 	e := &event{
-		org:            org,
-		repo:           repo,
-		baseRef:        pr.Base.Ref,
-		number:         number,
-		merged:         pr.Merged,
-		state:          pr.State,
-		body:           ice.Comment.Body,
-		title:          ice.Issue.Title,
-		htmlUrl:        ice.Comment.HTMLURL,
-		login:          ice.Comment.User.Login,
-		refresh:        refresh,
-		cc:             cc,
-		verify:         verified,
-		verifyLater:    verifyLater,
-		verifiedRemove: verifiedRemove,
-		verifiedBypass: verifiedBypass,
-		verifiedHelp:   verifiedHelp,
+		org:               org,
+		repo:              repo,
+		baseRef:           pr.Base.Ref,
+		number:            number,
+		merged:            pr.Merged,
+		state:             pr.State,
+		body:              ice.Comment.Body,
+		title:             ice.Issue.Title,
+		htmlUrl:           ice.Comment.HTMLURL,
+		login:             ice.Comment.User.Login,
+		refresh:           refresh,
+		cc:                cc,
+		verify:            verified,
+		verifyLater:       verifyLater,
+		verifiedRemove:    verifiedRemove,
+		verifiedBypass:    verifiedBypass,
+		textAfterVerified: textAfterVerified,
 	}
 
 	e.issues, e.missing, e.noJira = jiraKeyFromTitle(pr.Title)
@@ -1342,7 +1351,7 @@ type event struct {
 	backportBranches                            []string
 	verify, verifyLater                         []string
 	verifiedRemove, verifiedBypass, fileChanged bool
-	verifiedHelp                                bool
+	textAfterVerified                           []string
 }
 
 func (e *event) comment(gc githubClient) func(body string) error {
