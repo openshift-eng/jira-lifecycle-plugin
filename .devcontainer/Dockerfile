@@ -1,4 +1,4 @@
-FROM quay-proxy.ci.openshift.org/openshift/ci:openshift_release_rhel-9-release-golang-1.23-openshift-4.19
+FROM quay-proxy.ci.openshift.org/openshift/ci:openshift_release_rhel-9-release-golang-1.24-openshift-4.21
 # Create non-root user for rootless podman installations
 RUN groupadd --gid 1000 dev && useradd --uid 1000 --gid 1000 -m dev && mkdir /home/dev/go && chown -R dev:dev /home/dev/go
 USER dev
