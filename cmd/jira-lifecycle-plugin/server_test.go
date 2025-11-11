@@ -356,7 +356,7 @@ func TestHandle(t *testing.T) {
 		options                    JiraBranchOptions
 		fullConfig                 Config
 		expectedLabels             []string
-		expectedComment            string
+		expectedComments           []string
 		expectedIssues             []*jira.Issue
 		expectedNewRemoteLinks     []jira.RemoteLink
 		expectedRemovedRemoteLinks []jira.RemoteLink
@@ -398,7 +398,7 @@ func TestHandle(t *testing.T) {
 				body:   "/jira refresh", title: "this is a PR",
 				htmlUrl: "https://github.com/org/repo/pull/1", login: "user",
 			},
-			expectedComment: `org/repo#1:@user: No Jira issue is referenced in the title of this pull request.
+			expectedComments: []string{`org/repo#1:@user: No Jira issue is referenced in the title of this pull request.
 To reference a jira issue, add 'XYZ-NNN:' to the title of this pull request and request another refresh with <code>/jira refresh</code>.
 
 <details>
@@ -409,11 +409,11 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name: "no bug found leaves a comment",
-			expectedComment: `org/repo#1:@user: No Jira issue with key OCPBUGS-123 exists in the tracker at https://my-jira.com.
+			expectedComments: []string{`org/repo#1:@user: No Jira issue with key OCPBUGS-123 exists in the tracker at https://my-jira.com.
 Once a valid jira issue is referenced in the title of this pull request, request a refresh with <code>/jira refresh</code>.
 
 <details>
@@ -424,12 +424,12 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:           "error fetching bug leaves a comment",
 			issueGetErrors: map[string]error{"OCPBUGS-123": errors.New("injected error getting bug")},
-			expectedComment: `org/repo#1:@user: An error was encountered searching for bug OCPBUGS-123 on the Jira server at https://my-jira.com. No known errors were detected, please see the full error message for details.
+			expectedComments: []string{`org/repo#1:@user: An error was encountered searching for bug OCPBUGS-123 on the Jira server at https://my-jira.com. No known errors were detected, please see the full error message for details.
 
 <details><summary>Full error message.</summary>
 
@@ -449,7 +449,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:           "valid bug removes invalid label, adds valid/severity labels and comments",
@@ -457,7 +457,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraInvalidBug},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
+			expectedComments: []string{`org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
 
 <details><summary>No validations were run on this bug</summary></details>
 
@@ -469,7 +469,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:           "valid DFBUGS bug removes invalid label, adds valid/severity labels and comments",
@@ -480,7 +480,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			overrideEvent: &event{
 				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "DFBUGS", ID: "123", IsBug: true}}, body: "This PR fixes DFBUGS-123", title: "DFBUGS-123: fixed it!", htmlUrl: "https://github.com/org/repo/pull/1", login: "user",
 			},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue DFBUGS-123](https://my-jira.com/browse/DFBUGS-123), which is valid.
+			expectedComments: []string{`org/repo#1:@user: This pull request references [Jira Issue DFBUGS-123](https://my-jira.com/browse/DFBUGS-123), which is valid.
 
 <details><summary>No validations were run on this bug</summary></details>
 
@@ -492,7 +492,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:           "invalid bug adds invalid label, removes valid label and comments",
@@ -500,7 +500,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{IsOpen: &open},
 			labels:         []string{labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraInvalidBug, labels.SeverityImportant},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is invalid:
+			expectedComments: []string{`org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is invalid:
  - expected the bug to be open, but it isn't
 
 Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jira bug are made, or edit the title of this pull request to link to a different bug.
@@ -513,7 +513,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name: "invalid bug with matching previous comment adds invalid label, removes valid label and comments",
@@ -535,7 +535,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{IsOpen: &open},
 			labels:         []string{labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraInvalidBug, labels.SeverityImportant},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is invalid:
+			expectedComments: []string{`org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is invalid:
  - expected the bug to be open, but it isn't
 
 Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jira bug are made, or edit the title of this pull request to link to a different bug.
@@ -548,7 +548,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name: "invalid bug with correct state and previous comment does not comment",
@@ -581,7 +581,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:               JiraBranchOptions{IsOpen: &open},
 			labels:                []string{},
 			expectedLabels:        []string{labels.JiraValidRef, labels.JiraInvalidBug, labels.SeverityCritical},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is invalid:
+			expectedComments: []string{`org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is invalid:
  - expected the bug to be open, but it isn't
 
 Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jira bug are made, or edit the title of this pull request to link to a different bug.
@@ -600,7 +600,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name: "one valid bug and one invalid bug adds invalid/severity labels and comments",
@@ -612,7 +612,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:               JiraBranchOptions{IsOpen: &open},
 			labels:                []string{},
 			expectedLabels:        []string{labels.JiraValidRef, labels.JiraInvalidBug, labels.SeverityCritical},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
+			expectedComments: []string{`org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
 
 <details><summary>1 validation(s) were run on this bug</summary>
 
@@ -631,7 +631,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name: "two valid bugs valid/severity labels and comments",
@@ -643,7 +643,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:               JiraBranchOptions{IsOpen: &open},
 			labels:                []string{},
 			expectedLabels:        []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
+			expectedComments: []string{`org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
 
 <details><summary>1 validation(s) were run on this bug</summary>
 
@@ -663,7 +663,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name: "two valid bugs with different severities set valid and higher severity labels and comments",
@@ -675,7 +675,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:               JiraBranchOptions{IsOpen: &open},
 			labels:                []string{},
 			expectedLabels:        []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
+			expectedComments: []string{`org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
 
 <details><summary>1 validation(s) were run on this bug</summary>
 
@@ -695,7 +695,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:           "invalid bug adds keeps human-added valid bug label",
@@ -704,7 +704,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			humanLabelled:  true,
 			labels:         []string{labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityImportant},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is invalid:
+			expectedComments: []string{`org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is invalid:
  - expected the bug to be open, but it isn't
 
 Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jira bug are made, or edit the title of this pull request to link to a different bug.
@@ -719,13 +719,13 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:    "no bug removes all labels and comments",
 			missing: true,
 			labels:  []string{labels.JiraValidBug, labels.JiraInvalidBug},
-			expectedComment: `org/repo#1:@user: No Jira issue is referenced in the title of this pull request.
+			expectedComments: []string{`org/repo#1:@user: No Jira issue is referenced in the title of this pull request.
 To reference a jira issue, add 'XYZ-NNN:' to the title of this pull request and request another refresh with <code>/jira refresh</code>.
 
 <details>
@@ -736,7 +736,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name: "valid premerge bug with status update comments and updates status",
@@ -758,7 +758,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{StateAfterValidation: &updated, PreMergeStateAfterValidation: &updated2}, // no requirements --> always valid
 			labels:         []string{labels.QEApproved},
 			expectedLabels: []string{labels.JiraValidRef, labels.QEApproved},
-			expectedComment: `org/repo#1:@user: This pull request references OCPBUGS-123 which is a valid jira issue. The bug has been moved to the UPDATED2 state.
+			expectedComments: []string{`org/repo#1:@user: This pull request references OCPBUGS-123 which is a valid jira issue. The bug has been moved to the UPDATED2 state.
 
 <details>
 
@@ -768,7 +768,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Project:         jira.Project{Key: "OCPBUGS"},
 				Status:          &jira.Status{Name: "UPDATED2"},
@@ -792,7 +792,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{StateAfterValidation: &updated}, // no requirements --> always valid
 			labels:         []string{labels.JiraInvalidBug},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityModerate},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid. The bug has been moved to the UPDATED state.
+			expectedComments: []string{`org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid. The bug has been moved to the UPDATED state.
 
 <details><summary>No validations were run on this bug</summary></details>
 
@@ -804,7 +804,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Project:  jira.Project{Key: "OCPBUGS"},
 				Status:   &jira.Status{Name: "UPDATED"},
@@ -817,7 +817,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues:                []jira.Issue{{ID: "1", Key: "JIRA-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "JIRA"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityModerate}}}},
 			labels:                []string{labels.JiraInvalidBug},
 			expectedLabels:        []string{labels.JiraValidRef},
-			expectedComment: `org/repo#1:@user: This pull request references JIRA-123 which is a valid jira issue.
+			expectedComments: []string{`org/repo#1:@user: This pull request references JIRA-123 which is a valid jira issue.
 
 <details>
 
@@ -827,7 +827,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:                  "valid jira with incorrect version removes invalid label, adds valid label,comments",
@@ -836,7 +836,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			labels:                []string{labels.JiraInvalidBug},
 			expectedLabels:        []string{labels.JiraValidRef},
 			options:               JiraBranchOptions{TargetVersion: &v1Str},
-			expectedComment: `org/repo#1:@user: This pull request references JIRA-123 which is a valid jira issue.
+			expectedComments: []string{`org/repo#1:@user: This pull request references JIRA-123 which is a valid jira issue.
 
 Warning: The referenced jira issue has an invalid target version for the target branch this PR targets: expected the issue to target the "v1" version, but no target version was set.
 
@@ -848,7 +848,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name: "valid bug and valid jira ref adds valid/severity labels and comments",
@@ -860,7 +860,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:               JiraBranchOptions{IsOpen: &open},
 			labels:                []string{},
 			expectedLabels:        []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
+			expectedComments: []string{`org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
 
 <details><summary>1 validation(s) were run on this bug</summary>
 
@@ -876,14 +876,14 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:                  "invalid jira with status update removes valid label, comments",
 			replaceReferencedBugs: []referencedIssue{{Project: "JIRA", ID: "123", IsBug: false}},
 			labels:                []string{labels.JiraValidRef},
 			expectedLabels:        []string{},
-			expectedComment: `org/repo#1:@user: No Jira issue with key JIRA-123 exists in the tracker at https://my-jira.com.
+			expectedComments: []string{`org/repo#1:@user: No Jira issue with key JIRA-123 exists in the tracker at https://my-jira.com.
 Once a valid jira issue is referenced in the title of this pull request, request a refresh with <code>/jira refresh</code>.
 
 <details>
@@ -894,14 +894,14 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:           "valid no-jira removes invalid label, adds valid label, comments",
 			noJira:         true,
 			labels:         []string{labels.JiraInvalidBug},
 			expectedLabels: []string{labels.JiraValidRef},
-			expectedComment: `org/repo#1:@user: This pull request explicitly references no jira issue.
+			expectedComments: []string{`org/repo#1:@user: This pull request explicitly references no jira issue.
 
 <details>
 
@@ -911,7 +911,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:           "valid no-jira with no changes comments if there is no previous matching comment",
@@ -919,7 +919,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			noJira:         true,
 			labels:         []string{labels.JiraValidRef},
 			expectedLabels: []string{labels.JiraValidRef},
-			expectedComment: `org/repo#1:@user: This pull request explicitly references no jira issue.
+			expectedComments: []string{`org/repo#1:@user: This pull request explicitly references no jira issue.
 
 <details>
 
@@ -929,7 +929,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name: "valid no-jira with no changes comments if there if latest bot comment does not match",
@@ -947,7 +947,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			noJira:         true,
 			labels:         []string{labels.JiraValidRef},
 			expectedLabels: []string{labels.JiraValidRef},
-			expectedComment: `org/repo#1:@user: This pull request explicitly references no jira issue.
+			expectedComments: []string{`org/repo#1:@user: This pull request explicitly references no jira issue.
 
 <details>
 
@@ -957,7 +957,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name: "valid no-jira with no changes does not comments if latest bot comment matches",
@@ -982,7 +982,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{StateAfterValidation: &JiraBugState{Status: "CLOSED", Resolution: "VALIDATED"}}, // no requirements --> always valid
 			labels:         []string{labels.JiraInvalidBug},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityLow},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid. The bug has been moved to the CLOSED (VALIDATED) state.
+			expectedComments: []string{`org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid. The bug has been moved to the CLOSED (VALIDATED) state.
 
 <details><summary>No validations were run on this bug</summary></details>
 
@@ -994,7 +994,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Project: jira.Project{Key: "OCPBUGS"},
 				Status: &jira.Status{
@@ -1013,7 +1013,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{StateAfterValidation: &updated}, // no requirements --> always valid
 			labels:         []string{labels.JiraInvalidBug},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
+			expectedComments: []string{`org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
 
 <details><summary>No validations were run on this bug</summary></details>
 
@@ -1025,7 +1025,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Status: &jira.Status{Name: "UPDATED"}}}},
 		},
 		{
@@ -1034,7 +1034,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{AddExternalLink: &yes}, // no requirements --> always valid
 			labels:         []string{labels.JiraInvalidBug},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
+			expectedComments: []string{`org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
 
 <details><summary>No validations were run on this bug</summary></details>
 
@@ -1048,7 +1048,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123"}},
 			expectedNewRemoteLinks: []jira.RemoteLink{{Object: &jira.RemoteLinkObject{
 				URL:   "https://github.com/org/repo/pull/1",
@@ -1075,7 +1075,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{AddExternalLink: &yes}, // no requirements --> always valid
 			labels:         []string{labels.JiraInvalidBug},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
+			expectedComments: []string{`org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
 
 <details><summary>No validations were run on this bug</summary></details>
 
@@ -1087,7 +1087,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123"}},
 		},
 		{
@@ -1101,7 +1101,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			existingIssueLinks: []*jira.IssueLink{&cloneBetween123to124, &blocksBetween123to124},
 			issueGetErrors:     map[string]error{"OCPBUGS-123": errors.New("injected error getting bug")},
 			options:            JiraBranchOptions{DependentBugStates: &verified},
-			expectedComment: `org/repo#2:@user: An error was encountered searching for dependent bug OCPBUGS-123 for bug OCPBUGS-124 on the Jira server at https://my-jira.com. No known errors were detected, please see the full error message for details.
+			expectedComments: []string{`org/repo#2:@user: An error was encountered searching for dependent bug OCPBUGS-123 for bug OCPBUGS-124 on the Jira server at https://my-jira.com. No known errors were detected, please see the full error message for details.
 
 <details><summary>Full error message.</summary>
 
@@ -1121,7 +1121,7 @@ In response to [this](https://github.com/org/repo/pull/2):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name: "valid bug with dependent bugs removes invalid label, adds valid label, comments",
@@ -1148,7 +1148,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:            JiraBranchOptions{IsOpen: &yes, TargetVersion: &v1Str, DependentBugStates: &verified, DependentBugTargetVersions: &[]string{v2Str}},
 			labels:             []string{labels.JiraInvalidBug},
 			expectedLabels:     []string{labels.JiraValidRef, labels.JiraValidBug},
-			expectedComment: `org/repo#2:@user: This pull request references [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124), which is valid.
+			expectedComments: []string{`org/repo#2:@user: This pull request references [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124), which is valid.
 
 <details><summary>5 validation(s) were run on this bug</summary>
 
@@ -1166,7 +1166,7 @@ In response to [this](https://github.com/org/repo/pull/2):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:   "valid bug on merged PR with one external link migrates to new state with resolution and comments",
@@ -1186,7 +1186,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			}},
 			prs:     []github.PullRequest{{Number: base.number, Merged: true}},
 			options: JiraBranchOptions{StateAfterMerge: &JiraBugState{Status: "CLOSED", Resolution: "MERGED"}}, // no requirements --> always valid
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
+			expectedComments: []string{`org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
  * [org/repo#1](https://github.com/org/repo/pull/1)
 
 [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been moved to the CLOSED (MERGED) state.
@@ -1199,7 +1199,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Project:    jira.Project{Key: "OCPBUGS"},
 				Status:     &jira.Status{Name: "CLOSED"},
@@ -1229,7 +1229,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			expectedLabels: []string{labels.QEApproved},
 			prs:            []github.PullRequest{{Number: base.number, Merged: true}},
 			options:        JiraBranchOptions{StateAfterMerge: &JiraBugState{Status: "CLOSED", Resolution: "MERGED"}, PreMergeStateAfterMerge: &JiraBugState{Status: "UPDATED2", Resolution: "MERGED2"}}, // no requirements --> always valid
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
+			expectedComments: []string{`org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
  * [org/repo#1](https://github.com/org/repo/pull/1)
 
 [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been moved to the UPDATED2 (MERGED2) state.
@@ -1242,7 +1242,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Project:         jira.Project{Key: "OCPBUGS"},
 				Status:          &jira.Status{Name: "UPDATED2"},
@@ -1278,7 +1278,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			prs:     []github.PullRequest{{Number: base.number, Merged: true}},
 			options: JiraBranchOptions{StateAfterMerge: &JiraBugState{Status: "CLOSED", Resolution: "MERGED"}}, // no requirements --> always valid
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
+			expectedComments: []string{`org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
  * [org/repo#1](https://github.com/org/repo/pull/1)
 
 [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been moved to the CLOSED (MERGED) state.
@@ -1296,7 +1296,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Project:    jira.Project{Key: "OCPBUGS"},
 				Status:     &jira.Status{Name: "CLOSED"},
@@ -1324,7 +1324,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			}},
 			prs:     []github.PullRequest{{Number: base.number, Merged: true}},
 			options: JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
+			expectedComments: []string{`org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
  * [org/repo#1](https://github.com/org/repo/pull/1)
 
 [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been moved to the MODIFIED state.
@@ -1337,7 +1337,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: "MODIFIED"}}}},
 		},
 		{
@@ -1378,7 +1378,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			}},
 			prs:     []github.PullRequest{{Number: base.number, Merged: true}, {Number: 22, Merged: true}, {Number: 23, Merged: true}},
 			options: JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
+			expectedComments: []string{`org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
  * [org/repo#1](https://github.com/org/repo/pull/1)
  * [org/repo#22](https://github.com/org/repo/pull/22)
  * [org/repo#23](https://github.com/org/repo/pull/23)
@@ -1393,7 +1393,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: "MODIFIED"}}}},
 		},
 		{
@@ -1425,7 +1425,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			prs:            []github.PullRequest{{Number: base.number, Merged: true}, {Number: 22, Merged: false, State: "open"}},
 			options:        JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{}}},
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): Some pull requests linked via external trackers have merged:
+			expectedComments: []string{`org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): Some pull requests linked via external trackers have merged:
  * [org/repo#1](https://github.com/org/repo/pull/1)
 
 The following pull request, linked via external tracker, has not merged:
@@ -1443,7 +1443,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:   "2 valid bugs on merged PR, one with unmerged external links and one with merged external links",
@@ -1484,7 +1484,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			prs:     []github.PullRequest{{Number: base.number, Merged: true}, {Number: 22, Merged: false, State: "open"}},
 			options: JiraBranchOptions{StateAfterMerge: &JiraBugState{Status: "CLOSED", Resolution: "MERGED"}},
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): Some pull requests linked via external trackers have merged:
+			expectedComments: []string{`org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): Some pull requests linked via external trackers have merged:
  * [org/repo#1](https://github.com/org/repo/pull/1)
 
 The following pull request, linked via external tracker, has not merged:
@@ -1507,7 +1507,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "MODIFIED"},
 			}}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
@@ -1532,7 +1532,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			prs:            []github.PullRequest{{Number: 22, Merged: false, State: "open"}},
 			options:        JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: "MODIFIED"}}}},
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
+			expectedComments: []string{`org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
 
 
 [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been moved to the MODIFIED state.
@@ -1545,7 +1545,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:   "valid bug on merged PR with one external link but no status after merge configured does nothing",
@@ -1598,7 +1598,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			}},
 			prs:     []github.PullRequest{{Number: base.number, Merged: true}},
 			options: JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
-			expectedComment: `org/repo#1:@user: An error was encountered searching for bug OCPBUGS-123 on the Jira server at https://my-jira.com. No known errors were detected, please see the full error message for details.
+			expectedComments: []string{`org/repo#1:@user: An error was encountered searching for bug OCPBUGS-123 on the Jira server at https://my-jira.com. No known errors were detected, please see the full error message for details.
 
 <details><summary>Full error message.</summary>
 
@@ -1618,7 +1618,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123"}},
 		},
 		{
@@ -1641,7 +1641,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			}},
 			prs:     []github.PullRequest{{Number: base.number, Merged: true}},
 			options: JiraBranchOptions{StateAfterValidation: &updated, StateAfterMerge: &modified}, // no requirements --> always valid
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) is in an unrecognized state (CLOSED) and will not be moved to the MODIFIED state.
+			expectedComments: []string{`org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) is in an unrecognized state (CLOSED) and will not be moved to the MODIFIED state.
 
 <details>
 
@@ -1651,7 +1651,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "CLOSED"},
@@ -1681,7 +1681,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			}},
 			prs:     []github.PullRequest{{Number: base.number, Merged: false}},
 			options: JiraBranchOptions{AddExternalLink: &yes},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123). The bug has been updated to no longer refer to the pull request using the external bug tracker.
+			expectedComments: []string{`org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123). The bug has been updated to no longer refer to the pull request using the external bug tracker.
 
 <details>
 
@@ -1691,7 +1691,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "CLOSED"},
 				Unknowns: tcontainer.MarshalMap{
@@ -1751,7 +1751,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			}},
 			prs:     []github.PullRequest{{Number: base.number, Merged: false}},
 			options: JiraBranchOptions{AddExternalLink: &yes, StateAfterClose: &JiraBugState{Status: "NEW"}},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123). The bug has been updated to no longer refer to the pull request using the external bug tracker. All external bug links have been closed. The bug has been moved to the NEW state.
+			expectedComments: []string{`org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123). The bug has been updated to no longer refer to the pull request using the external bug tracker. All external bug links have been closed. The bug has been moved to the NEW state.
 
 <details>
 
@@ -1761,7 +1761,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "NEW"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
@@ -1812,7 +1812,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			expectedLabels: []string{labels.QEApproved},
 			prs:            []github.PullRequest{{Number: base.number, Merged: false}},
 			options:        JiraBranchOptions{AddExternalLink: &yes, StateAfterClose: &JiraBugState{Status: "NEW"}, PreMergeStateAfterClose: &JiraBugState{Status: "NEW2"}},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123). The bug has been updated to no longer refer to the pull request using the external bug tracker. All external bug links have been closed. The bug has been moved to the NEW2 state.
+			expectedComments: []string{`org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123). The bug has been updated to no longer refer to the pull request using the external bug tracker. All external bug links have been closed. The bug has been moved to the NEW2 state.
 
 <details>
 
@@ -1822,7 +1822,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "NEW2"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
@@ -1888,7 +1888,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			}},
 			prs:     []github.PullRequest{{Number: base.number, Merged: false}},
 			options: JiraBranchOptions{AddExternalLink: &yes, StateAfterClose: &JiraBugState{Status: "NEW"}},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123). The bug has been updated to no longer refer to the pull request using the external bug tracker. All external bug links have been closed. The bug has been moved to the NEW state.
+			expectedComments: []string{`org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123). The bug has been updated to no longer refer to the pull request using the external bug tracker. All external bug links have been closed. The bug has been moved to the NEW state.
 
 This pull request references [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). The bug has been updated to no longer refer to the pull request using the external bug tracker. All external bug links have been closed. The bug has been moved to the NEW state.
 
@@ -1900,7 +1900,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "NEW"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
@@ -1982,7 +1982,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			}},
 			prs:     []github.PullRequest{{Number: base.number, Merged: false}},
 			options: JiraBranchOptions{AddExternalLink: &yes, StateAfterClose: &JiraBugState{Status: "NEW"}},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123). The bug has been updated to no longer refer to the pull request using the external bug tracker.
+			expectedComments: []string{`org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123). The bug has been updated to no longer refer to the pull request using the external bug tracker.
 
 <details>
 
@@ -1992,7 +1992,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "POST"},
 				Unknowns: tcontainer.MarshalMap{
@@ -2032,7 +2032,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			cherrypick:          true,
 			cherryPickFromPRNum: 1,
 			options:             JiraBranchOptions{TargetVersion: &v1Str, IgnoreCloneLabels: []string{"bad_label_2", "bad_label_1"}},
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). Will retitle bug to link to clone.
+			expectedComments: []string{`org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). Will retitle bug to link to clone.
 /retitle [v1] OCPBUGS-124: fixed it!
 
 <details>
@@ -2043,7 +2043,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Assignee:    &jira.User{Name: "testUser"},
@@ -2087,7 +2087,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			cherrypick:          true,
 			cherryPickFromPRNum: 1,
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). Will retitle bug to link to clone.
+			expectedComments: []string{`org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). Will retitle bug to link to clone.
 /retitle [v1] OCPBUGS-124: fixed it!
 
 <details>
@@ -2098,7 +2098,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Assignee:    &jira.User{Name: "testUser"},
@@ -2155,7 +2155,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			cherrypick:            true,
 			cherryPickFromPRNum:   1,
 			options:               JiraBranchOptions{TargetVersion: &v1Str},
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-125](https://my-jira.com/browse/OCPBUGS-125). Will retitle bug to link to clone.
+			expectedComments: []string{`org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-125](https://my-jira.com/browse/OCPBUGS-125). Will retitle bug to link to clone.
 
 [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) has been cloned as [Jira Issue OCPBUGS-126](https://my-jira.com/browse/OCPBUGS-126). Will retitle bug to link to clone.
 /retitle [v1] OCPBUGS-125,OCPBUGS-126: fixed it!
@@ -2168,7 +2168,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
 				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
@@ -2255,7 +2255,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			cherrypick:            true,
 			cherryPickFromPRNum:   1,
 			options:               JiraBranchOptions{TargetVersion: &v1Str},
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-125](https://my-jira.com/browse/OCPBUGS-125). Will retitle bug to link to clone.
+			expectedComments: []string{`org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-125](https://my-jira.com/browse/OCPBUGS-125). Will retitle bug to link to clone.
 
 WARNING: Failed to update the target version, assignee, and sprint for the clone. Please update these fields manually. Full error below:
 <details><summary>Full error message.</summary>
@@ -2277,7 +2277,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
 				Assignee:    &jira.User{Name: "defaultAssignee"},
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
@@ -2350,7 +2350,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			cherrypick: true,
 			missing:    true,
 			options:    JiraBranchOptions{TargetVersion: &v1Str},
-			expectedComment: `org/repo#2:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). Will retitle bug to link to clone.
+			expectedComments: []string{`org/repo#2:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). Will retitle bug to link to clone.
 /retitle OCPBUGS-124: fixed it!
 
 <details>
@@ -2361,7 +2361,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
@@ -2419,7 +2419,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			cherrypick: true,
 			missing:    true,
 			options:    JiraBranchOptions{TargetVersion: &v1Str},
-			expectedComment: `org/repo#2:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-125](https://my-jira.com/browse/OCPBUGS-125). Will retitle bug to link to clone.
+			expectedComments: []string{`org/repo#2:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-125](https://my-jira.com/browse/OCPBUGS-125). Will retitle bug to link to clone.
 
 [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) has been cloned as [Jira Issue OCPBUGS-126](https://my-jira.com/browse/OCPBUGS-126). Will retitle bug to link to clone.
 /retitle OCPBUGS-125,OCPBUGS-126: fixed it!
@@ -2432,7 +2432,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
 				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
@@ -2506,7 +2506,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			cherrypick: true,
 			missing:    true,
 			options:    JiraBranchOptions{TargetVersion: &v1Str},
-			expectedComment: `org/repo#2:@user: Ignoring requests to cherry-pick non-bug issues: OTHER-124
+			expectedComments: []string{`org/repo#2:@user: Ignoring requests to cherry-pick non-bug issues: OTHER-124
  [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). Will retitle bug to link to clone.
 /retitle OCPBUGS-124: fixed it!
 
@@ -2518,7 +2518,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
@@ -2554,7 +2554,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			cherrypick:          true,
 			cherryPickFromPRNum: 1,
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
-			expectedComment: `org/repo#1:@user: Error creating a cherry-pick bug in Jira: failed to check the state of cherrypicked pull request at https://github.com/org/repo/pull/1: pull request number 1 does not exist.
+			expectedComments: []string{`org/repo#1:@user: Error creating a cherry-pick bug in Jira: failed to check the state of cherrypicked pull request at https://github.com/org/repo/pull/1: pull request number 1 does not exist.
 Please contact an administrator to resolve this issue, then request a bug refresh with <code>/jira refresh</code>.
 
 <details>
@@ -2565,7 +2565,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name: "failure to obtain parent bug for cherrypick results in error",
@@ -2585,7 +2585,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			cherrypick:          true,
 			cherryPickFromPRNum: 1,
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
-			expectedComment: `org/repo#1:@user: An error was encountered searching for bug OCPBUGS-123 on the Jira server at https://my-jira.com. No known errors were detected, please see the full error message for details.
+			expectedComments: []string{`org/repo#1:@user: An error was encountered searching for bug OCPBUGS-123 on the Jira server at https://my-jira.com. No known errors were detected, please see the full error message for details.
 
 <details><summary>Full error message.</summary>
 
@@ -2605,7 +2605,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		}, {
 			name: "failure to update bug retitles the PR and prints a warning in the comment",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
@@ -2629,7 +2629,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			cherrypick:          true,
 			cherryPickFromPRNum: 1,
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). Will retitle bug to link to clone.
+			expectedComments: []string{`org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). Will retitle bug to link to clone.
 
 WARNING: Failed to update the target version, assignee, and sprint for the clone. Please update these fields manually. Full error below:
 <details><summary>Full error message.</summary>
@@ -2649,7 +2649,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		}, {
 			name: "If bug clone with correct target version already exists, just retitle PR",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
@@ -2676,7 +2676,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			cherrypick:          true,
 			cherryPickFromPRNum: 1,
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
-			expectedComment: `org/repo#1:@user: Detected clone of [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) with correct target version. Will retitle the PR to link to the clone.
+			expectedComments: []string{`org/repo#1:@user: Detected clone of [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) with correct target version. Will retitle the PR to link to the clone.
 /retitle [v1] OCPBUGS-124: fixed it!
 
 <details>
@@ -2687,7 +2687,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		}, {
 			name: "If bug clone with correct target version already is listed as an issue label, just retitle PR",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
@@ -2708,7 +2708,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			cherrypick:          true,
 			cherryPickFromPRNum: 1,
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
-			expectedComment: `org/repo#1:@user: Detected clone of [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) with correct target version. Will retitle the PR to link to the clone.
+			expectedComments: []string{`org/repo#1:@user: Detected clone of [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) with correct target version. Will retitle the PR to link to the clone.
 /retitle [v1] OCPBUGS-124: fixed it!
 
 <details>
@@ -2719,7 +2719,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		}, {
 			name: "If clone with correct target version already exists in multibug PR, retitle PR for correct clone and create clone for other bug",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
@@ -2759,7 +2759,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			cherrypick:          true,
 			cherryPickFromPRNum: 1,
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
-			expectedComment: `org/repo#1:@user: Detected clone of [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) with correct target version. Will retitle the PR to link to the clone.
+			expectedComments: []string{`org/repo#1:@user: Detected clone of [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) with correct target version. Will retitle the PR to link to the clone.
 
 [Jira Issue OCPBUGS-125](https://my-jira.com/browse/OCPBUGS-125) has been cloned as [Jira Issue OCPBUGS-126](https://my-jira.com/browse/OCPBUGS-126). Will retitle bug to link to clone.
 /retitle [v1] OCPBUGS-124,OCPBUGS-126: fixed it!
@@ -2772,7 +2772,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "4", Key: "OCPBUGS-126", Fields: &jira.IssueFields{
 				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-125. The following is the description of the original issue: \n---\n",
@@ -2831,7 +2831,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			cherrypick:          true,
 			cherryPickFromPRNum: 1,
 			options:             JiraBranchOptions{TargetVersion: &v1Str},
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-125](https://my-jira.com/browse/OCPBUGS-125). Will retitle bug to link to clone.
+			expectedComments: []string{`org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-125](https://my-jira.com/browse/OCPBUGS-125). Will retitle bug to link to clone.
 /retitle [v1] OCPBUGS-125: fixed it!
 
 <details>
@@ -2842,7 +2842,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "3", Key: "OCPBUGS-125", Fields: &jira.IssueFields{
 				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
@@ -2873,7 +2873,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			refresh:        true,
 			body:           "/jira refresh",
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
+			expectedComments: []string{`org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
 
 <details><summary>No validations were run on this bug</summary></details>
 
@@ -2885,7 +2885,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		}, {
 			name: "Bug matching previous bot comment still comments on /jira refresh with no changes",
 			prComments: map[int][]github.IssueComment{1: {{Body: "Hello", User: github.User{Login: "alex"}}, {Body: `@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
@@ -2907,7 +2907,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			body:           "/jira refresh",
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
+			expectedComments: []string{`org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
 
 <details><summary>No validations were run on this bug</summary></details>
 
@@ -2919,7 +2919,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		}, {
 			name:    "Bug with non-allowed security level results in comment on /jira refresh",
 			issues:  []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{"security": jiraclient.SecurityLevel{Name: "security"}}}}},
@@ -2927,7 +2927,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			refresh: true,
 			body:    "/jira refresh",
 			options: JiraBranchOptions{AllowedSecurityLevels: []string{"internal"}},
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) is in a security level that is not in the allowed security levels for this repo.
+			expectedComments: []string{`org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) is in a security level that is not in the allowed security levels for this repo.
 Allowed security levels for this repo are:
 - internal
 
@@ -2939,14 +2939,14 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		}, {
 			name:    "Bug with non-allowed security level results in comment on PR creation",
 			issues:  []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{"security": jiraclient.SecurityLevel{Name: "security"}}}}},
 			prs:     []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}},
 			opened:  true,
 			options: JiraBranchOptions{AllowedSecurityLevels: []string{"internal"}},
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) is in a security level that is not in the allowed security levels for this repo.
+			expectedComments: []string{`org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) is in a security level that is not in the allowed security levels for this repo.
 Allowed security levels for this repo are:
 - internal
 
@@ -2958,7 +2958,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		}, {
 			name: "Bug with allowed group is properly handled",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Unknowns: tcontainer.MarshalMap{
@@ -2968,7 +2968,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{StateAfterValidation: &updated, AllowedSecurityLevels: []string{"security"}},
 			labels:         []string{labels.JiraInvalidBug},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityModerate},
-			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid. The bug has been moved to the UPDATED state.
+			expectedComments: []string{`org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid. The bug has been moved to the UPDATED state.
 
 <details><summary>No validations were run on this bug</summary></details>
 
@@ -2980,7 +2980,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Unknowns: tcontainer.MarshalMap{
 					"security":            jiraclient.SecurityLevel{Name: "security"},
@@ -3026,7 +3026,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{IsOpen: &yes, TargetVersion: &v1Str, DependentBugStates: &verified, DependentBugTargetVersions: &[]string{v2Str}},
 			labels:         []string{},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraInvalidBug},
-			expectedComment: `org/repo#2:@user: This pull request references [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124), which is invalid:
+			expectedComments: []string{`org/repo#2:@user: This pull request references [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124), which is invalid:
  - dependent bug OCPBUGSM-123 is not in the required ` + "`OCPBUGS`" + ` project
 
 Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jira bug are made, or edit the title of this pull request to link to a different bug.
@@ -3039,7 +3039,7 @@ In response to [this](https://github.com/org/repo/pull/2):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		}, {
 			name: "Backport with 4 version creates all issues and issue links and adds labels to parent",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
@@ -3070,7 +3070,7 @@ Instructions for interacting with me using PR comments are available [here](http
 					"v5": {TargetVersion: &v5Str, DependentBugTargetVersions: nil},
 				},
 			},
-			expectedComment: `org/repo#1:@user: The following backport issues have been created:
+			expectedComments: []string{`org/repo#1:@user: The following backport issues have been created:
 - [OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) for branch v4
 - [OCPBUGS-125](https://my-jira.com/browse/OCPBUGS-125) for branch v3
 - [OCPBUGS-126](https://my-jira.com/browse/OCPBUGS-126) for branch v2
@@ -3090,7 +3090,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Assignee:   &jira.User{Name: "testUser"},
 				Labels:     []string{"jlp-v1:OCPBUGS-127", "jlp-v2:OCPBUGS-126", "jlp-v3:OCPBUGS-125", "jlp-v4:OCPBUGS-124"},
@@ -3197,7 +3197,7 @@ Instructions for interacting with me using PR comments are available [here](http
 					"v5": {TargetVersion: &v5Str, DependentBugTargetVersions: nil},
 				},
 			},
-			expectedComment: `org/repo#1:@user: Missing required branches for backport chain:
+			expectedComments: []string{`org/repo#1:@user: Missing required branches for backport chain:
 - branch with one of the following target versions: [` + "v3 v3z" + `]
 
 
@@ -3209,12 +3209,12 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:     "verified comment from payload repo PR results in verified label being added and bigquery data being uploaded",
 			issues:   []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
-			body:     "/verified by @tester",
+			body:     "random prefix line\n/verified by @tester\nrandom suffix line",
 			verified: []string{"@tester"},
 			verificationInfo: []VerificationInfo{{
 				User:   "user",
@@ -3229,17 +3229,19 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `.
+			expectedComments: []string{`org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `.
 
 <details>
 
 In response to [this](https://github.com/org/repo/pull/1):
 
+>random prefix line
 >/verified by @tester
+>random suffix line
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:     "verified comment from excluded repo PR results in verified label being added and bigquery data being uploaded",
@@ -3259,7 +3261,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `.
+			expectedComments: []string{`org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `.
 
 <details>
 
@@ -3269,7 +3271,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			fullConfig: Config{PreMergeVerification: PreMergeVerificationOptions{ExcludedRepositories: []string{"org/repo"}}},
 		},
 		{
@@ -3299,7 +3301,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester,@tester2`" + `.
+			expectedComments: []string{`org/repo#1:@user: This PR has been marked as verified by ` + "`@tester,@tester2`" + `.
 
 <details>
 
@@ -3309,7 +3311,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:     "verified comment in excluded repo PR with multiple reasons results in verified label being added and multiple bigquery data being uploaded",
@@ -3338,7 +3340,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester,@tester2`" + `.
+			expectedComments: []string{`org/repo#1:@user: This PR has been marked as verified by ` + "`@tester,@tester2`" + `.
 
 <details>
 
@@ -3348,7 +3350,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			fullConfig: Config{PreMergeVerification: PreMergeVerificationOptions{ExcludedRepositories: []string{"org/repo"}}},
 		},
 		{
@@ -3378,7 +3380,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified, labels.VerifiedLater},
-			expectedComment: `org/repo#1:@user: This PR has been marked to be verified later by ` + "`@tester`" + `.
+			expectedComments: []string{`org/repo#1:@user: This PR has been marked to be verified later by ` + "`@tester`" + `.
 
 <details>
 
@@ -3388,7 +3390,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:           "verified later comment not referring to a user gives error",
@@ -3398,7 +3400,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
-			expectedComment: `org/repo#1:@user: Only users can be targets for the ` + "`/verified later`" + ` command.
+			expectedComments: []string{`org/repo#1:@user: Only users can be targets for the ` + "`/verified later`" + ` command.
 
 <details>
 
@@ -3408,7 +3410,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:           "verified PR from payload repo does not move issue to VERIFIED on merge",
@@ -3418,7 +3420,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{StateAfterMerge: &JiraBugState{Status: "CLOSED", Resolution: "MERGED"}}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: Jira Issue Verification Checks: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123)
+			expectedComments: []string{`org/repo#1:@user: Jira Issue Verification Checks: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123)
     :heavy_check_mark:  This pull request was pre-merge verified.
     :heavy_check_mark:  All associated pull requests have merged.
     :heavy_check_mark:  All associated, merged pull requests were pre-merge verified.
@@ -3433,7 +3435,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Project:    jira.Project{Key: "OCPBUGS"},
 				Resolution: &jira.Resolution{Name: "MERGED"},
@@ -3449,7 +3451,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{StateAfterMerge: &JiraBugState{Status: "CLOSED", Resolution: "MERGED"}}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.VerifiedLater},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.VerifiedLater},
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
+			expectedComments: []string{`org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
 
 
 This pull request has the ` + "`verified-later`" + ` tag and will need to be manually moved to VERIFIED after testing. [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been moved to the ` + "`CLOSED (MERGED)`" + ` state.
@@ -3462,7 +3464,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Project:    jira.Project{Key: "OCPBUGS"},
 				Resolution: &jira.Resolution{Name: "MERGED"},
@@ -3478,7 +3480,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{StateAfterMerge: &JiraBugState{Status: "CLOSED", Resolution: "MERGED"}}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
+			expectedComments: []string{`org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
 
 
 All linked pull requests have the ` + "`verified`" + ` tag. [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been moved to the ` + "`VERIFIED`" + ` state.
@@ -3491,7 +3493,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Project:  jira.Project{Key: "OCPBUGS"},
 				Status:   &jira.Status{Name: "VERIFIED"},
@@ -3507,7 +3509,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{StateAfterMerge: &JiraBugState{Status: "CLOSED", Resolution: "MERGED"}}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.VerifiedLater},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.VerifiedLater},
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
+			expectedComments: []string{`org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
 
 
 This pull request has the ` + "`verified-later`" + ` tag and will need to be manually moved to VERIFIED after testing. [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been moved to the ` + "`CLOSED (MERGED)`" + ` state.
@@ -3520,7 +3522,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Project:    jira.Project{Key: "OCPBUGS"},
 				Resolution: &jira.Resolution{Name: "MERGED"},
@@ -3538,7 +3540,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `.
+			expectedComments: []string{`org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `.
 
 <details>
 
@@ -3548,7 +3550,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:           "verified comment in excluded repo PR without bigquery succeeds",
@@ -3559,7 +3561,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `.
+			expectedComments: []string{`org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `.
 
 <details>
 
@@ -3569,7 +3571,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			fullConfig: Config{PreMergeVerification: PreMergeVerificationOptions{ExcludedRepositories: []string{"org/repo"}}},
 		},
 		{
@@ -3599,7 +3601,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
-			expectedComment: `org/repo#1:@user: The ` + "`verified`" + ` label has been removed.
+			expectedComments: []string{`org/repo#1:@user: The ` + "`verified`" + ` label has been removed.
 
 <details>
 
@@ -3609,7 +3611,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:           "verified remove comment results in verified later label being removed and bigquery data being uploaded",
@@ -3638,7 +3640,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.VerifiedLater},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
-			expectedComment: `org/repo#1:@user: The ` + "`verified-later`" + ` label has been removed.
+			expectedComments: []string{`org/repo#1:@user: The ` + "`verified-later`" + ` label has been removed.
 
 <details>
 
@@ -3648,7 +3650,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:           "verified remove comment results in verified and verified later labels being removed and bigquery data being uploaded",
@@ -3686,7 +3688,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified, labels.VerifiedLater},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
-			expectedComment: `org/repo#1:@user: The ` + "`verified`" + ` label has been removed.The ` + "`verified-later`" + ` label has been removed.
+			expectedComments: []string{`org/repo#1:@user: The ` + "`verified`" + ` label has been removed.The ` + "`verified-later`" + ` label has been removed.
 
 <details>
 
@@ -3696,7 +3698,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:           "verified remove comment with no verified labels results in comment and bigquery data being uploaded",
@@ -3716,7 +3718,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
-			expectedComment: `org/repo#1:@user: This PR does not have ` + "`verified`" + ` or ` + "`verified-later`" + ` labels.
+			expectedComments: []string{`org/repo#1:@user: This PR does not have ` + "`verified`" + ` or ` + "`verified-later`" + ` labels.
 
 <details>
 
@@ -3726,7 +3728,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:        "PR change results in verified label being removed and bigquery data being uploaded",
@@ -3791,7 +3793,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.VerifiedLater},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `.
+			expectedComments: []string{`org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `.
 
 <details>
 
@@ -3801,7 +3803,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:     "verified comment in excluded repo PR with existing verified-later label results in verified label being added, verified-later label being removed, and bigquery data being uploaded",
@@ -3830,7 +3832,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.VerifiedLater},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `.
+			expectedComments: []string{`org/repo#1:@user: This PR has been marked as verified by ` + "`@tester`" + `.
 
 <details>
 
@@ -3840,7 +3842,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			fullConfig: Config{PreMergeVerification: PreMergeVerificationOptions{ExcludedRepositories: []string{"org/repo"}}},
 		},
 		{
@@ -3852,7 +3854,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
-			expectedComment: `org/repo#1:@tester: Jira verification commands are restricted to collaborators for this repo.
+			expectedComments: []string{`org/repo#1:@tester: Jira verification commands are restricted to collaborators for this repo.
 
 <details>
 
@@ -3862,7 +3864,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:   "valid bug on merged PR from payload repo with many verified external links does not migrate to VERIFIED and comments",
@@ -3904,7 +3906,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			expectedLabels: []string{"verified"},
 			prs:            []github.PullRequest{{Number: base.number, Merged: true, Labels: []github.Label{{Name: "verified"}}}, {Number: 22, Merged: true, Labels: []github.Label{{Name: "verified"}}}, {Number: 23, Merged: true, Labels: []github.Label{{Name: "verified"}}}},
 			options:        JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
-			expectedComment: `org/repo#1:@user: Jira Issue Verification Checks: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123)
+			expectedComments: []string{`org/repo#1:@user: Jira Issue Verification Checks: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123)
     :heavy_check_mark:  This pull request was pre-merge verified.
     :heavy_check_mark:  All associated pull requests have merged.
     :heavy_check_mark:  All associated, merged pull requests were pre-merge verified.
@@ -3919,7 +3921,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "MODIFIED"},
 			}}},
@@ -3964,7 +3966,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			expectedLabels: []string{"verified"},
 			prs:            []github.PullRequest{{Number: base.number, Merged: true, Labels: []github.Label{{Name: "verified"}}}, {Number: 22, Merged: false, State: "open", Labels: []github.Label{{Name: "verified"}}}, {Number: 23, Merged: true, Labels: []github.Label{{Name: "verified"}}}},
 			options:        JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): Some pull requests linked via external trackers have merged:
+			expectedComments: []string{`org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): Some pull requests linked via external trackers have merged:
  * [org/repo#1](https://github.com/org/repo/pull/1)
 
 The following pull request, linked via external tracker, has not merged:
@@ -3984,7 +3986,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{}}},
 		},
 		{
@@ -4027,7 +4029,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			expectedLabels: []string{"verified-later"},
 			prs:            []github.PullRequest{{Number: base.number, Merged: true, Labels: []github.Label{{Name: "verified"}}}, {Number: 22, Merged: false, State: "open", Labels: []github.Label{{Name: "verified"}}}, {Number: 23, Merged: true, Labels: []github.Label{{Name: "verified"}}}},
 			options:        JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): Some pull requests linked via external trackers have merged:
+			expectedComments: []string{`org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): Some pull requests linked via external trackers have merged:
  * [org/repo#1](https://github.com/org/repo/pull/1)
 
 The following pull request, linked via external tracker, has not merged:
@@ -4047,7 +4049,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{}}},
 		},
 		{
@@ -4090,7 +4092,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			expectedLabels: []string{"verified"},
 			prs:            []github.PullRequest{{Number: base.number, Merged: true, Labels: []github.Label{{Name: "verified"}}}, {Number: 22, Merged: true, Labels: []github.Label{{Name: "verified"}}}, {Number: 23, Merged: true, Labels: []github.Label{{Name: "verified"}}}},
 			options:        JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
+			expectedComments: []string{`org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
  * [org/repo#1](https://github.com/org/repo/pull/1)
  * [org/repo#22](https://github.com/org/repo/pull/22)
  * [org/repo#23](https://github.com/org/repo/pull/23)
@@ -4105,7 +4107,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: "VERIFIED"}}}},
 			fullConfig:     Config{PreMergeVerification: PreMergeVerificationOptions{ExcludedRepositories: []string{"org/repo"}}},
 		},
@@ -4149,7 +4151,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			expectedLabels: []string{"verified"},
 			prs:            []github.PullRequest{{Number: base.number, Merged: true, Labels: []github.Label{{Name: "verified"}}}, {Number: 22, Merged: false, State: "open", Labels: []github.Label{{Name: "verified"}}}, {Number: 23, Merged: true, Labels: []github.Label{{Name: "verified"}}}},
 			options:        JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): Some pull requests linked via external trackers have merged:
+			expectedComments: []string{`org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): Some pull requests linked via external trackers have merged:
  * [org/repo#1](https://github.com/org/repo/pull/1)
 
 The following pull request, linked via external tracker, has not merged:
@@ -4169,7 +4171,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{}}},
 			fullConfig:     Config{PreMergeVerification: PreMergeVerificationOptions{ExcludedRepositories: []string{"org/repo"}}},
 		},
@@ -4213,7 +4215,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			expectedLabels: []string{"verified-later"},
 			prs:            []github.PullRequest{{Number: base.number, Merged: true, Labels: []github.Label{{Name: "verified"}}}, {Number: 22, Merged: false, State: "open", Labels: []github.Label{{Name: "verified"}}}, {Number: 23, Merged: true, Labels: []github.Label{{Name: "verified"}}}},
 			options:        JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): Some pull requests linked via external trackers have merged:
+			expectedComments: []string{`org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): Some pull requests linked via external trackers have merged:
  * [org/repo#1](https://github.com/org/repo/pull/1)
 
 The following pull request, linked via external tracker, has not merged:
@@ -4233,7 +4235,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{}}},
 			fullConfig:     Config{PreMergeVerification: PreMergeVerificationOptions{ExcludedRepositories: []string{"org/repo"}}},
 		},
@@ -4277,7 +4279,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			expectedLabels: []string{"verified"},
 			prs:            []github.PullRequest{{Number: base.number, Merged: true, Labels: []github.Label{{Name: "verified"}}}, {Number: 22, Merged: true, Labels: []github.Label{{Name: "verified"}}}, {Number: 23, Merged: true, Labels: []github.Label{{Name: "verified-later"}}}},
 			options:        JiraBranchOptions{StateAfterMerge: &modified}, // no requirements --> always valid
-			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
+			expectedComments: []string{`org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123): All pull requests linked via external trackers have merged:
  * [org/repo#1](https://github.com/org/repo/pull/1)
  * [org/repo#22](https://github.com/org/repo/pull/22)
  * [org/repo#23](https://github.com/org/repo/pull/23)
@@ -4292,7 +4294,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Status: &jira.Status{Name: "MODIFIED"}}}},
 		},
 		{
@@ -4322,7 +4324,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: The ` + "`verified`" + ` label has been added.
+			expectedComments: []string{`org/repo#1:@user: The ` + "`verified`" + ` label has been added.
 
 <details>
 
@@ -4332,7 +4334,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:           "verified bypass comment results in verified label being added verified later label being removed and bigquery data being uploaded",
@@ -4370,7 +4372,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.VerifiedLater},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: The ` + "`verified`" + ` label has been added.The ` + "`verified-later`" + ` label has been removed.
+			expectedComments: []string{`org/repo#1:@user: The ` + "`verified`" + ` label has been added.The ` + "`verified-later`" + ` label has been removed.
 
 <details>
 
@@ -4380,7 +4382,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:           "verified bypass comment results in verified later label being removed and bigquery data being uploaded",
@@ -4409,7 +4411,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:        JiraBranchOptions{}, // no requirements --> always valid
 			labels:         []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified, labels.VerifiedLater},
 			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical, labels.Verified},
-			expectedComment: `org/repo#1:@user: The ` + "`verified-later`" + ` label has been removed.
+			expectedComments: []string{`org/repo#1:@user: The ` + "`verified-later`" + ` label has been removed.
 
 <details>
 
@@ -4419,7 +4421,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:              "verified comment with no action prints help text",
@@ -4429,7 +4431,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:           JiraBranchOptions{}, // no requirements --> always valid
 			labels:            []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels:    []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
-			expectedComment: `org/repo#1:@user: The ` + "`/verified`" + ` command must be used with one of the following actions: ` + "`by`, `later`, `remove`, or `bypass`" + `. See https://docs.ci.openshift.org/docs/architecture/jira/#premerge-verification for more information.
+			expectedComments: []string{`org/repo#1:@user: The ` + "`/verified`" + ` command must be used with one of the following actions: ` + "`by`, `later`, `remove`, or `bypass`" + `. See https://docs.ci.openshift.org/docs/architecture/jira/#premerge-verification for more information.
 
 <details>
 
@@ -4439,7 +4441,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:              "verified later comment with no reason prints help text",
@@ -4449,7 +4451,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:           JiraBranchOptions{}, // no requirements --> always valid
 			labels:            []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels:    []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
-			expectedComment: `org/repo#1:@user: ` + "`/verified later <@username>`" + ` requires at least one GitHub @username to be specified (it can be a comma delimited list). It indicates the engineer(s) that will be performing the verification. See https://docs.ci.openshift.org/docs/architecture/jira/#premerge-verification for more information.
+			expectedComments: []string{`org/repo#1:@user: ` + "`/verified later <@username>`" + ` requires at least one GitHub @username to be specified (it can be a comma delimited list). It indicates the engineer(s) that will be performing the verification. See https://docs.ci.openshift.org/docs/architecture/jira/#premerge-verification for more information.
 
 <details>
 
@@ -4459,7 +4461,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 		{
 			name:              "verified by comment with no reason prints help text",
@@ -4469,7 +4471,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			options:           JiraBranchOptions{}, // no requirements --> always valid
 			labels:            []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
 			expectedLabels:    []string{labels.JiraValidRef, labels.JiraValidBug, labels.SeverityCritical},
-			expectedComment: `org/repo#1:@user: ` + "`/verified by <reason>`" + ` requires at least one verification method to be identified (it can be a comma delimited list). It can specify a test name or a GitHub @username (an engineer that performed the pre-merge verification). See https://docs.ci.openshift.org/docs/architecture/jira/#premerge-verification for more information.
+			expectedComments: []string{`org/repo#1:@user: ` + "`/verified by <reason>`" + ` requires at least one verification method to be identified (it can be a comma delimited list). It can specify a test name or a GitHub @username (an engineer that performed the pre-merge verification). See https://docs.ci.openshift.org/docs/architecture/jira/#premerge-verification for more information.
 
 <details>
 
@@ -4479,7 +4481,7 @@ In response to [this](https://github.com/org/repo/pull/1):
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
-</details>`,
+</details>`},
 		},
 	}
 
@@ -4581,7 +4583,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				t.Errorf("comment updates differ from expected: %s", diff)
 			}
 
-			checkComments(gc, tc.name, tc.expectedComment, t)
+			checkComments(gc, tc.name, tc.expectedComments, t)
 
 			expected := sets.NewString()
 			for _, label := range tc.expectedLabels {
@@ -4627,18 +4629,16 @@ Instructions for interacting with me using PR comments are available [here](http
 	}
 }
 
-func checkComments(client *fakegithub.FakeClient, name, expectedComment string, t *testing.T) {
-	wantedComments := 0
-	if expectedComment != "" {
-		wantedComments = 1
-	}
-	if len(client.IssueCommentsAdded) != wantedComments {
-		t.Errorf("%s: wanted %d comment, got %d: %v", name, wantedComments, len(client.IssueCommentsAdded), client.IssueCommentsAdded)
+func checkComments(client *fakegithub.FakeClient, name string, expectedComments []string, t *testing.T) {
+	if len(client.IssueCommentsAdded) != len(expectedComments) {
+		t.Errorf("%s: wanted %d comment, got %d: %v", name, len(expectedComments), len(client.IssueCommentsAdded), client.IssueCommentsAdded)
 	}
 
-	if expectedComment != "" && len(client.IssueCommentsAdded) == 1 {
-		if expectedComment != client.IssueCommentsAdded[0] {
-			t.Errorf("%s: got incorrect comment: %v", name, cmp.Diff(expectedComment, client.IssueCommentsAdded[0]))
+	for i := range expectedComments {
+		expectedComment := expectedComments[i]
+		actualComment := client.IssueCommentsAdded[i]
+		if expectedComment != actualComment {
+			t.Errorf("%s: got incorrect comment: %v", name, cmp.Diff(expectedComment, actualComment))
 		}
 	}
 }
@@ -5572,13 +5572,13 @@ func TestDigestPR(t *testing.T) {
 
 func TestDigestComment(t *testing.T) {
 	var testCases = []struct {
-		name            string
-		e               github.IssueCommentEvent
-		title           string
-		merged          bool
-		expected        *event
-		expectedComment string
-		expectedErr     bool
+		name             string
+		e                github.IssueCommentEvent
+		title            string
+		merged           bool
+		expected         []*event
+		expectedComments []string
+		expectedErr      bool
 	}{
 		{
 			name: "unrelated event gets ignored",
@@ -5623,8 +5623,8 @@ func TestDigestComment(t *testing.T) {
 				},
 			},
 			title: "cole, please review this typo fix",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, missing: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, missing: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false},
 			},
 		},
 		{
@@ -5645,7 +5645,7 @@ func TestDigestComment(t *testing.T) {
 				},
 			},
 			title: "someone misspelled words in this repo",
-			expectedComment: `org/repo#1:@: Jira bug referencing is only supported for Pull Requests, not issues.
+			expectedComments: []string{`org/repo#1:@: Jira bug referencing is only supported for Pull Requests, not issues.
 
 <details>
 
@@ -5656,6 +5656,7 @@ In response to [this]():
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
+},
 		},
 		{
 			name: "title referencing bug gets an event",
@@ -5680,8 +5681,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false},
 			},
 		},
 		{
@@ -5707,8 +5708,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "DFBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "DFBUGS", ID: "123", IsBug: true}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "DFBUGS", ID: "123", IsBug: true}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false},
 			},
 		},
 		{
@@ -5734,8 +5735,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123,OCPBUGS-124: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "OCPBUGS", ID: "124", IsBug: true}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "OCPBUGS", ID: "124", IsBug: true}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false},
 			},
 		},
 		{
@@ -5761,8 +5762,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123,JIRA-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "JIRA", ID: "123", IsBug: false}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "JIRA", ID: "123", IsBug: false}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false},
 			},
 		},
 		{
@@ -5788,8 +5789,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "SOMEJIRA-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "SOMEJIRA", ID: "123", IsBug: false}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "SOMEJIRA", ID: "123", IsBug: false}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false},
 			},
 		},
 		{
@@ -5815,8 +5816,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "NO-JIRA: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: nil, noJira: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: nil, noJira: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false},
 			},
 		},
 		{
@@ -5842,8 +5843,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "NO-ISSUE: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: nil, noJira: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: nil, noJira: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false},
 			},
 		},
 		{
@@ -5870,8 +5871,8 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			title:  "OCPBUGS-123: oopsie doopsie",
 			merged: true,
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, merged: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, merged: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false},
 			},
 		},
 		{
@@ -5897,8 +5898,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/jira cc-qa", htmlUrl: "www.com", login: "user", cc: true,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/jira cc-qa", htmlUrl: "www.com", login: "user", cc: true},
 			},
 		},
 		{
@@ -5924,8 +5925,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "1234", IsBug: true}}, body: "/jira cherrypick OCPBUGS-1234", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: true, cherrypick: true,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "1234", IsBug: true}}, body: "/jira cherrypick OCPBUGS-1234", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: true, cherrypick: true},
 			},
 		},
 		{
@@ -5951,8 +5952,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OTHER", ID: "1234", IsBug: false}}, body: "/jira cherry-pick OTHER-1234", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: true, cherrypick: true,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OTHER", ID: "1234", IsBug: false}}, body: "/jira cherry-pick OTHER-1234", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: true, cherrypick: true},
 			},
 		},
 		{
@@ -5978,8 +5979,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "1234", IsBug: true}, {Project: "OTHER", ID: "1235", IsBug: false}}, body: "/jira cherrypick OCPBUGS-1234,OTHER-1235", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: true, cherrypick: true,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "1234", IsBug: true}, {Project: "OTHER", ID: "1235", IsBug: false}}, body: "/jira cherrypick OCPBUGS-1234,OTHER-1235", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: true, cherrypick: true},
 			},
 		},
 		{
@@ -6005,8 +6006,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "1234", IsBug: true}}, body: "/jira cherrypick OCPBUGS-1234\r\nThis is part of a\r\nmultiline comment", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: false, cherrypick: true,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "1234", IsBug: true}}, body: "/jira cherrypick OCPBUGS-1234\r\nThis is part of a\r\nmultiline comment", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: false, cherrypick: true},
 			},
 		},
 		{
@@ -6032,8 +6033,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/jira backport release-4.16,release-4.15,release-4.14,release-4.13", htmlUrl: "www.com", login: "user", backport: true, backportBranches: []string{"release-4.16", "release-4.15", "release-4.14", "release-4.13"},
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/jira backport release-4.16,release-4.15,release-4.14,release-4.13", htmlUrl: "www.com", login: "user", backport: true, backportBranches: []string{"release-4.16", "release-4.15", "release-4.14", "release-4.13"}},
 			},
 		},
 		{
@@ -6059,8 +6060,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified by @tester", htmlUrl: "www.com", login: "user", verify: []string{"@tester"},
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified by @tester", htmlUrl: "www.com", login: "user", verify: []string{"@tester"}},
 			},
 		},
 		{
@@ -6086,8 +6087,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified by @tester,@tester2", htmlUrl: "www.com", login: "user", verify: []string{"@tester", "@tester2"},
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified by @tester,@tester2", htmlUrl: "www.com", login: "user", verify: []string{"@tester", "@tester2"}},
 			},
 		},
 		{
@@ -6113,8 +6114,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified by a new test", htmlUrl: "www.com", login: "user", verify: []string{"a new test"},
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified by a new test", htmlUrl: "www.com", login: "user", verify: []string{"a new test"}},
 			},
 		},
 		{
@@ -6140,8 +6141,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified by a new test,another new test", htmlUrl: "www.com", login: "user", verify: []string{"a new test", "another new test"},
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified by a new test,another new test", htmlUrl: "www.com", login: "user", verify: []string{"a new test", "another new test"}},
 			},
 		},
 		{
@@ -6167,8 +6168,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified by a new test, another new test ", htmlUrl: "www.com", login: "user", verify: []string{"a new test", "another new test"},
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified by a new test, another new test ", htmlUrl: "www.com", login: "user", verify: []string{"a new test", "another new test"}},
 			},
 		},
 		{
@@ -6194,8 +6195,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified later @tester", htmlUrl: "www.com", login: "user", verifyLater: []string{"@tester"},
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified later @tester", htmlUrl: "www.com", login: "user", verifyLater: []string{"@tester"}},
 			},
 		},
 		{
@@ -6221,8 +6222,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified later @tester , @tester2", htmlUrl: "www.com", login: "user", verifyLater: []string{"@tester", "@tester2"},
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified later @tester , @tester2", htmlUrl: "www.com", login: "user", verifyLater: []string{"@tester", "@tester2"}},
 			},
 		},
 		{
@@ -6248,8 +6249,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified later @tester ", htmlUrl: "www.com", login: "user", verifyLater: []string{"@tester"},
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified later @tester ", htmlUrl: "www.com", login: "user", verifyLater: []string{"@tester"}},
 			},
 		},
 		{
@@ -6275,8 +6276,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: " /verified later @tester", htmlUrl: "www.com", login: "user", verifyLater: []string{"@tester"},
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: " /verified later @tester", htmlUrl: "www.com", login: "user", verifyLater: []string{"@tester"}},
 			},
 		},
 		{
@@ -6302,8 +6303,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified remove", htmlUrl: "www.com", login: "user", verifiedRemove: true,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified remove", htmlUrl: "www.com", login: "user", verifiedRemove: true},
 			},
 		},
 		{
@@ -6329,8 +6330,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified bypass", htmlUrl: "www.com", login: "user", verifiedBypass: true,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified bypass", htmlUrl: "www.com", login: "user", verifiedBypass: true},
 			},
 		},
 		{
@@ -6356,8 +6357,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified", htmlUrl: "www.com", login: "user", textAfterVerified: []string{""},
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified", htmlUrl: "www.com", login: "user", textAfterVerified: []string{""}},
 			},
 		},
 		{
@@ -6383,8 +6384,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified later", htmlUrl: "www.com", login: "user", textAfterVerified: []string{"later"},
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified later", htmlUrl: "www.com", login: "user", textAfterVerified: []string{"later"}},
 			},
 		},
 		{
@@ -6410,8 +6411,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified by", htmlUrl: "www.com", login: "user", textAfterVerified: []string{"by"},
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified by", htmlUrl: "www.com", login: "user", textAfterVerified: []string{"by"}},
 			},
 		},
 	}
@@ -6423,19 +6424,27 @@ Instructions for interacting with me using PR comments are available [here](http
 				1: {Base: github.PullRequestBranch{Ref: "branch"}, Title: testCase.title, Merged: testCase.merged},
 			}
 			fakeClient := fakeGHClient{client}
-			event, err := digestComment(fakeClient, logrus.WithField("testCase", testCase.name), testCase.e)
-			if err == nil && testCase.expectedErr {
+			events, errs := digestComment(fakeClient, logrus.WithField("testCase", testCase.name), testCase.e)
+			hasErr := false
+			for _, err := range errs {
+				if err != nil {
+					hasErr = true
+					break
+				}
+			}
+			if !hasErr && testCase.expectedErr {
 				t.Errorf("%s: expected an error but got none", testCase.name)
 			}
-			if err != nil && !testCase.expectedErr {
-				t.Errorf("%s: expected no error but got one: %v", testCase.name, err)
+			if hasErr && !testCase.expectedErr {
+				t.Errorf("%s: expected no error but got errors: %v", testCase.name, errs)
 			}
 
-			if actual, expected := event, testCase.expected; !reflect.DeepEqual(actual, expected) {
-				t.Errorf("%s: did not get correct event: %v", testCase.name, cmp.Diff(actual, expected, allowEventAndDate))
+			actual, expected := events, testCase.expected
+			if len(actual) > 0 && len(expected) > 0 && !reflect.DeepEqual(actual, expected) {
+				t.Errorf("%s: did not get correct events: %v", testCase.name, cmp.Diff(actual, expected, allowEventAndDate))
 			}
 
-			checkComments(client, testCase.name, testCase.expectedComment, t)
+			checkComments(client, testCase.name, testCase.expectedComments, t)
 		})
 	}
 }
