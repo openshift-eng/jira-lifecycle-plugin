@@ -221,7 +221,7 @@ func main() {
 	}
 
 	eventServer := githubeventserver.New(o.githubEventServerOptions, secret.GetTokenGenerator(o.webhookSecretFile), logger)
-	eventServer.RegisterHandleIssueCommentEvent(serv.handleIssueComment)
+	eventServer.RegisterHandleIssueCommentEvent(serv.handleIssueComments)
 	eventServer.RegisterHandlePullRequestEvent(serv.handlePullRequest)
 	eventServer.RegisterHelpProvider(serv.helpProvider, logger)
 
