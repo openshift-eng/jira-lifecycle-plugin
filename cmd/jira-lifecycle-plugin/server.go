@@ -57,6 +57,7 @@ var (
 	cherrypickPRMatch        = regexp.MustCompile(`This is an automated cherry-pick of #([0-9]+)`)
 	jiraIssueReferenceMatch  = regexp.MustCompile(`([[:alnum:]]+)-([[:digit:]]+)`)
 	bugProjects              = sets.New("OCPBUGS", "DFBUGS")
+	qaReviewProjects         = sets.New("CORS") // Non-bug projects that need QA review
 )
 
 type referencedIssue struct {
@@ -661,6 +662,35 @@ Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jir
 					if changed {
 						response += "\n\nThe bug has been updated to refer to the pull request using the external bug tracker."
 					}
+				}
+			}
+
+			// Handle QA contact for non-bug projects
+			if issue != nil && !refIssue.IsBug && qaReviewProjects.Has(refIssue.Project) {
+				qaContactDetail, err := helpers.GetIssueQaContact(issue)
+				if err != nil {
+					return comment(formatError("processing qa contact information", jc.JiraURL(), refIssue.Key(), err))
+				}
+				if qaContactDetail == nil {
+					if e.cc {
+						response += fmt.Sprintf("\n\n[%s](%s/browse/%s) does not have a QA contact, skipping assignment", refIssue.Key(), jc.JiraURL(), refIssue.Key())
+					}
+				} else if qaContactDetail.EmailAddress == "" {
+					if e.cc {
+						response += fmt.Sprintf("\n\nQA contact for [%s](%s/browse/%s) does not have a listed email, skipping assignment", refIssue.Key(), jc.JiraURL(), refIssue.Key())
+					}
+				} else {
+					query := &emailToLoginQuery{}
+					email := qaContactDetail.EmailAddress
+					queryVars := map[string]any{
+						"email": githubql.String(email),
+					}
+					err := ghc.QueryWithGitHubAppsSupport(context.Background(), query, queryVars, e.org)
+					if err != nil {
+						log.WithError(err).Error("Failed to run graphql github query")
+						return comment(formatError(fmt.Sprintf("querying GitHub for users with public email (%s)", email), jc.JiraURL(), refIssue.Key(), err))
+					}
+					response += fmt.Sprint("\n\n", processQuery(query, email))
 				}
 			}
 		}
