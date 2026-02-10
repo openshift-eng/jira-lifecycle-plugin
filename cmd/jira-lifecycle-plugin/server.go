@@ -616,30 +616,8 @@ func handle(jc jiraclient.Client, ghc githubClient, inserter BigQueryInserter, r
 					}
 					response += "</details>"
 
-					qaContactDetail, err := helpers.GetIssueQaContact(issue)
-					if err != nil {
-						return comment(formatError("processing qa contact information for the bug", jc.JiraURL(), refIssue.Key(), err))
-					}
-					if qaContactDetail == nil {
-						if e.cc {
-							response += fmt.Sprintf(issueLink+" does not have a QA contact, skipping assignment", refIssue.Key(), jc.JiraURL(), refIssue.Key())
-						}
-					} else if qaContactDetail.EmailAddress == "" {
-						if e.cc {
-							response += fmt.Sprintf("QA contact for "+issueLink+" does not have a listed email, skipping assignment", refIssue.Key(), jc.JiraURL(), refIssue.Key())
-						}
-					} else {
-						query := &emailToLoginQuery{}
-						email := qaContactDetail.EmailAddress
-						queryVars := map[string]any{
-							"email": githubql.String(email),
-						}
-						err := ghc.QueryWithGitHubAppsSupport(context.Background(), query, queryVars, e.org)
-						if err != nil {
-							log.WithError(err).Error("Failed to run graphql github query")
-							return comment(formatError(fmt.Sprintf("querying GitHub for users with public email (%s)", email), jc.JiraURL(), refIssue.Key(), err))
-						}
-						response += fmt.Sprint("\n\n", processQuery(query, email))
+					if response, err = notifyQAContact(jc, ghc, log, issue, refIssue, comment, e, response); err != nil {
+						return comment(formatError("unable to notify QA contact", jc.JiraURL(), refIssue.Key(), err))
 					}
 				} else {
 					log.Debug("Invalid bug found.")
@@ -666,30 +644,8 @@ Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jir
 
 			// Handle QA contact for non-bug projects
 			if issue != nil && !refIssue.IsBug && e.cc {
-				qaContactDetail, err := helpers.GetIssueQaContact(issue)
-				if err != nil {
-					return comment(formatError("processing qa contact information", jc.JiraURL(), refIssue.Key(), err))
-				}
-				if qaContactDetail == nil {
-					if e.cc {
-						response += fmt.Sprintf("\n\n[%s](%s/browse/%s) does not have a QA contact, skipping assignment", refIssue.Key(), jc.JiraURL(), refIssue.Key())
-					}
-				} else if qaContactDetail.EmailAddress == "" {
-					if e.cc {
-						response += fmt.Sprintf("\n\nQA contact for [%s](%s/browse/%s) does not have a listed email, skipping assignment", refIssue.Key(), jc.JiraURL(), refIssue.Key())
-					}
-				} else {
-					query := &emailToLoginQuery{}
-					email := qaContactDetail.EmailAddress
-					queryVars := map[string]any{
-						"email": githubql.String(email),
-					}
-					err := ghc.QueryWithGitHubAppsSupport(context.Background(), query, queryVars, e.org)
-					if err != nil {
-						log.WithError(err).Error("Failed to run graphql github query")
-						return comment(formatError(fmt.Sprintf("querying GitHub for users with public email (%s)", email), jc.JiraURL(), refIssue.Key(), err))
-					}
-					response += fmt.Sprint("\n\n", processQuery(query, email))
+				if response, err = notifyQAContact(jc, ghc, log, issue, refIssue, comment, e, response); err != nil {
+					return comment(formatError("unable to notify QA contact", jc.JiraURL(), refIssue.Key(), err))
 				}
 			}
 		}
@@ -2807,4 +2763,33 @@ func getVerifiedLaterMessage(e event, verificationOptions PreMergeVerificationOp
 		return fmt.Sprintf("This PR has been marked to be verified later by `%s`.", strings.Join(e.verifyLater, ","))
 	}
 	return fmt.Sprintf("This PR has been marked to be verified later by `%s`.", strings.Join(e.verifyLater, ","))
+}
+
+func notifyQAContact(jc jiraclient.Client, ghc githubClient, log *logrus.Entry, issue *jira.Issue, refIssue referencedIssue, comment func(string) error, e event, response string) (string, error) {
+	qaContactDetail, err := helpers.GetIssueQaContact(issue)
+	if err != nil {
+		return "", comment(formatError("processing qa contact information", jc.JiraURL(), refIssue.Key(), err))
+	}
+	if qaContactDetail == nil {
+		if e.cc {
+			response += fmt.Sprintf("\n\n"+issueLink+" does not have a QA contact, skipping assignment", refIssue.Key(), jc.JiraURL(), refIssue.Key())
+		}
+	} else if qaContactDetail.EmailAddress == "" {
+		if e.cc {
+			response += fmt.Sprintf("\n\nQA contact for "+issueLink+" does not have a listed email, skipping assignment", refIssue.Key(), jc.JiraURL(), refIssue.Key())
+		}
+	} else {
+		query := &emailToLoginQuery{}
+		email := qaContactDetail.EmailAddress
+		queryVars := map[string]any{
+			"email": githubql.String(email),
+		}
+		err := ghc.QueryWithGitHubAppsSupport(context.Background(), query, queryVars, e.org)
+		if err != nil {
+			log.WithError(err).Error("Failed to run graphql github query")
+			return "", comment(formatError(fmt.Sprintf("querying GitHub for users with public email (%s)", email), jc.JiraURL(), refIssue.Key(), err))
+		}
+		response += fmt.Sprint("\n\n", processQuery(query, email))
+	}
+	return response, nil
 }

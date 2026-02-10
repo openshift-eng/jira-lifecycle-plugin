@@ -36,19 +36,16 @@ type fakeGHClient struct {
 }
 
 func (f fakeGHClient) QueryWithGitHubAppsSupport(ctx context.Context, q any, vars map[string]any, org string) error {
-	value, ok := q.(*emailToLoginQuery)
-	if ok {
-		if value.Search.Edges == nil || len(value.Search.Edges) == 0 {
-			if email, ok := vars["email"]; ok {
-				value.Search.Edges = []queryEdge{
-					{
-						Node: queryNode{
-							User: queryUser{
-								Login: email.(githubql.String),
-							},
+	if value, ok := q.(*emailToLoginQuery); ok && value.Search.Edges == nil {
+		if email, ok := vars["email"]; ok {
+			value.Search.Edges = []queryEdge{
+				{
+					Node: queryNode{
+						User: queryUser{
+							Login: email.(githubql.String),
 						},
 					},
-				}
+				},
 			}
 		}
 	}
@@ -4515,6 +4512,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				body:   "/jira refresh", title: "this is a PR",
 				htmlUrl: "https://github.com/org/repo/pull/1", login: "user",
 			},
+			refresh:        true,
 			labels:         []string{},
 			expectedLabels: []string{labels.JiraValidRef},
 			expectedComment: `org/repo#1:@user: This pull request references ABC-123 which is a valid jira issue.
@@ -4545,7 +4543,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			expectedLabels: []string{labels.JiraValidRef},
 			expectedComment: `org/repo#1:@user: This pull request references ABC-123 which is a valid jira issue.
 
-[ABC-123](https://my-jira.com/browse/ABC-123) does not have a QA contact, skipping assignment
+[Jira Issue ABC-123](https://my-jira.com/browse/ABC-123) does not have a QA contact, skipping assignment
 
 <details>
 
@@ -4594,13 +4592,15 @@ Instructions for interacting with me using PR comments are available [here](http
 			overrideEvent: &event{
 				org: "org", repo: "repo", baseRef: "branch", cc: true,
 				number: 1,
-				issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: false}},
+				issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}},
 				body:   "/jira cc-qa", title: "this is a PR",
 				htmlUrl: "https://github.com/org/repo/pull/1", login: "user",
 			},
 			labels:         []string{},
-			expectedLabels: []string{labels.JiraValidRef},
-			expectedComment: `org/repo#1:@user: This pull request references OCPBUGS-123 which is a valid jira issue.
+			expectedLabels: []string{labels.SeverityCritical, labels.JiraValidBug, labels.JiraValidRef},
+			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
+
+<details><summary>No validations were run on this bug</summary></details>
 
 Requesting review from QA contact:
 /cc @qa_user1@acme.com
@@ -4610,6 +4610,37 @@ Requesting review from QA contact:
 In response to [this](https://github.com/org/repo/pull/1):
 
 >/jira cc-qa
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+		},
+		{
+			name:    "Jira refresh from bug project with qa contact and associated GitHub User",
+			issues:  []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical, helpers.QAContactField: &qaUser1}}}},
+			body:    "/jira refresh",
+			options: JiraBranchOptions{}, // no requirements --> always valid
+			overrideEvent: &event{
+				org: "org", repo: "repo", baseRef: "branch",
+				number: 1,
+				issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}},
+				body:   "/jira refresh", title: "this is a PR",
+				htmlUrl: "https://github.com/org/repo/pull/1", login: "user",
+			},
+			labels:         []string{},
+			expectedLabels: []string{labels.SeverityCritical, labels.JiraValidBug, labels.JiraValidRef},
+			expectedComment: `org/repo#1:@user: This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.
+
+<details><summary>No validations were run on this bug</summary></details>
+
+Requesting review from QA contact:
+/cc @qa_user1@acme.com
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>/jira refresh
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
