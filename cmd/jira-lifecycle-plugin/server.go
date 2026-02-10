@@ -57,7 +57,6 @@ var (
 	cherrypickPRMatch        = regexp.MustCompile(`This is an automated cherry-pick of #([0-9]+)`)
 	jiraIssueReferenceMatch  = regexp.MustCompile(`([[:alnum:]]+)-([[:digit:]]+)`)
 	bugProjects              = sets.New("OCPBUGS", "DFBUGS")
-	qaReviewProjects         = sets.New("CORS") // Non-bug projects that need QA review
 )
 
 type referencedIssue struct {
@@ -666,7 +665,7 @@ Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jir
 			}
 
 			// Handle QA contact for non-bug projects
-			if issue != nil && !refIssue.IsBug && qaReviewProjects.Has(refIssue.Project) {
+			if issue != nil && !refIssue.IsBug && e.cc {
 				qaContactDetail, err := helpers.GetIssueQaContact(issue)
 				if err != nil {
 					return comment(formatError("processing qa contact information", jc.JiraURL(), refIssue.Key(), err))

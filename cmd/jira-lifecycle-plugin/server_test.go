@@ -12,6 +12,7 @@ import (
 	"github.com/openshift-eng/jira-lifecycle-plugin/pkg/helpers"
 	"github.com/openshift-eng/jira-lifecycle-plugin/pkg/labels"
 	"github.com/openshift-eng/jira-lifecycle-plugin/pkg/status"
+	githubql "github.com/shurcooL/githubv4"
 	"github.com/sirupsen/logrus"
 	"github.com/trivago/tgo/tcontainer"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -35,6 +36,23 @@ type fakeGHClient struct {
 }
 
 func (f fakeGHClient) QueryWithGitHubAppsSupport(ctx context.Context, q any, vars map[string]any, org string) error {
+	value, ok := q.(*emailToLoginQuery)
+	if ok {
+		if value.Search.Edges == nil || len(value.Search.Edges) == 0 {
+			if email, ok := vars["email"]; ok {
+				value.Search.Edges = []queryEdge{
+					{
+						Node: queryNode{
+							User: queryUser{
+								Login: email.(githubql.String),
+							},
+						},
+					},
+				}
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -323,6 +341,10 @@ func TestHandle(t *testing.T) {
 		},
 		OutwardIssue: &jira.Issue{ID: "2", Key: "OCPBUGS-124"},
 		InwardIssue:  &jira.Issue{ID: "1", Key: "OCPBUGS-123"},
+	}
+	qaUser1 := &jira.User{
+		Name:         "qa_user1",
+		EmailAddress: "qa_user1@acme.com",
 	}
 
 	base := &event{
@@ -4476,6 +4498,118 @@ Instructions for interacting with me using PR comments are available [here](http
 In response to [this](https://github.com/org/repo/pull/1):
 
 >/verified by
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+		},
+		{
+			name:    "Jira refresh from non-bug project",
+			issues:  []jira.Issue{{ID: "1", Key: "ABC-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "ABC"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
+			body:    "/jira refresh",
+			options: JiraBranchOptions{}, // no requirements --> always valid
+			overrideEvent: &event{
+				org: "org", repo: "repo", baseRef: "branch",
+				number: 1,
+				issues: []referencedIssue{{Project: "ABC", ID: "123", IsBug: false}},
+				body:   "/jira refresh", title: "this is a PR",
+				htmlUrl: "https://github.com/org/repo/pull/1", login: "user",
+			},
+			labels:         []string{},
+			expectedLabels: []string{labels.JiraValidRef},
+			expectedComment: `org/repo#1:@user: This pull request references ABC-123 which is a valid jira issue.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>/jira refresh
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+		},
+		{
+			name:    "Jira cc-qa from non-bug project and no qa contact",
+			issues:  []jira.Issue{{ID: "1", Key: "ABC-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "ABC"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical}}}},
+			body:    "/jira cc-qa",
+			options: JiraBranchOptions{}, // no requirements --> always valid
+			overrideEvent: &event{
+				org: "org", repo: "repo", baseRef: "branch", cc: true,
+				number: 1,
+				issues: []referencedIssue{{Project: "ABC", ID: "123", IsBug: false}},
+				body:   "/jira cc-qa", title: "this is a PR",
+				htmlUrl: "https://github.com/org/repo/pull/1", login: "user",
+			},
+			labels:         []string{},
+			expectedLabels: []string{labels.JiraValidRef},
+			expectedComment: `org/repo#1:@user: This pull request references ABC-123 which is a valid jira issue.
+
+[ABC-123](https://my-jira.com/browse/ABC-123) does not have a QA contact, skipping assignment
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>/jira cc-qa
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+		},
+		{
+			name:    "Jira cc-qa from non-bug project with qa contact and associated GitHub User",
+			issues:  []jira.Issue{{ID: "1", Key: "ABC-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "ABC"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical, helpers.QAContactField: &qaUser1}}}},
+			body:    "/jira cc-qa",
+			options: JiraBranchOptions{}, // no requirements --> always valid
+			overrideEvent: &event{
+				org: "org", repo: "repo", baseRef: "branch", cc: true,
+				number: 1,
+				issues: []referencedIssue{{Project: "ABC", ID: "123", IsBug: false}},
+				body:   "/jira cc-qa", title: "this is a PR",
+				htmlUrl: "https://github.com/org/repo/pull/1", login: "user",
+			},
+			labels:         []string{},
+			expectedLabels: []string{labels.JiraValidRef},
+			expectedComment: `org/repo#1:@user: This pull request references ABC-123 which is a valid jira issue.
+
+Requesting review from QA contact:
+/cc @qa_user1@acme.com
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>/jira cc-qa
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+		},
+		{
+			name:    "Jira cc-qa from bug project with qa contact and associated GitHub User",
+			issues:  []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityCritical, helpers.QAContactField: &qaUser1}}}},
+			body:    "/jira cc-qa",
+			options: JiraBranchOptions{}, // no requirements --> always valid
+			overrideEvent: &event{
+				org: "org", repo: "repo", baseRef: "branch", cc: true,
+				number: 1,
+				issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: false}},
+				body:   "/jira cc-qa", title: "this is a PR",
+				htmlUrl: "https://github.com/org/repo/pull/1", login: "user",
+			},
+			labels:         []string{},
+			expectedLabels: []string{labels.JiraValidRef},
+			expectedComment: `org/repo#1:@user: This pull request references OCPBUGS-123 which is a valid jira issue.
+
+Requesting review from QA contact:
+/cc @qa_user1@acme.com
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>/jira cc-qa
 
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
