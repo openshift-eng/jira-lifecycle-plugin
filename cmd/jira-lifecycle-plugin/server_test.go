@@ -4686,8 +4686,6 @@ Instructions for interacting with me using PR comments are available [here](http
 				testEvent.login = tc.login
 			}
 			if tc.replaceReferencedBugs != nil {
-				newEvent := testEvent
-				newEvent.issues = []referencedIssue{}
 				testEvent.issues = tc.replaceReferencedBugs
 			}
 			if tc.noJira {
@@ -4716,7 +4714,6 @@ Instructions for interacting with me using PR comments are available [here](http
 				gc.IssueLabelsExisting = append(gc.IssueLabelsExisting, fmt.Sprintf("%s/%s#%d:%s", testEvent.org, testEvent.repo, testEvent.number, label))
 			}
 			for _, pr := range tc.prs {
-				pr := pr
 				gc.PullRequests[pr.Number] = &pr
 			}
 			gc.Collaborators = []string{"user"}
@@ -4746,7 +4743,11 @@ Instructions for interacting with me using PR comments are available [here](http
 				t.Errorf("comment updates differ from expected: %s", diff)
 			}
 
-			checkComments(gc, tc.name, tc.expectedComment, t)
+			var expectedComments []string
+			if tc.expectedComment != "" {
+				expectedComments = []string{tc.expectedComment}
+			}
+			checkComments(gc, tc.name, expectedComments, t)
 
 			expected := sets.NewString()
 			for _, label := range tc.expectedLabels {
@@ -4792,18 +4793,17 @@ Instructions for interacting with me using PR comments are available [here](http
 	}
 }
 
-func checkComments(client *fakegithub.FakeClient, name, expectedComment string, t *testing.T) {
-	wantedComments := 0
-	if expectedComment != "" {
-		wantedComments = 1
-	}
-	if len(client.IssueCommentsAdded) != wantedComments {
-		t.Errorf("%s: wanted %d comment, got %d: %v", name, wantedComments, len(client.IssueCommentsAdded), client.IssueCommentsAdded)
+func checkComments(client *fakegithub.FakeClient, name string, expectedComments []string, t *testing.T) {
+	if len(client.IssueCommentsAdded) != len(expectedComments) {
+		t.Errorf("%s: wanted %d comment, got %d: %v", name, len(expectedComments), len(client.IssueCommentsAdded), client.IssueCommentsAdded)
+		return
 	}
 
-	if expectedComment != "" && len(client.IssueCommentsAdded) == 1 {
-		if expectedComment != client.IssueCommentsAdded[0] {
-			t.Errorf("%s: got incorrect comment: %v", name, cmp.Diff(expectedComment, client.IssueCommentsAdded[0]))
+	for i := range expectedComments {
+		expectedComment := expectedComments[i]
+		actualComment := client.IssueCommentsAdded[i]
+		if expectedComment != actualComment {
+			t.Errorf("%s: got incorrect comment: %v", name, cmp.Diff(expectedComment, actualComment))
 		}
 	}
 }
@@ -5737,13 +5737,13 @@ func TestDigestPR(t *testing.T) {
 
 func TestDigestComment(t *testing.T) {
 	var testCases = []struct {
-		name            string
-		e               github.IssueCommentEvent
-		title           string
-		merged          bool
-		expected        *event
-		expectedComment string
-		expectedErr     bool
+		name             string
+		e                github.IssueCommentEvent
+		title            string
+		merged           bool
+		expected         []*event
+		expectedComments []string
+		expectedErr      bool
 	}{
 		{
 			name: "unrelated event gets ignored",
@@ -5788,8 +5788,8 @@ func TestDigestComment(t *testing.T) {
 				},
 			},
 			title: "cole, please review this typo fix",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, missing: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, missing: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false},
 			},
 		},
 		{
@@ -5810,7 +5810,7 @@ func TestDigestComment(t *testing.T) {
 				},
 			},
 			title: "someone misspelled words in this repo",
-			expectedComment: `org/repo#1:@: Jira bug referencing is only supported for Pull Requests, not issues.
+			expectedComments: []string{`org/repo#1:@: Jira bug referencing is only supported for Pull Requests, not issues.
 
 <details>
 
@@ -5821,6 +5821,7 @@ In response to [this]():
 
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
+			},
 		},
 		{
 			name: "title referencing bug gets an event",
@@ -5845,8 +5846,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false},
 			},
 		},
 		{
@@ -5872,8 +5873,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "DFBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "DFBUGS", ID: "123", IsBug: true}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "DFBUGS", ID: "123", IsBug: true}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false},
 			},
 		},
 		{
@@ -5899,8 +5900,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123,OCPBUGS-124: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "OCPBUGS", ID: "124", IsBug: true}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "OCPBUGS", ID: "124", IsBug: true}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false},
 			},
 		},
 		{
@@ -5926,8 +5927,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123,JIRA-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "JIRA", ID: "123", IsBug: false}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "JIRA", ID: "123", IsBug: false}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false},
 			},
 		},
 		{
@@ -5953,8 +5954,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "SOMEJIRA-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "SOMEJIRA", ID: "123", IsBug: false}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "SOMEJIRA", ID: "123", IsBug: false}}, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false},
 			},
 		},
 		{
@@ -5980,8 +5981,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "NO-JIRA: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: nil, noJira: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: nil, noJira: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false},
 			},
 		},
 		{
@@ -6007,8 +6008,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "NO-ISSUE: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: nil, noJira: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: nil, noJira: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false},
 			},
 		},
 		{
@@ -6035,8 +6036,8 @@ Instructions for interacting with me using PR comments are available [here](http
 			},
 			title:  "OCPBUGS-123: oopsie doopsie",
 			merged: true,
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, merged: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, merged: true, body: "/jira refresh", htmlUrl: "www.com", login: "user", refresh: true, cc: false},
 			},
 		},
 		{
@@ -6062,8 +6063,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/jira cc-qa", htmlUrl: "www.com", login: "user", cc: true,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/jira cc-qa", htmlUrl: "www.com", login: "user", cc: true},
 			},
 		},
 		{
@@ -6089,8 +6090,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "1234", IsBug: true}}, body: "/jira cherrypick OCPBUGS-1234", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: true, cherrypick: true,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "1234", IsBug: true}}, body: "/jira cherrypick OCPBUGS-1234", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: true, cherrypick: true},
 			},
 		},
 		{
@@ -6116,8 +6117,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OTHER", ID: "1234", IsBug: false}}, body: "/jira cherry-pick OTHER-1234", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: true, cherrypick: true,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OTHER", ID: "1234", IsBug: false}}, body: "/jira cherry-pick OTHER-1234", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: true, cherrypick: true},
 			},
 		},
 		{
@@ -6143,8 +6144,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "1234", IsBug: true}, {Project: "OTHER", ID: "1235", IsBug: false}}, body: "/jira cherrypick OCPBUGS-1234,OTHER-1235", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: true, cherrypick: true,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "1234", IsBug: true}, {Project: "OTHER", ID: "1235", IsBug: false}}, body: "/jira cherrypick OCPBUGS-1234,OTHER-1235", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: true, cherrypick: true},
 			},
 		},
 		{
@@ -6170,8 +6171,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "1234", IsBug: true}}, body: "/jira cherrypick OCPBUGS-1234\r\nThis is part of a\r\nmultiline comment", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: false, cherrypick: true,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "1234", IsBug: true}}, body: "/jira cherrypick OCPBUGS-1234\r\nThis is part of a\r\nmultiline comment", htmlUrl: "www.com", login: "user", cherrypickCmd: true, missing: false, cherrypick: true},
 			},
 		},
 		{
@@ -6197,8 +6198,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/jira backport release-4.16,release-4.15,release-4.14,release-4.13", htmlUrl: "www.com", login: "user", backport: true, backportBranches: []string{"release-4.16", "release-4.15", "release-4.14", "release-4.13"},
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/jira backport release-4.16,release-4.15,release-4.14,release-4.13", htmlUrl: "www.com", login: "user", backport: true, backportBranches: []string{"release-4.16", "release-4.15", "release-4.14", "release-4.13"}},
 			},
 		},
 		{
@@ -6224,8 +6225,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified by @tester", htmlUrl: "www.com", login: "user", verify: []string{"@tester"},
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified by @tester", htmlUrl: "www.com", login: "user", verify: []string{"@tester"}},
 			},
 		},
 		{
@@ -6251,8 +6252,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified by @tester,@tester2", htmlUrl: "www.com", login: "user", verify: []string{"@tester", "@tester2"},
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified by @tester,@tester2", htmlUrl: "www.com", login: "user", verify: []string{"@tester", "@tester2"}},
 			},
 		},
 		{
@@ -6278,8 +6279,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified by a new test", htmlUrl: "www.com", login: "user", verify: []string{"a new test"},
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified by a new test", htmlUrl: "www.com", login: "user", verify: []string{"a new test"}},
 			},
 		},
 		{
@@ -6305,8 +6306,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified by a new test,another new test", htmlUrl: "www.com", login: "user", verify: []string{"a new test", "another new test"},
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified by a new test,another new test", htmlUrl: "www.com", login: "user", verify: []string{"a new test", "another new test"}},
 			},
 		},
 		{
@@ -6332,8 +6333,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified by a new test, another new test ", htmlUrl: "www.com", login: "user", verify: []string{"a new test", "another new test"},
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified by a new test, another new test ", htmlUrl: "www.com", login: "user", verify: []string{"a new test", "another new test"}},
 			},
 		},
 		{
@@ -6359,8 +6360,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified later @tester", htmlUrl: "www.com", login: "user", verifyLater: []string{"@tester"},
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified later @tester", htmlUrl: "www.com", login: "user", verifyLater: []string{"@tester"}},
 			},
 		},
 		{
@@ -6386,8 +6387,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified later @tester , @tester2", htmlUrl: "www.com", login: "user", verifyLater: []string{"@tester", "@tester2"},
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified later @tester , @tester2", htmlUrl: "www.com", login: "user", verifyLater: []string{"@tester", "@tester2"}},
 			},
 		},
 		{
@@ -6413,8 +6414,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified later @tester ", htmlUrl: "www.com", login: "user", verifyLater: []string{"@tester"},
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified later @tester ", htmlUrl: "www.com", login: "user", verifyLater: []string{"@tester"}},
 			},
 		},
 		{
@@ -6440,8 +6441,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: " /verified later @tester", htmlUrl: "www.com", login: "user", verifyLater: []string{"@tester"},
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: " /verified later @tester", htmlUrl: "www.com", login: "user", verifyLater: []string{"@tester"}},
 			},
 		},
 		{
@@ -6467,8 +6468,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified remove", htmlUrl: "www.com", login: "user", verifiedRemove: true,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified remove", htmlUrl: "www.com", login: "user", verifiedRemove: true},
 			},
 		},
 		{
@@ -6494,8 +6495,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified bypass", htmlUrl: "www.com", login: "user", verifiedBypass: true,
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified bypass", htmlUrl: "www.com", login: "user", verifiedBypass: true},
 			},
 		},
 		{
@@ -6521,8 +6522,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified", htmlUrl: "www.com", login: "user", textAfterVerified: []string{""},
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified", htmlUrl: "www.com", login: "user", textAfterVerified: []string{""}},
 			},
 		},
 		{
@@ -6548,8 +6549,8 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified later", htmlUrl: "www.com", login: "user", textAfterVerified: []string{"later"},
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified later", htmlUrl: "www.com", login: "user", textAfterVerified: []string{"later"}},
 			},
 		},
 		{
@@ -6575,8 +6576,36 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			title: "OCPBUGS-123: oopsie doopsie",
-			expected: &event{
-				org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified by", htmlUrl: "www.com", login: "user", textAfterVerified: []string{"by"},
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified by", htmlUrl: "www.com", login: "user", textAfterVerified: []string{"by"}},
+			},
+		},
+		{
+			name: "multiple commands on separate lines produces multiple events",
+			e: github.IssueCommentEvent{
+				Action: github.IssueCommentActionCreated,
+				Issue: github.Issue{
+					Number:      1,
+					PullRequest: &struct{}{},
+				},
+				Comment: github.IssueComment{
+					Body: "/jira refresh\n/jira cc-qa",
+					User: github.User{
+						Login: "user",
+					},
+					HTMLURL: "www.com",
+				},
+				Repo: github.Repo{
+					Owner: github.User{
+						Login: "org",
+					},
+					Name: "repo",
+				},
+			},
+			title: "OCPBUGS-123: oopsie doopsie",
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/jira refresh\n/jira cc-qa", htmlUrl: "www.com", login: "user", refresh: true, cc: false},
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/jira refresh\n/jira cc-qa", htmlUrl: "www.com", login: "user", cc: true},
 			},
 		},
 	}
@@ -6588,19 +6617,27 @@ Instructions for interacting with me using PR comments are available [here](http
 				1: {Base: github.PullRequestBranch{Ref: "branch"}, Title: testCase.title, Merged: testCase.merged},
 			}
 			fakeClient := fakeGHClient{client}
-			event, err := digestComment(fakeClient, logrus.WithField("testCase", testCase.name), testCase.e)
-			if err == nil && testCase.expectedErr {
+			events, errs := digestComment(fakeClient, logrus.WithField("testCase", testCase.name), testCase.e)
+			hasErr := false
+			for _, err := range errs {
+				if err != nil {
+					hasErr = true
+					break
+				}
+			}
+			if !hasErr && testCase.expectedErr {
 				t.Errorf("%s: expected an error but got none", testCase.name)
 			}
-			if err != nil && !testCase.expectedErr {
-				t.Errorf("%s: expected no error but got one: %v", testCase.name, err)
+			if hasErr && !testCase.expectedErr {
+				t.Errorf("%s: expected no error but got errors: %v", testCase.name, errs)
 			}
 
-			if actual, expected := event, testCase.expected; !reflect.DeepEqual(actual, expected) {
-				t.Errorf("%s: did not get correct event: %v", testCase.name, cmp.Diff(actual, expected, allowEventAndDate))
+			actual, expected := events, testCase.expected
+			if len(actual) != len(expected) || (len(actual) > 0 && !reflect.DeepEqual(actual, expected)) {
+				t.Errorf("%s: did not get correct events: %v", testCase.name, cmp.Diff(actual, expected, allowEventAndDate))
 			}
 
-			checkComments(client, testCase.name, testCase.expectedComment, t)
+			checkComments(client, testCase.name, testCase.expectedComments, t)
 		})
 	}
 }

@@ -346,17 +346,18 @@ type githubClient interface {
 	BotUserChecker() (func(candidate string) bool, error)
 }
 
-func (s *server) handleIssueComment(l *logrus.Entry, e github.IssueCommentEvent) {
+func (s *server) handleIssueComments(l *logrus.Entry, e github.IssueCommentEvent) {
 	// logging to investigate nonresponsive comments bug
 	if e.Repo.Owner.Login == "openshift" && e.Repo.Name == "origin" && e.Issue.Number == 30096 {
 		l.Infof("Comment event for verfified test: %+v", e)
 	}
 	cfg := s.config()
-	event, err := digestComment(s.ghc, l, e)
-	if err != nil {
+
+	events, errs := digestComment(s.ghc, l, e)
+	for _, err := range errs {
 		l.Errorf("failed to digest comment: %v", err)
 	}
-	if event != nil {
+	for _, event := range events {
 		branchOptions := cfg.OptionsForBranch(event.org, event.repo, event.baseRef)
 		repoOptions := cfg.OptionsForRepo(event.org, event.repo)
 		verificationOptions := cfg.OptionsForPreMergeVerification()
@@ -1166,42 +1167,60 @@ func digestPR(log *logrus.Entry, pre github.PullRequestEvent, validateByDefault 
 	return e, nil
 }
 
-// digestComment determines if any action is necessary and creates the objects for handle() if it is
-func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEvent) (*event, error) {
+// digestComment determines if any actions are necessary and creates the objects for handle() if there are
+func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEvent) ([]*event, []error) {
+	events := []*event{}
+	errs := []error{}
+
 	// Only consider new comments.
 	if ice.Action != github.IssueCommentActionCreated {
-		return nil, nil
+		return events, errs
 	}
+
+	for _, line := range strings.Split(ice.Comment.Body, "\n") {
+		event, err := digestLine(gc, log, ice, line)
+		if event != nil {
+			events = append(events, event)
+		}
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return events, errs
+}
+
+// digestLine determines if any action is necessary and creates the objects for handle() if it is
+func digestLine(gc githubClient, log *logrus.Entry, ice github.IssueCommentEvent, line string) (*event, error) {
 	// Make sure they are requesting a valid command
 	var refresh, cc, cherrypick, backport, verifiedRemove, verifiedBypass bool
 	var verified, verifyLater, textAfterVerified []string
 	switch {
-	case refreshCommandMatch.MatchString(ice.Comment.Body):
+	case refreshCommandMatch.MatchString(line):
 		refresh = true
-	case qaReviewCommandMatch.MatchString(ice.Comment.Body):
+	case qaReviewCommandMatch.MatchString(line):
 		cc = true
-	case cherrypickCommandMatch.MatchString(ice.Comment.Body):
+	case cherrypickCommandMatch.MatchString(line):
 		cherrypick = true
-	case backportCommandMatch.MatchString(ice.Comment.Body):
+	case backportCommandMatch.MatchString(line):
 		backport = true
-	case verifyCommandMatch.MatchString(ice.Comment.Body):
+	case verifyCommandMatch.MatchString(line):
 		var err error
-		verified, err = verifyCommandMatches(ice.Comment.Body)
+		verified, err = verifyCommandMatches(line)
 		if err != nil {
 			return nil, err
 		}
-	case verifyLaterCommandMatch.MatchString(ice.Comment.Body):
+	case verifyLaterCommandMatch.MatchString(line):
 		var err error
-		verifyLater, err = verifyLaterCommandMatches(ice.Comment.Body)
+		verifyLater, err = verifyLaterCommandMatches(line)
 		if err != nil {
 			return nil, err
 		}
-	case verifyRemoveCommandMatch.MatchString(ice.Comment.Body):
+	case verifyRemoveCommandMatch.MatchString(line):
 		verifiedRemove = true
-	case verifyBypassCommandMatch.MatchString(ice.Comment.Body):
+	case verifyBypassCommandMatch.MatchString(line):
 		verifiedBypass = true
-	case verifyHelpCommandMatch.MatchString(ice.Comment.Body):
-		textAfterVerified = verifyHelpCommandMatch.FindStringSubmatch(ice.Comment.Body)[1:]
+	case verifyHelpCommandMatch.MatchString(line):
+		textAfterVerified = verifyHelpCommandMatch.FindStringSubmatch(line)[1:]
 	default:
 		return nil, nil
 	}
@@ -1214,7 +1233,7 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 	// We don't support linking issues to bugProjects
 	if !ice.Issue.IsPullRequest() {
 		log.Debug("Jira bug command requested on an issue, ignoring")
-		return nil, gc.CreateComment(org, repo, number, formatResponseRaw(ice.Comment.Body, ice.Comment.HTMLURL, ice.Comment.User.Login, `Jira bug referencing is only supported for Pull Requests, not issues.`, fmt.Sprintf("%s/%s", ice.Repo.Owner.Login, ice.Repo.Name)))
+		return nil, gc.CreateComment(org, repo, number, formatResponseRaw(line, ice.Comment.HTMLURL, ice.Comment.User.Login, `Jira bug referencing is only supported for Pull Requests, not issues.`, fmt.Sprintf("%s/%s", ice.Repo.Owner.Login, ice.Repo.Name)))
 	}
 
 	// Make sure the PR title is referencing a bug
@@ -1247,7 +1266,7 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 
 	if cherrypick {
 		var matchError error
-		e.issues, matchError = cherryPickCommandMatches(ice.Comment.Body)
+		e.issues, matchError = cherryPickCommandMatches(line)
 		if matchError != nil {
 			return nil, matchError
 		}
@@ -1257,7 +1276,7 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 
 	if backport {
 		var matchError error
-		e.backportBranches, matchError = backportCommandMatches(ice.Comment.Body)
+		e.backportBranches, matchError = backportCommandMatches(line)
 		if matchError != nil {
 			return nil, matchError
 		}
@@ -1284,26 +1303,26 @@ func splitAndTrimList(line string) []string {
 	return trimmedItems
 }
 
-func backportCommandMatches(body string) ([]string, error) {
-	commandMatches := backportCommandMatch.FindAllStringSubmatch(body, -1)
+func backportCommandMatches(line string) ([]string, error) {
+	commandMatches := backportCommandMatch.FindAllStringSubmatch(line, -1)
 	if len(commandMatches) == 0 || len(commandMatches[0]) < 2 {
-		return nil, fmt.Errorf("body %q did not match backport regex, programmer error", body)
+		return nil, fmt.Errorf("body %q did not match backport regex, programmer error", line)
 	}
 	return splitAndTrimList(commandMatches[0][1]), nil
 }
 
-func verifyCommandMatches(body string) ([]string, error) {
-	commandMatches := verifyCommandMatch.FindAllStringSubmatch(body, -1)
+func verifyCommandMatches(line string) ([]string, error) {
+	commandMatches := verifyCommandMatch.FindAllStringSubmatch(line, -1)
 	if len(commandMatches) == 0 || len(commandMatches[0]) < 2 {
-		return nil, fmt.Errorf("body %q did not match verify regex, programmer error", body)
+		return nil, fmt.Errorf("body %q did not match verify regex, programmer error", line)
 	}
 	return splitAndTrimList(commandMatches[0][1]), nil
 }
 
-func verifyLaterCommandMatches(body string) ([]string, error) {
-	commandMatches := verifyLaterCommandMatch.FindAllStringSubmatch(body, -1)
+func verifyLaterCommandMatches(line string) ([]string, error) {
+	commandMatches := verifyLaterCommandMatch.FindAllStringSubmatch(line, -1)
 	if len(commandMatches) == 0 || len(commandMatches[0]) < 2 {
-		return nil, fmt.Errorf("body %q did not match verify-later regex, programmer error", body)
+		return nil, fmt.Errorf("body %q did not match verify-later regex, programmer error", line)
 	}
 	return splitAndTrimList(commandMatches[0][1]), nil
 }
