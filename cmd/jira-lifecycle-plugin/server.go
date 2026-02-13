@@ -958,7 +958,7 @@ func insertLinksIntoComment(body string, issueNames []string, jiraBaseURL string
 
 func insertLinksIntoLine(line string, issueNames []string, jiraBaseURL string) string {
 	for _, issue := range issueNames {
-		replacement := fmt.Sprintf("[%s](%s/browse/%s)", issue, jiraBaseURL, issue)
+		replacement := fmt.Sprintf("[%s](%s/browse/%s)", issue, strings.TrimSuffix(jiraBaseURL, "/"), issue)
 		line = replaceStringIfNeeded(line, issue, replacement)
 	}
 	return line
@@ -2338,7 +2338,7 @@ func handleBackport(e event, gc githubClient, jc jiraclient.Client, repoOptions 
 		var newLabels []string
 		for key, branch := range createdIssues {
 			newLabels = append(newLabels, fmt.Sprintf("jlp-%s:%s", branch, key))
-			createdIssuesMessageLines = append(createdIssuesMessageLines, insertLinksIntoLine(fmt.Sprintf("- %s for branch %s", key, branch), []string{key}, strings.TrimSuffix(jc.JiraURL(), "/")))
+			createdIssuesMessageLines = append(createdIssuesMessageLines, insertLinksIntoLine(fmt.Sprintf("- %s for branch %s", key, branch), []string{key}, jc.JiraURL()))
 		}
 		// sorting the labels isn't necessary for production but helps with tests
 		sort.Strings(newLabels)
@@ -2411,16 +2411,17 @@ func jiraKeyFromTitle(title string) ([]referencedIssue, bool, bool, bool) {
 }
 
 func getJira(jc jiraclient.Client, jiraKey string, log *logrus.Entry, comment func(string) error) (*jira.Issue, error) {
+	jiraEndpoint := strings.TrimSuffix(jc.JiraURL(), "/")
 	issue, err := jc.GetIssue(jiraKey)
 	if err != nil && !jiraclient.IsNotFound(err) {
 		log.WithError(err).Warn("Unexpected error searching for Jira issue.")
-		return nil, comment(formatError("searching", jc.JiraURL(), jiraKey, err))
+		return nil, comment(formatError("searching", jiraEndpoint, jiraKey, err))
 	}
 	if jiraclient.IsNotFound(err) || issue == nil {
 		log.Debug("No jira issue found.")
 		return nil, comment(fmt.Sprintf(`No Jira issue with key %s exists in the tracker at %s.
 Once a valid jira issue is referenced in the title of this pull request, request a refresh with <code>/jira refresh</code>.`,
-			jiraKey, strings.TrimSuffix(jc.JiraURL(), "/")))
+			jiraKey, jiraEndpoint))
 	}
 	return issue, nil
 }
@@ -2821,6 +2822,7 @@ func getVerifiedLaterMessage(e event, verificationOptions PreMergeVerificationOp
 }
 
 func notifyQAContact(jc jiraclient.Client, ghc githubClient, log *logrus.Entry, issue *jira.Issue, refIssue referencedIssue, comment func(string) error, e event, response string) (string, error) {
+
 	qaContactDetail, err := helpers.GetIssueQaContact(issue)
 	if err != nil {
 		return "", comment(formatError("processing qa contact information", jc.JiraURL(), refIssue.Key(), err))
@@ -2847,4 +2849,56 @@ func notifyQAContact(jc jiraclient.Client, ghc githubClient, log *logrus.Entry, 
 		response += fmt.Sprint("\n\n", processQuery(query, email))
 	}
 	return response, nil
+}
+
+// searchIssuesWithPagination performs a paginated search using Jira API v3
+// It properly handles pagination by following nextPageToken until all results are retrieved
+func searchIssuesWithPagination(jc jiraclient.Client, jql string, pageSize int) ([]jira.Issue, error) {
+	var allIssues []jira.Issue
+	var nextPageToken string
+	pageNum := 1
+
+	for {
+		// Create search options for this page
+		searchOptions := &jira.SearchOptionsV2{
+			MaxResults:    pageSize,
+			NextPageToken: nextPageToken,
+		}
+
+		// Debug: Log pagination details
+		logrus.Debugf("Fetching page %d with pageSize=%d, nextPageToken='%s'", pageNum, pageSize, nextPageToken)
+
+		// Perform the search for this page
+		issues, response, err := jc.SearchV2JqlWithContext(context.Background(), jql, searchOptions)
+		if err != nil {
+			return nil, fmt.Errorf("failed to search issues on page %d: %w", pageNum, err)
+		}
+
+		// Debug: Log results from this page
+		logrus.Debugf("Page %d returned %d issues (total so far: %d)", pageNum, len(issues), len(allIssues)+len(issues))
+
+		// Add issues from this page to our collection
+		allIssues = append(allIssues, issues...)
+
+		// Check if this is the last page using the isLast property from the response
+		if response != nil && response.IsLast {
+			logrus.Debugf("Reached last page - isLast=true, got %d issues on final page", len(issues))
+			break
+		}
+
+		// Get the nextPageToken from the response for the next iteration
+		if response != nil && response.NextPageToken != "" {
+			nextPageToken = response.NextPageToken
+			logrus.Debugf("Found nextPageToken: '%s'", nextPageToken)
+		} else {
+			// No nextPageToken means we've reached the last page
+			logrus.Debugf("No nextPageToken found - reached last page")
+			break
+		}
+
+		pageNum++
+	}
+
+	logrus.Debugf("Pagination complete - retrieved %d total issues across %d pages", len(allIssues), pageNum-1)
+	return allIssues, nil
 }
