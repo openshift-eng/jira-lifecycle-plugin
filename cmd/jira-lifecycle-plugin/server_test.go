@@ -365,6 +365,7 @@ func TestHandle(t *testing.T) {
 		baseRef                    string
 		replaceReferencedBugs      []referencedIssue
 		noJira                     bool
+		upstreamSync               bool
 		remoteLinks                map[string][]jira.RemoteLink
 		prs                        []github.PullRequest
 		prComments                 map[int][]github.IssueComment
@@ -4646,6 +4647,22 @@ In response to [this](https://github.com/org/repo/pull/1):
 Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
 </details>`,
 		},
+		{
+			name:           "UPSTREAM-SYNC in title adds valid-bug and valid-ref labels",
+			upstreamSync:   true,
+			expectedLabels: []string{labels.JiraValidRef, labels.JiraValidBug},
+			expectedComment: `org/repo#1:@user: This pull request is an upstream sync and explicitly references no jira issue.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -4690,6 +4707,10 @@ Instructions for interacting with me using PR comments are available [here](http
 			}
 			if tc.noJira {
 				testEvent.noJira = true
+				testEvent.issues = nil
+			}
+			if tc.upstreamSync {
+				testEvent.upstreamSync = true
 				testEvent.issues = nil
 			}
 			testEvent.cherrypick = tc.cherrypick
@@ -6644,10 +6665,11 @@ Instructions for interacting with me using PR comments are available [here](http
 
 func TestBugKeyFromTitle(t *testing.T) {
 	var testCases = []struct {
-		title            string
-		expectedRefBugs  []referencedIssue
-		expectedNotFound bool
-		expectedNoJira   bool
+		title                string
+		expectedRefBugs      []referencedIssue
+		expectedNotFound     bool
+		expectedNoJira       bool
+		expectedUpstreamSync bool
 	}{
 		{
 			title:            "no match",
@@ -6733,10 +6755,25 @@ func TestBugKeyFromTitle(t *testing.T) {
 			expectedRefBugs: nil,
 			expectedNoJira:  true,
 		},
+		{
+			title:                "UPSTREAM-SYNC: sync upstream changes",
+			expectedRefBugs:      nil,
+			expectedUpstreamSync: true,
+		},
+		{
+			title:                "upstream-sync: sync upstream changes (lowercase)",
+			expectedRefBugs:      nil,
+			expectedUpstreamSync: true,
+		},
+		{
+			title:                "Upstream-Sync: sync upstream changes (mixed case)",
+			expectedRefBugs:      nil,
+			expectedUpstreamSync: true,
+		},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.title, func(t *testing.T) {
-			bugs, notFound, noJira := jiraKeyFromTitle(testCase.title)
+			bugs, notFound, noJira, upstreamSync := jiraKeyFromTitle(testCase.title)
 			if diff := cmp.Diff(bugs, testCase.expectedRefBugs); diff != "" {
 				t.Errorf("%s: incorrect bugs: %v", testCase.title, diff)
 			}
@@ -6745,6 +6782,9 @@ func TestBugKeyFromTitle(t *testing.T) {
 			}
 			if noJira != testCase.expectedNoJira {
 				t.Errorf("%s: unexpected %t != %t", testCase.title, noJira, testCase.expectedNoJira)
+			}
+			if upstreamSync != testCase.expectedUpstreamSync {
+				t.Errorf("%s: unexpected %t != %t", testCase.title, upstreamSync, testCase.expectedUpstreamSync)
 			}
 		})
 	}

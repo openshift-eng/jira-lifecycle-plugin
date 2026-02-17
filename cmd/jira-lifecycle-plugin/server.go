@@ -43,7 +43,7 @@ const (
 
 var (
 	jiraIssueRegexPart       = `[[:alnum:]]+-[[:digit:]]+`
-	titleMatchJiraIssue      = regexp.MustCompile(`(?i)(` + jiraIssueRegexPart + `,?[[:space:]]*)*(NO-JIRA|NO-ISSUE|` + jiraIssueRegexPart + `)+:`)
+	titleMatchJiraIssue      = regexp.MustCompile(`(?i)(` + jiraIssueRegexPart + `,?[[:space:]]*)*(NO-JIRA|NO-ISSUE|UPSTREAM-SYNC|` + jiraIssueRegexPart + `)+:`)
 	verifyCommandMatch       = regexp.MustCompile(`(?mi)^\s*/verified by\s+([^\r\n]+)\s*$`)
 	verifyRemoveCommandMatch = regexp.MustCompile(`(?mi)^\s*/verified remove\s*$`)
 	verifyLaterCommandMatch  = regexp.MustCompile(`(?mi)^\s*/verified later\s+([^\r\n]+)\s*$`)
@@ -451,7 +451,7 @@ func handle(jc jiraclient.Client, ghc githubClient, inserter BigQueryInserter, r
 	var needsJiraValidRefLabel, needsJiraValidBugLabel, needsJiraInvalidBugLabel bool
 	var response, severityLabel string
 	var invalidIssues []string
-	if !e.noJira {
+	if !e.noJira && !e.upstreamSync {
 		for _, refIssue := range e.issues {
 			// separate responses for different bugs
 			if response != "" {
@@ -650,6 +650,10 @@ Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jir
 				}
 			}
 		}
+	} else if e.upstreamSync {
+		needsJiraValidRefLabel = true
+		needsJiraValidBugLabel = true
+		response = "This pull request is an upstream sync and explicitly references no jira issue."
 	} else {
 		needsJiraValidRefLabel = true
 		response = "This pull request explicitly references no jira issue."
@@ -1100,7 +1104,7 @@ func digestPR(log *logrus.Entry, pre github.PullRequestEvent, validateByDefault 
 	e := &event{org: org, repo: repo, baseRef: baseRef, number: number, merged: pre.PullRequest.Merged, closed: pre.Action == github.PullRequestActionClosed, opened: pre.Action == github.PullRequestActionOpened, state: pre.PullRequest.State, body: body, title: title, htmlUrl: pre.PullRequest.HTMLURL, login: pre.PullRequest.User.Login, fileChanged: pre.Action == github.PullRequestActionSynchronize}
 	// Make sure the PR title is referencing a bug
 	var err error
-	e.issues, e.missing, e.noJira = jiraKeyFromTitle(title)
+	e.issues, e.missing, e.noJira, e.upstreamSync = jiraKeyFromTitle(title)
 
 	// Check if PR is a cherrypick
 	cherrypick, cherrypickFromPRNum, err := getCherryPickMatch(pre)
@@ -1141,7 +1145,7 @@ func digestPR(log *logrus.Entry, pre github.PullRequestEvent, validateByDefault 
 		// we're detecting this best-effort so we can handle it anyway
 		return intermediate, nil
 	}
-	prevIds, missing, _ := jiraKeyFromTitle(changes.Title.From)
+	prevIds, missing, _, _ := jiraKeyFromTitle(changes.Title.From)
 	if missing {
 		// title did not previously reference a bug
 		return intermediate, nil
@@ -1262,7 +1266,7 @@ func digestLine(gc githubClient, log *logrus.Entry, ice github.IssueCommentEvent
 		textAfterVerified: textAfterVerified,
 	}
 
-	e.issues, e.missing, e.noJira = jiraKeyFromTitle(pr.Title)
+	e.issues, e.missing, e.noJira, e.upstreamSync = jiraKeyFromTitle(pr.Title)
 
 	if cherrypick {
 		var matchError error
@@ -1344,7 +1348,7 @@ type event struct {
 	org, repo, baseRef                          string
 	number                                      int
 	issues                                      []referencedIssue
-	noJira                                      bool
+	noJira, upstreamSync                        bool
 	missing, merged, closed, opened             bool
 	state                                       string
 	body, title, htmlUrl, login                 string
@@ -2001,7 +2005,7 @@ func handleCherrypick(e event, gc githubClient, jc jiraclient.Client, options Ji
 			return comment(fmt.Sprintf("Error creating a cherry-pick bug in Jira: failed to check the state of cherrypicked pull request at https://github.com/%s/%s/pull/%d: %v.\nPlease contact an administrator to resolve this issue, then request a bug refresh with <code>/jira refresh</code>.", e.org, e.repo, e.cherrypickFromPRNum, err))
 		}
 		// Attempt to identify bug from PR title
-		issues, _, _ = jiraKeyFromTitle(pr.Title)
+		issues, _, _, _ = jiraKeyFromTitle(pr.Title)
 		if len(issues) == 0 {
 			log.Debugf("Parent PR %d doesn't have associated bug; not creating cherrypicked bug", pr.Number)
 			// if there is no jira bug, we should simply ignore this PR
@@ -2363,16 +2367,20 @@ func createLinkedJiras(jc jiraclient.Client, parentIssue *jira.Issue, parentBran
 // 1: issues as an array of referencedIssue, if exists
 // 2: missing: true/false based on whether the title is missing a jira ref
 // 3: noJira: true/false based on whether the title contains jira excluding term (i.e. "NO-JIRA" or "NO-ISSUE")
-func jiraKeyFromTitle(title string) ([]referencedIssue, bool, bool) {
+// 4: upstreamSync: true/false based on whether the title contains "UPSTREAM-SYNC"
+func jiraKeyFromTitle(title string) ([]referencedIssue, bool, bool, bool) {
 	titleMatches := titleMatchJiraIssue.FindStringSubmatch(title)
 	if len(titleMatches) == 0 || len(titleMatches) < 3 {
-		return nil, true, false
+		return nil, true, false, false
 	}
 	if strings.EqualFold(titleMatches[2], "NO-ISSUE") || strings.EqualFold(titleMatches[2], "NO-JIRA") {
-		return nil, false, true
+		return nil, false, true, false
+	}
+	if strings.EqualFold(titleMatches[2], "UPSTREAM-SYNC") {
+		return nil, false, false, true
 	}
 
-	return referencedIssues(titleMatches[0]), false, false
+	return referencedIssues(titleMatches[0]), false, false, false
 }
 
 func getJira(jc jiraclient.Client, jiraKey string, log *logrus.Entry, comment func(string) error) (*jira.Issue, error) {
