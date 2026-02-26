@@ -1115,7 +1115,7 @@ func digestPR(log *logrus.Entry, pre github.PullRequestEvent, validateByDefault 
 		return nil, nil
 	}
 
-	if (pre.Action == github.PullRequestActionLabeled || pre.Action == github.PullRequestActionUnlabeled) && pre.Label.Name != labels.QEApproved {
+	if (pre.Action == github.PullRequestActionLabeled || pre.Action == github.PullRequestActionUnlabeled) && pre.Label.Name != labels.QEApproved && pre.Label.Name != labels.JiraSkipDependentBugCheck {
 		return nil, nil
 	}
 
