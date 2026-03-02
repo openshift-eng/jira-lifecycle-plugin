@@ -85,10 +85,10 @@ const (
 	ProwIgnoreFileName = ".prowignore"
 )
 
-var (
-	DefaultDiffOpts []cmp.Option = []cmp.Option{cmpopts.IgnoreFields(TideBranchMergeType{}, "Regexpr"),
-		cmpopts.IgnoreUnexported(Gerrit{})}
-)
+var DefaultDiffOpts []cmp.Option = []cmp.Option{
+	cmpopts.IgnoreFields(TideBranchMergeType{}, "Regexpr"),
+	cmpopts.IgnoreUnexported(Gerrit{}),
+}
 
 // Config is a read-only snapshot of the config.
 type Config struct {
@@ -143,6 +143,7 @@ type ProwConfig struct {
 	ConfigVersionSHA     string               `json:"config_version_sha,omitempty"`
 	Tide                 Tide                 `json:"tide,omitempty"`
 	Plank                Plank                `json:"plank,omitempty"`
+	Pipeline             Pipeline             `json:"pipeline,omitempty"`
 	Sinker               Sinker               `json:"sinker,omitempty"`
 	Deck                 Deck                 `json:"deck,omitempty"`
 	BranchProtection     BranchProtection     `json:"branch-protection"`
@@ -413,8 +414,8 @@ func (rg *RefGetterForGitHubPullRequest) BaseSHA() (string, error) {
 // retrieval of a *ProwYAML.
 func GetAndCheckRefs(
 	baseSHAGetter RefGetter,
-	headSHAGetters ...RefGetter) (string, []string, error) {
-
+	headSHAGetters ...RefGetter,
+) (string, []string, error) {
 	// Parse "baseSHAGetter".
 	baseSHA, err := baseSHAGetter()
 	if err != nil {
@@ -642,6 +643,17 @@ func (c *Controller) ReportTemplateForRepo(refs *prowapi.Refs) *template.Templat
 	return def
 }
 
+// Pipeline is config for the Tekton pipeline controller.
+type Pipeline struct {
+	// AllowConcurrentPostsubmitJobs controls the duplicate job abort behavior for Tekton PipelineRuns.
+	// When disabled (default): all duplicate jobs (presubmit and postsubmit) are aborted when a newer
+	// job with the same identifier is detected.
+	// When enabled: only presubmit jobs are aborted; postsubmit jobs are allowed to run concurrently
+	// even if duplicates exist.
+	// This flag only affects jobs using the Tekton agent (agent: tekton-pipeline).
+	AllowConcurrentPostsubmitJobs bool `json:"allow_concurrent_postsubmit_jobs,omitempty"`
+}
+
 // Plank is config for the plank controller.
 type Plank struct {
 	Controller `json:",inline"`
@@ -654,6 +666,12 @@ type Plank struct {
 	// PodUnscheduledTimeout defines how long the controller will wait to abort a prowjob
 	// stuck in an unscheduled state. Defaults to 5 minutes.
 	PodUnscheduledTimeout *metav1.Duration `json:"pod_unscheduled_timeout,omitempty"`
+
+	// MaxRevivals is the maximum number of times a prowjob will be retried in case of an
+	// unexpected stop of the job before being marked as failed. Generally a job is stopped
+	// unexpectedly due to the underlying Node being terminated, evicted or becoming unreachable.
+	// Defaults to 3. A value of 0 means no retries.
+	MaxRevivals *int `json:"max_revivals,omitempty"`
 
 	// DefaultDecorationConfigs holds the default decoration config for specific values.
 	//
@@ -2057,6 +2075,7 @@ func setPeriodicProwJobDefaults(c *Config, ps *Periodic) {
 
 	ps.ProwJobDefault = c.mergeProwJobDefault(repo, ps.Cluster, ps.ProwJobDefault)
 }
+
 func setPresubmitDecorationDefaults(c *Config, ps *Presubmit, repo string) {
 	if shouldDecorate(&c.JobConfig, &ps.JobBase.UtilityConfig) {
 		ps.DecorationConfig = c.Plank.mergeDefaultDecorationConfig(repo, ps.Cluster, ps.DecorationConfig)
@@ -2459,7 +2478,6 @@ func (c Config) validatePeriodics(periodics []Periodic) error {
 // ValidateJobConfig validates if all the jobspecs/presets are valid
 // if you are mutating the jobs, please add it to finalizeJobConfig above.
 func (c *Config) ValidateJobConfig() error {
-
 	var errs []error
 
 	// Validate presubmits.
@@ -2503,6 +2521,11 @@ func parseProwConfig(c *Config) error {
 		c.Plank.PodUnscheduledTimeout = &metav1.Duration{Duration: 5 * time.Minute}
 	}
 
+	if c.Plank.MaxRevivals == nil {
+		maxRetries := 3
+		c.Plank.MaxRevivals = &maxRetries
+	}
+
 	if err := c.Gerrit.DefaultAndValidate(); err != nil {
 		return fmt.Errorf("validating gerrit config: %w", err)
 	}
@@ -2533,7 +2556,7 @@ func parseProwConfig(c *Config) error {
 	// We could use sprig.FuncMap() instead in feature.
 	jenkinsFuncMap := template.FuncMap{
 		"replace": func(old, new, src string) string {
-			return strings.Replace(src, old, new, -1)
+			return strings.ReplaceAll(src, old, new)
 		},
 	}
 
@@ -2729,7 +2752,6 @@ func parseProwConfig(c *Config) error {
 	for name, templates := range c.Tide.MergeTemplate {
 		if templates.TitleTemplate != "" {
 			titleTemplate, err := template.New("CommitTitle").Parse(templates.TitleTemplate)
-
 			if err != nil {
 				return fmt.Errorf("parsing template for commit title: %w", err)
 			}
@@ -2739,7 +2761,6 @@ func parseProwConfig(c *Config) error {
 
 		if templates.BodyTemplate != "" {
 			bodyTemplate, err := template.New("CommitBody").Parse(templates.BodyTemplate)
-
 			if err != nil {
 				return fmt.Errorf("parsing template for commit body: %w", err)
 			}
@@ -2930,7 +2951,7 @@ func validateDecoration(container v1.Container, config *prowapi.DecorationConfig
 func resolvePresets(name string, labels map[string]string, spec *v1.PodSpec, presets []Preset) error {
 	for _, preset := range presets {
 		if spec != nil {
-			if err := mergePreset(preset, labels, spec.Containers, &spec.Volumes); err != nil {
+			if err := mergePreset(preset, labels, spec); err != nil {
 				return fmt.Errorf("job %s failed to merge presets for podspec: %w", name, err)
 			}
 		}
@@ -2991,8 +3012,15 @@ func validatePodSpec(jobType prowapi.ProwJobType, spec *v1.PodSpec, decorationCo
 
 	var errs []error
 
-	if len(spec.InitContainers) != 0 {
-		errs = append(errs, errors.New("pod spec may not use init containers"))
+	var unspported []string
+	for i := range spec.InitContainers {
+		c := &spec.InitContainers[i]
+		if c.RestartPolicy == nil || *c.RestartPolicy != v1.ContainerRestartPolicyAlways {
+			unspported = append(unspported, c.Name)
+		}
+	}
+	if len(unspported) > 0 {
+		errs = append(errs, fmt.Errorf("pod spec may not use init containers(sidecar container is supported): %v", unspported))
 	}
 
 	if n := len(spec.Containers); n < 1 {
