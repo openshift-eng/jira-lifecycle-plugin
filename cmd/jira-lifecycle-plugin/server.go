@@ -471,12 +471,12 @@ func handle(jc jiraclient.Client, ghc githubClient, inserter BigQueryInserter, r
 			} else {
 				needsJiraValidRefLabel = true
 				premergeUpdated := false
-				// check labels for premerge verification
+				// check labels for premerge verification and skip-dependent-bug-check
 				if refIssue.IsBug {
-					if labels, err := ghc.GetIssueLabels(e.org, e.repo, e.number); err != nil {
+					if prLabels, err := ghc.GetIssueLabels(e.org, e.repo, e.number); err != nil {
 						log.WithError(err).Warn("Could not list labels on PR")
 					} else {
-						premergeVerified := isPreMergeVerified(issue, labels)
+						premergeVerified := isPreMergeVerified(issue, prLabels)
 						if premergeVerified && branchOptions.PreMergeStateAfterValidation != nil {
 							if branchOptions.PreMergeStateAfterValidation.Status != "" && (issue.Fields.Status == nil || !strings.EqualFold(issue.Fields.Status.Name, branchOptions.PreMergeStateAfterValidation.Status)) {
 								if err := jc.UpdateStatus(issue.Key, branchOptions.PreMergeStateAfterValidation.Status); err != nil {
@@ -498,6 +498,11 @@ func handle(jc jiraclient.Client, ghc githubClient, inserter BigQueryInserter, r
 						}
 						// if this is a premerge verified issue, we don't want to run the usual verification on it; just treat it as a reference instead
 						refIssue.IsBug = !premergeVerified
+						// check if the PR has the skip-dependent-bug-check label; if so, suppress dependent bug checks
+						if hasSkipDependentBugCheckLabel(prLabels) {
+							log.Debug("PR has jira/skip-dependent-bug-check label; skipping dependent bug check.")
+							branchOptions = skipDependentBugOptions(branchOptions)
+						}
 					}
 				}
 				if !refIssue.IsBug {
@@ -841,6 +846,28 @@ func getSimplifiedSeverity(issue *jira.Issue) (string, error) {
 	return splitSeverity[len(splitSeverity)-1], nil
 }
 
+// hasSkipDependentBugCheckLabel returns true if the PR has the
+// jira/skip-dependent-bug-check label applied, indicating that the dependent
+// bug check should be bypassed (e.g. for CVE trackers that intentionally have
+// no upstream fix in a later version).
+func hasSkipDependentBugCheckLabel(prLabels []github.Label) bool {
+	for _, label := range prLabels {
+		if label.Name == labels.JiraSkipDependentBugCheck {
+			return true
+		}
+	}
+	return false
+}
+
+// skipDependentBugOptions returns a copy of the given JiraBranchOptions with
+// DependentBugStates and DependentBugTargetVersions set to nil, effectively
+// disabling the dependent bug check.
+func skipDependentBugOptions(opts JiraBranchOptions) JiraBranchOptions {
+	opts.DependentBugStates = nil
+	opts.DependentBugTargetVersions = nil
+	return opts
+}
+
 func isPreMergeVerified(issue *jira.Issue, prLabels []github.Label) bool {
 	var hasLabel, hasFixVersions, hasAffectsVersions bool
 	for _, label := range prLabels {
@@ -1088,7 +1115,7 @@ func digestPR(log *logrus.Entry, pre github.PullRequestEvent, validateByDefault 
 		return nil, nil
 	}
 
-	if (pre.Action == github.PullRequestActionLabeled || pre.Action == github.PullRequestActionUnlabeled) && pre.Label.Name != labels.QEApproved {
+	if (pre.Action == github.PullRequestActionLabeled || pre.Action == github.PullRequestActionUnlabeled) && pre.Label.Name != labels.QEApproved && pre.Label.Name != labels.JiraSkipDependentBugCheck {
 		return nil, nil
 	}
 
