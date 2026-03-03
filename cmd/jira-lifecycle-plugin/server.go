@@ -33,7 +33,7 @@ import (
 
 const (
 	PluginName            = "jira-lifecycle"
-	issueLink             = `[Jira Issue %s](%s/browse/%s)`
+	issueLink             = `[Jira Issue %s](%sbrowse/%s)`
 	criticalSeverity      = "Critical"
 	importantSeverity     = "Important"
 	moderateSeverity      = "Moderate"
@@ -2311,7 +2311,7 @@ func handleBackport(e event, gc githubClient, jc jiraclient.Client, repoOptions 
 		var newLabels []string
 		for key, branch := range createdIssues {
 			newLabels = append(newLabels, fmt.Sprintf("jlp-%s:%s", branch, key))
-			createdIssuesMessageLines = append(createdIssuesMessageLines, insertLinksIntoLine(fmt.Sprintf("- %s for branch %s", key, branch), []string{key}, jc.JiraURL()))
+			createdIssuesMessageLines = append(createdIssuesMessageLines, insertLinksIntoLine(fmt.Sprintf("- %s for branch %s", key, branch), []string{key}, strings.TrimSuffix(jc.JiraURL(), "/")))
 		}
 		// sorting the labels isn't necessary for production but helps with tests
 		sort.Strings(newLabels)
@@ -2393,12 +2393,13 @@ func getJira(jc jiraclient.Client, jiraKey string, log *logrus.Entry, comment fu
 		log.Debug("No jira issue found.")
 		return nil, comment(fmt.Sprintf(`No Jira issue with key %s exists in the tracker at %s.
 Once a valid jira issue is referenced in the title of this pull request, request a refresh with <code>/jira refresh</code>.`,
-			jiraKey, jc.JiraURL()))
+			jiraKey, strings.TrimSuffix(jc.JiraURL(), "/")))
 	}
 	return issue, nil
 }
 
 func formatError(action, endpoint, bugKey string, err error) string {
+	endpoint = strings.TrimSuffix(endpoint, "/")
 	knownErrors := map[string]string{
 		// TODO: Most of this code is copied from the bugzilla client. If Jira rate limits us the same way, this could come in handy. We will keep this for now in case it is needed
 		//"There was an error reported for a GitHub REST call": "The Bugzilla server failed to load data from GitHub when creating the bug. This is usually caused by rate-limiting, please try again later.",

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/andygrunwald/go-jira"
@@ -4933,7 +4934,7 @@ is very important` + "\n``ABC-123`` and `ABC-123` shouldn't be replaced, as well
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			if diff := cmp.Diff(insertLinksIntoComment(tc.body, []string{issueName}, fakejira.FakeJiraUrl), tc.expected); diff != "" {
+			if diff := cmp.Diff(insertLinksIntoComment(tc.body, []string{issueName}, strings.TrimSuffix(fakejira.FakeJiraUrl, "/")), tc.expected); diff != "" {
 				t.Errorf("actual result differs from expected result: %s", diff)
 			}
 		})
@@ -7227,7 +7228,7 @@ func TestValidateBug(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			valid, validations, why := validateBug(testCase.issue, testCase.dependents, testCase.options, "https://my-jira.com")
+			valid, validations, why := validateBug(testCase.issue, testCase.dependents, testCase.options, fakejira.FakeJiraUrl)
 			if valid != testCase.valid {
 				t.Errorf("%s: didn't validate bug correctly, expected %t got %t", testCase.name, testCase.valid, valid)
 			}

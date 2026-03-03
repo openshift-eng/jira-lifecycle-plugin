@@ -26,6 +26,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/andygrunwald/go-jira"
 	"github.com/hashicorp/go-retryablehttp"
@@ -55,6 +56,7 @@ type Client interface {
 	// SearchWithContext will search for tickets according to the jql
 	// Jira API docs: https://developer.atlassian.com/jiradev/jira-apis/jira-rest-apis/jira-rest-api-tutorials/jira-rest-api-example-query-issues
 	SearchWithContext(ctx context.Context, jql string, options *jira.SearchOptions) ([]jira.Issue, *jira.Response, error)
+	SearchV2JqlWithContext(ctx context.Context, jql string, options *jira.SearchOptionsV2) ([]jira.Issue, *jira.Response, error)
 	UpdateIssue(*jira.Issue) (*jira.Issue, error)
 	CreateIssue(*jira.Issue) (*jira.Issue, error)
 	CreateIssueLink(*jira.IssueLink) error
@@ -101,9 +103,13 @@ type BasicAuthGenerator func() (username, password string)
 type BearerAuthGenerator func() (token string)
 
 type Options struct {
-	BasicAuth  BasicAuthGenerator
-	BearerAuth BearerAuthGenerator
-	LogFields  logrus.Fields
+	BasicAuth    BasicAuthGenerator
+	BearerAuth   BearerAuthGenerator
+	LogFields    logrus.Fields
+	BackOff      retryablehttp.Backoff
+	RetryWaitMin time.Duration
+	RetryWaitMax time.Duration
+	RetryMax     int
 }
 
 type Option func(*Options)
@@ -123,6 +129,30 @@ func WithBearerAuth(token BearerAuthGenerator) Option {
 func WithFields(fields logrus.Fields) Option {
 	return func(o *Options) {
 		o.LogFields = fields
+	}
+}
+
+func WithBackOff(backoff retryablehttp.Backoff) Option {
+	return func(o *Options) {
+		o.BackOff = backoff
+	}
+}
+
+func WithRetryWaitMin(retryWaitMin time.Duration) Option {
+	return func(o *Options) {
+		o.RetryWaitMin = retryWaitMin
+	}
+}
+
+func WithRetryWaitMax(retryWaitMax time.Duration) Option {
+	return func(o *Options) {
+		o.RetryWaitMax = retryWaitMax
+	}
+}
+
+func WithRetryMax(retryMax int) Option {
+	return func(o *Options) {
+		o.RetryMax = retryMax
 	}
 }
 
@@ -149,6 +179,20 @@ func newJiraClient(endpoint string, o Options, retryingClient *retryablehttp.Cli
 			generator: o.BearerAuth,
 			upstream:  retryingClient.HTTPClient.Transport,
 		}
+	}
+
+	if o.BackOff != nil {
+		retryingClient.Backoff = o.BackOff
+	}
+
+	if o.RetryWaitMin == 0 {
+		retryingClient.RetryWaitMin = 1 * time.Second
+	}
+	if o.RetryWaitMax == 0 {
+		retryingClient.RetryWaitMax = 30 * time.Second
+	}
+	if o.RetryMax == 0 {
+		retryingClient.RetryMax = 4
 	}
 
 	return jira.NewClient(retryingClient.StandardClient(), endpoint)
@@ -623,7 +667,7 @@ func (bart *bearerAuthRoundtripper) RoundTrip(req *http.Request) (*http.Response
 	req2.URL = new(url.URL)
 	*req2.URL = *req.URL
 	token := bart.generator()
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	logrus.WithField("curl", toCurl(req2)).Trace("Executing http request")
 	return bart.upstream.RoundTrip(req2)
 }
@@ -777,6 +821,17 @@ func (l *retryableHTTPLogrusWrapper) Warn(msg string, context ...interface{}) {
 
 func (jc *client) SearchWithContext(ctx context.Context, jql string, options *jira.SearchOptions) ([]jira.Issue, *jira.Response, error) {
 	issues, response, err := jc.upstream.Issue.SearchWithContext(ctx, jql, options)
+	if err != nil {
+		if response != nil && response.StatusCode == http.StatusNotFound {
+			return nil, response, NotFoundError{err}
+		}
+		return nil, response, HandleJiraError(response, err)
+	}
+	return issues, response, nil
+}
+
+func (jc *client) SearchV2JqlWithContext(ctx context.Context, jql string, options *jira.SearchOptionsV2) ([]jira.Issue, *jira.Response, error) {
+	issues, response, err := jc.upstream.Issue.SearchV2JQLWithContext(ctx, jql, options)
 	if err != nil {
 		if response != nil && response.StatusCode == http.StatusNotFound {
 			return nil, response, NotFoundError{err}
