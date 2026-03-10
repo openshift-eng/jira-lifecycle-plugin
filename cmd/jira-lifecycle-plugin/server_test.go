@@ -5827,6 +5827,66 @@ func TestDigestPR(t *testing.T) {
 			},
 		},
 		{
+			name: "jira/skip-dependent-bug-check labeling gets event",
+			pre: github.PullRequestEvent{
+				Action: github.PullRequestActionLabeled,
+				PullRequest: github.PullRequest{
+					Base: github.PullRequestBranch{
+						Repo: github.Repo{
+							Owner: github.User{
+								Login: "org",
+							},
+							Name: "repo",
+						},
+						Ref: "branch",
+					},
+					Number:  1,
+					Title:   "OCPBUGS-123: fixed it!",
+					State:   "open",
+					HTMLURL: "http.com",
+					User: github.User{
+						Login: "user",
+					},
+				},
+				Label: github.Label{
+					Name: labels.JiraSkipDependentBugCheck,
+				},
+			},
+			expected: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: false, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, title: "OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
+			},
+		},
+		{
+			name: "jira/skip-dependent-bug-check unlabeling gets event",
+			pre: github.PullRequestEvent{
+				Action: github.PullRequestActionUnlabeled,
+				PullRequest: github.PullRequest{
+					Base: github.PullRequestBranch{
+						Repo: github.Repo{
+							Owner: github.User{
+								Login: "org",
+							},
+							Name: "repo",
+						},
+						Ref: "branch",
+					},
+					Number:  1,
+					Title:   "OCPBUGS-123: fixed it!",
+					State:   "open",
+					HTMLURL: "http.com",
+					User: github.User{
+						Login: "user",
+					},
+				},
+				Label: github.Label{
+					Name: labels.JiraSkipDependentBugCheck,
+				},
+			},
+			expected: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 1, state: "open", opened: false, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, title: "OCPBUGS-123: fixed it!", htmlUrl: "http.com", login: "user",
+			},
+		},
+		{
 			name: "pull request synchronized action adds fileChanged to event",
 			pre: github.PullRequestEvent{
 				Action: github.PullRequestActionSynchronize,
