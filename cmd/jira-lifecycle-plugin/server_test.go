@@ -1144,6 +1144,41 @@ Instructions for interacting with me using PR comments are available [here](http
 </details>`,
 		},
 		{
+			name: "failure to fetch dependent bug is bypassed when jira/skip-dependent-bug-check label is present",
+			issues: []jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+				Project:    jira.Project{Key: "OCPBUGS"},
+				Status:     &jira.Status{Name: "MODIFIED"},
+				IssueLinks: []*jira.IssueLink{&cloneLinkTo123, &blocksLinkTo123},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.TargetVersionField: &v1,
+				},
+			}}},
+			overrideEvent: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 2, issues: []referencedIssue{{Project: "OCPBUGS", ID: "124", IsBug: true}}, body: "This PR fixes OCPBUGS-124", title: "OCPBUGS-124: fixed it!", htmlUrl: "https://github.com/org/repo/pull/2", login: "user",
+			},
+			existingIssueLinks: []*jira.IssueLink{&cloneBetween123to124, &blocksBetween123to124},
+			issueGetErrors:     map[string]error{"OCPBUGS-123": errors.New("injected error getting bug")},
+			options:            JiraBranchOptions{IsOpen: &yes, TargetVersion: &v1Str, DependentBugStates: &verified, DependentBugTargetVersions: &[]string{v2Str}},
+			labels:             []string{labels.JiraInvalidBug, labels.JiraSkipDependentBugCheck},
+			expectedLabels:     []string{labels.JiraValidRef, labels.JiraValidBug, labels.JiraSkipDependentBugCheck},
+			expectedComment: `org/repo#2:@user: This pull request references [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124), which is valid.
+
+<details><summary>2 validation(s) were run on this bug</summary>
+
+* bug is open, matching expected state (open)
+* bug target version (v1) matches configured target version for branch (v1)</details>
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/2):
+
+>This PR fixes OCPBUGS-124
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+		},
+		{
 			name: "valid bug with dependent bugs removes invalid label, adds valid label, comments",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Project:    jira.Project{Key: "OCPBUGS"},
@@ -7870,9 +7905,13 @@ func TestHasSkipDependentBugCheckLabel(t *testing.T) {
 }
 
 func TestSkipDependentBugOptions(t *testing.T) {
+	yes := true
 	verified := []JiraBugState{{Status: "VERIFIED"}}
 	targetVersions := []string{"4.13.z"}
+	validStates := []JiraBugState{{Status: "MODIFIED"}, {Status: "VERIFIED"}}
 	opts := JiraBranchOptions{
+		IsOpen:                     &yes,
+		ValidStates:                &validStates,
 		DependentBugStates:         &verified,
 		DependentBugTargetVersions: &targetVersions,
 	}
@@ -7882,6 +7921,13 @@ func TestSkipDependentBugOptions(t *testing.T) {
 	}
 	if result.DependentBugTargetVersions != nil {
 		t.Errorf("skipDependentBugOptions() should set DependentBugTargetVersions to nil, got %v", result.DependentBugTargetVersions)
+	}
+	// Verify non-dependent fields are preserved
+	if result.IsOpen == nil || *result.IsOpen != yes {
+		t.Errorf("skipDependentBugOptions() must preserve IsOpen, got %v", result.IsOpen)
+	}
+	if result.ValidStates == nil || !reflect.DeepEqual(*result.ValidStates, validStates) {
+		t.Errorf("skipDependentBugOptions() must preserve ValidStates, got %v", result.ValidStates)
 	}
 	// Verify original was not mutated
 	if opts.DependentBugStates == nil {
