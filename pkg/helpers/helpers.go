@@ -33,6 +33,9 @@ func GetUnknownField(field string, issue *jira.Issue, fn func() any) (bool, erro
 	if !ok {
 		return false, nil
 	}
+	if unknownField == nil {
+		return false, nil
+	}
 	bytes, err := json.Marshal(unknownField)
 	if err != nil {
 		return true, fmt.Errorf("failed to process the custom field %s. Error : %v", field, err)
