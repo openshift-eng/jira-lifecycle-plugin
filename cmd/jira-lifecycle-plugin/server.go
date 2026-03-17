@@ -2162,7 +2162,7 @@ func createCherryPickBug(jc jiraclient.Client, bug *jira.Issue, branch string, o
 	// TODO: these fields can cause the clone to fail if not manually removed. It may be better to
 	// perform some recursion when cloning issues, as these only error when everything else is correct...
 	delete(bugCopy.Fields.Unknowns, "environment")
-	delete(bugCopy.Fields.Unknowns, "customfield_12318341")
+	delete(bugCopy.Fields.Unknowns, helpers.RankField)
 	// This is the sprint field; sprints are handled by a custom plugin, and the data given to us via
 	// GetIssue is invalid for setting the field ourselves
 	sprintField := bugCopy.Fields.Unknowns[helpers.SprintField]

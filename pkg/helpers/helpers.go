@@ -19,6 +19,7 @@ const (
 	SprintField          = "customfield_10020"
 	ReleaseNoteTypeField = "customfield_10785"
 	ContributorsField    = "customfield_10479"
+	RankField            = "customfield_10019"
 )
 
 // GetUnknownField will attempt to get the specified field from the Unknowns struct and unmarshal
