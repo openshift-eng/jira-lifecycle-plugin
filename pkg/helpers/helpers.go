@@ -11,15 +11,17 @@ import (
 )
 
 const (
-	QAContactField       = "customfield_10470"
-	SeverityField        = "customfield_10840"
-	TargetVersionField   = "customfield_10855"
-	ReleaseBlockerField  = "customfield_10847"
-	ReleaseNoteTextField = "customfield_10783"
-	SprintField          = "customfield_10020"
-	ReleaseNoteTypeField = "customfield_10785"
-	ContributorsField    = "customfield_10479"
-	RankField            = "customfield_10019"
+	QAContactField           = "customfield_10470"
+	SeverityField            = "customfield_10840"
+	TargetVersionField       = "customfield_10855"
+	ReleaseBlockerField      = "customfield_10847"
+	ReleaseNoteTextField     = "customfield_10783"
+	SprintField              = "customfield_10020"
+	ReleaseNoteTypeField     = "customfield_10785"
+	ContributorsField        = "customfield_10479"
+	RankField                = "customfield_10019" // "customfield_10019": "Rank"
+	DateOfFirstResponseField = "customfield_10024" // "customfield_10024": "[CHART] Date of First Response"
+	TimeInStatusField        = "customfield_10025" // "customfield_10025": "[CHART] Time in Status"
 )
 
 // GetUnknownField will attempt to get the specified field from the Unknowns struct and unmarshal
