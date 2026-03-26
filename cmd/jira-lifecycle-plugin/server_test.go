@@ -74,6 +74,15 @@ func (f *fakeJiraClient) CloneIssue(issue *jira.Issue) (*jira.Issue, error) {
 	return clonedIssue, err
 }
 
+func (f *fakeJiraClient) GetUser(accountID string) (*jira.User, error) {
+	for _, user := range f.Users {
+		if user.AccountID == accountID {
+			return user, nil
+		}
+	}
+	return nil, jiraclient.NewNotFoundError(fmt.Errorf("no user with accountId %s found", accountID))
+}
+
 func TestHandle(t *testing.T) {
 	t.Parallel()
 	yes := true
@@ -374,6 +383,7 @@ func TestHandle(t *testing.T) {
 		issueGetErrors             map[string]error
 		issueCreateErrors          map[string]error
 		issueUpdateErrors          map[string]error
+		jiraUsers                  []*jira.User
 		options                    JiraBranchOptions
 		fullConfig                 Config
 		expectedLabels             []string
@@ -2228,6 +2238,169 @@ Instructions for interacting with me using PR comments are available [here](http
 					Key:  "OCPBUGS",
 				},
 				Labels:     []string{"good_label"},
+				IssueLinks: []*jira.IssueLink{&cloneOutward1, &blockInward1},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      map[string]any{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
+					helpers.TargetVersionField: []any{map[string]any{"name": v1Str}},
+				},
+			}}},
+		},
+		{
+			name: "Cherrypick PR with inactive reporter results in cloned bug with nil reporter",
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Assignee: &jira.User{Name: "testUser"},
+				Reporter: &jira.User{AccountID: "inactive-user-id", Name: "inactiveUser", Active: true},
+				Status:   &jira.Status{Name: "CLOSED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
+				},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      severityCritical,
+					helpers.TargetVersionField: &v2,
+				},
+			}}},
+			jiraUsers:           []*jira.User{{AccountID: "inactive-user-id", Name: "inactiveUser", Active: false}},
+			prs:                 []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}, {Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] " + base.title}},
+			title:               "[v1] " + base.title,
+			cherrypick:          true,
+			cherryPickFromPRNum: 1,
+			options:             JiraBranchOptions{TargetVersion: &v1Str},
+			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). Will retitle bug to link to clone.
+/retitle [v1] OCPBUGS-124: fixed it!
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+			expectedIssues: []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
+				Assignee:    &jira.User{Name: "testUser"},
+				Status:      &jira.Status{Name: "CLOSED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
+				},
+				IssueLinks: []*jira.IssueLink{&cloneOutward1, &blockInward1},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      map[string]any{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
+					helpers.TargetVersionField: []any{map[string]any{"name": v1Str}},
+				},
+			}}},
+		},
+		{
+			name: "Cherrypick PR with active reporter preserves reporter on clone",
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Assignee: &jira.User{Name: "testUser"},
+				Reporter: &jira.User{AccountID: "active-user-id", Name: "activeUser", Active: true},
+				Status:   &jira.Status{Name: "CLOSED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
+				},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      severityCritical,
+					helpers.TargetVersionField: &v2,
+				},
+			}}},
+			jiraUsers:           []*jira.User{{AccountID: "active-user-id", Name: "activeUser", Active: true}},
+			prs:                 []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}, {Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] " + base.title}},
+			title:               "[v1] " + base.title,
+			cherrypick:          true,
+			cherryPickFromPRNum: 1,
+			options:             JiraBranchOptions{TargetVersion: &v1Str},
+			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). Will retitle bug to link to clone.
+/retitle [v1] OCPBUGS-124: fixed it!
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+			expectedIssues: []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
+				Reporter:    &jira.User{AccountID: "active-user-id", Name: "activeUser", Active: true},
+				Assignee:    &jira.User{Name: "testUser"},
+				Status:      &jira.Status{Name: "CLOSED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
+				},
+				IssueLinks: []*jira.IssueLink{&cloneOutward1, &blockInward1},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      map[string]any{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
+					helpers.TargetVersionField: []any{map[string]any{"name": v1Str}},
+				},
+			}}},
+		},
+		{
+			name: "Cherrypick PR with not-found reporter results in cloned bug with nil reporter",
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Assignee: &jira.User{Name: "testUser"},
+				Reporter: &jira.User{AccountID: "deleted-user-id", Name: "deletedUser", Active: true},
+				Status:   &jira.Status{Name: "CLOSED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
+				},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      severityCritical,
+					helpers.TargetVersionField: &v2,
+				},
+			}}},
+			jiraUsers:           []*jira.User{}, // no users — GetUser will return not-found
+			prs:                 []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}, {Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] " + base.title}},
+			title:               "[v1] " + base.title,
+			cherrypick:          true,
+			cherryPickFromPRNum: 1,
+			options:             JiraBranchOptions{TargetVersion: &v1Str},
+			expectedComment: `org/repo#1:@user: [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has been cloned as [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124). Will retitle bug to link to clone.
+/retitle [v1] OCPBUGS-124: fixed it!
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+			expectedIssues: []*jira.Issue{{ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
+				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
+				Assignee:    &jira.User{Name: "testUser"},
+				Status:      &jira.Status{Name: "CLOSED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
+				},
 				IssueLinks: []*jira.IssueLink{&cloneOutward1, &blockInward1},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      map[string]any{"Value": `<img alt="" src="/images/icons/priorities/critical.svg" width="16" height="16"> Critical`},
@@ -4830,6 +5003,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				CreateIssueError: tc.issueCreateErrors,
 				UpdateIssueError: tc.issueUpdateErrors,
 				Transitions:      jiraTransitions,
+				Users:            tc.jiraUsers,
 			}
 			jiraClient := fakeJiraClient{jc}
 			var testEvent event // copy so parallel tests don't collide

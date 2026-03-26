@@ -214,7 +214,7 @@ func main() {
 			return o.config
 		},
 		ghc:             githubClient.WithFields(logger.Data).ForPlugin(PluginName),
-		jc:              jiraClient.WithFields(logger.Data).ForPlugin(PluginName),
+		jc:              &jcWithGetUserStruct{jiraClient.WithFields(logger.Data).ForPlugin(PluginName)},
 		prowConfigAgent: configAgent,
 
 		bigqueryInserter: bigqueryInserter,
