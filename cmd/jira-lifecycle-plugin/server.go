@@ -57,7 +57,7 @@ var (
 	existingBackportMatch    = regexp.MustCompile(`jlp-[^:]+:[^:]+`)
 	cherrypickPRMatch        = regexp.MustCompile(`This is an automated cherry-pick of #([0-9]+)`)
 	jiraIssueReferenceMatch  = regexp.MustCompile(`([[:alnum:]]+)-([[:digit:]]+)`)
-	bugProjects              = sets.New("OCPBUGS", "DFBUGS")
+	bugProjects              = sets.New("OCPBUGS", "DFBUGS", "PROJQUAY")
 )
 
 type referencedIssue struct {
