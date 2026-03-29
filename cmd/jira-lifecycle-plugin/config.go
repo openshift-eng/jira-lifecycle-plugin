@@ -20,6 +20,10 @@ type Config struct {
 	Orgs map[string]JiraOrgOptions `json:"orgs,omitempty"`
 	// PreMergeVerification options for Pre-Merge Verification.
 	PreMergeVerification PreMergeVerificationOptions `json:"premerge_verification,omitempty"`
+	// BugProjects is a list of Jira project keys that should be treated as bug projects,
+	// enabling full lifecycle management (validation, state transitions, severity labels,
+	// cherry-picks, backports). If not set, defaults to OCPBUGS and DFBUGS.
+	BugProjects []string `json:"bug_projects,omitempty"`
 }
 
 // JiraOrgOptions holds options for checking Jira bugs for an org.
@@ -443,6 +447,15 @@ type PreMergeVerificationOptions struct {
 
 func (b *Config) OptionsForPreMergeVerification() PreMergeVerificationOptions {
 	return b.PreMergeVerification
+}
+
+// GetBugProjects returns the set of Jira project keys that should be treated as
+// bug projects. If not configured, defaults to OCPBUGS and DFBUGS.
+func (c *Config) GetBugProjects() sets.Set[string] {
+	if len(c.BugProjects) > 0 {
+		return sets.New(c.BugProjects...)
+	}
+	return bugProjects
 }
 
 // Excluded checks whether the specified repository is excluded from pre-merge validation

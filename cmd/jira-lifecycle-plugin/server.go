@@ -379,7 +379,11 @@ func (s *server) handleIssueComments(l *logrus.Entry, e github.IssueCommentEvent
 	for _, err := range errs {
 		l.Errorf("failed to digest comment: %v", err)
 	}
+	configuredBugProjects := cfg.GetBugProjects()
 	for _, event := range events {
+		for i := range event.issues {
+			event.issues[i].IsBug = configuredBugProjects.Has(event.issues[i].Project)
+		}
 		branchOptions := cfg.OptionsForBranch(event.org, event.repo, event.baseRef)
 		repoOptions := cfg.OptionsForRepo(event.org, event.repo)
 		verificationOptions := cfg.OptionsForPreMergeVerification()
@@ -1104,6 +1108,10 @@ func (s *server) handlePullRequest(l *logrus.Entry, pre github.PullRequestEvent)
 		l.Errorf("failed to digest PR: %v", err)
 	}
 	if event != nil {
+		configuredBugProjects := cfg.GetBugProjects()
+		for i := range event.issues {
+			event.issues[i].IsBug = configuredBugProjects.Has(event.issues[i].Project)
+		}
 		repoOptions := cfg.OptionsForRepo(event.org, event.repo)
 		if err := handle(s.jc, s.ghc, s.bigqueryInserter, repoOptions, branchOptions, verificationOptions, l, *event, s.prowConfigAgent.Config().AllRepos); err != nil {
 			l.Errorf("failed to handle PR: %v", err)
@@ -1517,7 +1525,7 @@ func getSeverityLabel(severity string) string {
 	case informationalSeverity:
 		return labels.SeverityInformational
 	}
-	//If we don't understand the severity, don't set it but don't error.
+	// If we don't understand the severity, don't set it but don't error.
 	return ""
 }
 
@@ -2856,7 +2864,6 @@ func getVerifiedLaterMessage(e event, verificationOptions PreMergeVerificationOp
 }
 
 func notifyQAContact(jc jiraclient.Client, ghc githubClient, log *logrus.Entry, issue *jira.Issue, refIssue referencedIssue, comment func(string) error, e event, response string) (string, error) {
-
 	qaContactDetail, err := helpers.GetIssueQaContact(issue)
 	if err != nil {
 		return "", comment(formatError("processing qa contact information", jc.JiraURL(), refIssue.Key(), err))
