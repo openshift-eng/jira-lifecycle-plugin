@@ -2187,6 +2187,8 @@ func createCherryPickBug(jc jcWithGetUser, bug *jira.Issue, branch string, optio
 	delete(bugCopy.Fields.Unknowns, helpers.RankField)
 	delete(bugCopy.Fields.Unknowns, helpers.DateOfFirstResponseField)
 	delete(bugCopy.Fields.Unknowns, helpers.TimeInStatusField)
+	// Attachments cannot be set via the Create Issue API; they must be uploaded separately
+	bugCopy.Fields.Attachments = nil
 	// This is the sprint field; sprints are handled by a custom plugin, and the data given to us via
 	// GetIssue is invalid for setting the field ourselves
 	sprintField := bugCopy.Fields.Unknowns[helpers.SprintField]
