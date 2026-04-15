@@ -51,29 +51,30 @@ func validateStatuses(c *Config) []error {
 
 func checkBranchStatuses(name string, options JiraBranchOptions) []error {
 	errors := []error{}
-	if options.StateAfterClose != nil && !validStatusSet.Has(options.StateAfterClose.Status) {
-		errors = append(errors, fmt.Errorf("%s has invalid status for `state_after_close`: `%s`", name, options.StateAfterClose.Status))
+	validStateConfig := func(jiraState *JiraBugState, configStr string) {
+		if jiraState != nil && !validStatusSet.Has(jiraState.Status) {
+			errors = append(errors, fmt.Errorf("%s has invalid status for `%s`: `%s`", name, configStr, jiraState.Status))
+		}
 	}
-	if options.StateAfterMerge != nil && !validStatusSet.Has(options.StateAfterMerge.Status) {
-		errors = append(errors, fmt.Errorf("%s has invalid status for `state_after_merge`: `%s`", name, options.StateAfterMerge.Status))
-	}
-	if options.StateAfterValidation != nil && !validStatusSet.Has(options.StateAfterValidation.Status) {
-		errors = append(errors, fmt.Errorf("%s has invalid status for `state_after_validation`: `%s`", name, options.StateAfterValidation.Status))
-	}
-	if options.ValidStates != nil {
-		for _, state := range *options.ValidStates {
-			if !validStatusSet.Has(state.Status) {
-				errors = append(errors, fmt.Errorf("%s has invalid status in `valid_states`: `%s`", name, state.Status))
+	validStateConfig(options.StateAfterClose, "state_after_close")
+	validStateConfig(options.StateAfterMerge, "state_after_merge")
+	validStateConfig(options.StateAfterValidation, "state_after_validation")
+	validStateConfig(options.TaskStateAfterValidation, "task_state_after_validation")
+	validStateConfig(options.TaskStateAfterMerge, "task_state_after_merge")
+	validStateConfig(options.TaskStateAfterClose, "task_state_after_close")
+
+	validateStates := func(states *[]JiraBugState, configStr string) {
+		if states != nil {
+			for _, state := range *states {
+				if !validStatusSet.Has(state.Status) {
+					errors = append(errors, fmt.Errorf("%s has invalid status in `%s`: `%s`", name, configStr, state.Status))
+				}
 			}
 		}
 	}
-	if options.DependentBugStates != nil {
-		for _, state := range *options.DependentBugStates {
-			if !validStatusSet.Has(state.Status) {
-				errors = append(errors, fmt.Errorf("%s has invalid status in `dependent_bug_states`: `%s`", name, state.Status))
-			}
-		}
-	}
+	validateStates(options.ValidStates, "valid_states")
+	validateStates(options.DependentBugStates, "dependent_bug_states")
+
 	return errors
 }
 
@@ -86,4 +87,7 @@ var validStatusSet = sets.NewString(status.Assigned,
 	status.ReleasePending,
 	status.Verified,
 	status.Refinement,
-	status.InProgress)
+	status.InProgress,
+	status.ToDo,
+	status.CodeReview,
+	status.Review)

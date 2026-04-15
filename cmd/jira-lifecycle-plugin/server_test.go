@@ -2010,7 +2010,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
 					Body: "This is a bug",
 				}, {
-					Body:       "Bug status changed to NEW as previous linked PR https://github.com/org/repo/pull/1 has been closed",
+					Body:       "Bug status changed to NEW2 as previous linked PR https://github.com/org/repo/pull/1 has been closed",
 					Visibility: PrivateVisibility,
 				}}},
 				Unknowns: tcontainer.MarshalMap{
