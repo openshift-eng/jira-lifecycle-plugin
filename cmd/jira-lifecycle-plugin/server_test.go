@@ -8112,3 +8112,207 @@ func TestSkipDependentBugOptions(t *testing.T) {
 		t.Errorf("skipDependentBugOptions() must not mutate the original DependentBugTargetVersions")
 	}
 }
+
+func TestAppendUniqueState(t *testing.T) {
+	post := JiraBugState{Status: "POST"}
+	modified := JiraBugState{Status: "MODIFIED"}
+	closedErrata := JiraBugState{Status: "CLOSED", Resolution: "ERRATA"}
+
+	testCases := []struct {
+		name     string
+		allowed  []JiraBugState
+		state    *JiraBugState
+		expected []JiraBugState
+	}{
+		{
+			name:     "nil state is a no-op",
+			allowed:  []JiraBugState{post},
+			state:    nil,
+			expected: []JiraBugState{post},
+		},
+		{
+			name:     "nil state on empty slice",
+			allowed:  nil,
+			state:    nil,
+			expected: nil,
+		},
+		{
+			name:     "appends to empty slice",
+			allowed:  nil,
+			state:    &post,
+			expected: []JiraBugState{post},
+		},
+		{
+			name:     "appends new state",
+			allowed:  []JiraBugState{post},
+			state:    &modified,
+			expected: []JiraBugState{post, modified},
+		},
+		{
+			name:     "skips duplicate",
+			allowed:  []JiraBugState{post, modified},
+			state:    &post,
+			expected: []JiraBugState{post, modified},
+		},
+		{
+			name:     "matches case-insensitively",
+			allowed:  []JiraBugState{{Status: "post"}},
+			state:    &post,
+			expected: []JiraBugState{{Status: "post"}},
+		},
+		{
+			name:     "status and resolution both compared",
+			allowed:  []JiraBugState{{Status: "CLOSED", Resolution: "WONTFIX"}},
+			state:    &closedErrata,
+			expected: []JiraBugState{{Status: "CLOSED", Resolution: "WONTFIX"}, closedErrata},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			actual := appendUniqueState(tc.allowed, tc.state)
+			if !reflect.DeepEqual(actual, tc.expected) {
+				t.Errorf("expected %v, got %v", tc.expected, actual)
+			}
+		})
+	}
+}
+
+func TestTransitionIssue(t *testing.T) {
+	makeIssue := func(status, resolution string) *jira.Issue {
+		issue := &jira.Issue{
+			ID:     "1",
+			Key:    "TEST-123",
+			Fields: &jira.IssueFields{},
+		}
+		if status != "" {
+			issue.Fields.Status = &jira.Status{Name: status}
+		}
+		if resolution != "" {
+			issue.Fields.Resolution = &jira.Resolution{Name: resolution}
+		}
+		return issue
+	}
+
+	testCases := []struct {
+		name               string
+		issue              *jira.Issue
+		targetState        *JiraBugState
+		expectedChanged    bool
+		expectedErr        bool
+		expectedStatus     string
+		expectedResolution string
+	}{
+		{
+			name:            "nil target state is a no-op",
+			issue:           makeIssue("NEW", ""),
+			targetState:     nil,
+			expectedChanged: false,
+		},
+		{
+			name:            "already in target status",
+			issue:           makeIssue("POST", ""),
+			targetState:     &JiraBugState{Status: "POST"},
+			expectedChanged: false,
+			expectedStatus:  "POST",
+		},
+		{
+			name:            "already in target status case-insensitive",
+			issue:           makeIssue("post", ""),
+			targetState:     &JiraBugState{Status: "POST"},
+			expectedChanged: false,
+			expectedStatus:  "post",
+		},
+		{
+			name:            "transitions status",
+			issue:           makeIssue("NEW", ""),
+			targetState:     &JiraBugState{Status: "POST"},
+			expectedChanged: true,
+			expectedStatus:  "POST",
+		},
+		{
+			name:               "sets resolution",
+			issue:              makeIssue("CLOSED", ""),
+			targetState:        &JiraBugState{Resolution: "ERRATA"},
+			expectedChanged:    true,
+			expectedResolution: "ERRATA",
+		},
+		{
+			name:               "already in target resolution",
+			issue:              makeIssue("CLOSED", "ERRATA"),
+			targetState:        &JiraBugState{Resolution: "ERRATA"},
+			expectedChanged:    false,
+			expectedStatus:     "CLOSED",
+			expectedResolution: "ERRATA",
+		},
+		{
+			name:               "already in target resolution case-insensitive",
+			issue:              makeIssue("CLOSED", "errata"),
+			targetState:        &JiraBugState{Resolution: "ERRATA"},
+			expectedChanged:    false,
+			expectedStatus:     "CLOSED",
+			expectedResolution: "errata",
+		},
+		{
+			name:               "transitions status and resolution together",
+			issue:              makeIssue("NEW", ""),
+			targetState:        &JiraBugState{Status: "CLOSED", Resolution: "ERRATA"},
+			expectedChanged:    true,
+			expectedStatus:     "CLOSED",
+			expectedResolution: "ERRATA",
+		},
+		{
+			name:        "missing transition returns error",
+			issue:       makeIssue("NEW", ""),
+			targetState: &JiraBugState{Status: "NONEXISTENT"},
+			expectedErr: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			fc := &fakejira.FakeClient{
+				Issues: []*jira.Issue{tc.issue},
+				Transitions: []jira.Transition{
+					{ID: "1", Name: "POST", To: jira.Status{Name: "POST"}},
+					{ID: "2", Name: "MODIFIED", To: jira.Status{Name: "MODIFIED"}},
+					{ID: "3", Name: "CLOSED", To: jira.Status{Name: "CLOSED"}},
+				},
+			}
+			changed, err := transitionIssue(fc, tc.issue, tc.targetState)
+			if tc.expectedErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if changed != tc.expectedChanged {
+				t.Errorf("expected changed=%t, got %t", tc.expectedChanged, changed)
+			}
+			retrieved, err := fc.GetIssue(tc.issue.Key)
+			if err != nil {
+				t.Fatalf("failed to get issue: %v", err)
+			}
+			if tc.expectedStatus != "" {
+				actual := ""
+				if retrieved.Fields.Status != nil {
+					actual = retrieved.Fields.Status.Name
+				}
+				if actual != tc.expectedStatus {
+					t.Errorf("expected status %q, got %q", tc.expectedStatus, actual)
+				}
+			}
+			if tc.expectedResolution != "" {
+				actual := ""
+				if retrieved.Fields.Resolution != nil {
+					actual = retrieved.Fields.Resolution.Name
+				}
+				if actual != tc.expectedResolution {
+					t.Errorf("expected resolution %q, got %q", tc.expectedResolution, actual)
+				}
+			}
+		})
+	}
+}

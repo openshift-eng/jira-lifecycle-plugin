@@ -2514,10 +2514,10 @@ func handleClose(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 						response += " All external bug links have been closed."
 						if changeState {
 							response += fmt.Sprintf(" The bug has been moved to the %s state.", PrettyStatus(updatedState.Status, updatedState.Resolution))
-						}
-						jiraComment := &jira.Comment{Body: fmt.Sprintf("Bug status changed to %s as previous linked PR https://github.com/%s/%s/pull/%d has been closed", updatedState.Status, e.org, e.repo, e.number), Visibility: PrivateVisibility}
-						if _, err := jc.AddComment(bug.ID, jiraComment); err != nil {
-							response += "\nWarning: Failed to comment on Jira bug with reason for changed state."
+							jiraComment := &jira.Comment{Body: fmt.Sprintf("Bug status changed to %s as previous linked PR https://github.com/%s/%s/pull/%d has been closed", updatedState.Status, e.org, e.repo, e.number), Visibility: PrivateVisibility}
+							if _, err := jc.AddComment(bug.ID, jiraComment); err != nil {
+								response += "\nWarning: Failed to comment on Jira bug with reason for changed state."
+							}
 						}
 					}
 				}
@@ -2912,7 +2912,6 @@ func formatTransitionError(err error, endpoint, bugKey string) string {
 	}
 	return formatError(err.Error(), endpoint, bugKey, err)
 }
-
 
 func transitionIssue(jc jiraclient.Client, issue *jira.Issue, targetState *JiraBugState) (bool, error) {
 	if targetState == nil {
