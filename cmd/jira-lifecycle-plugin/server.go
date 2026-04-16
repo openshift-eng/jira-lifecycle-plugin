@@ -2098,7 +2098,9 @@ func handleCherrypick(e event, gc githubClient, jc jcWithGetUser, options JiraBr
 			}
 		}
 		cloneKey, response, err := createCherryPickBug(jc, bug, e.baseRef, options, log)
-		retitleList[refIssue.Key()] = cloneKey
+		if cloneKey != "" {
+			retitleList[refIssue.Key()] = cloneKey
+		}
 		msg += response
 		if err != nil {
 			msg += err.Error()
@@ -2146,6 +2148,9 @@ func createCherryPickBug(jc jcWithGetUser, bug *jira.Issue, branch string, optio
 		return "", "", nil
 	}
 	oldLink := fmt.Sprintf(issueLink, bug.Key, jc.JiraURL(), bug.Key)
+	if slices.Contains(bug.Fields.Labels, "jlp-no-clone") {
+		return "", fmt.Sprintf("The bug %s has the `jlp-no-clone` label, skipping clone creation.", oldLink), nil
+	}
 	for _, label := range bug.Fields.Labels {
 		match := existingBackportMatch.FindString(label)
 		if len(match) > 0 {
@@ -2402,9 +2407,13 @@ func createLinkedJiras(jc jcWithGetUser, parentIssue *jira.Issue, parentBranch s
 	children := []*jira.Issue{}
 	log.Infof("Starting childBranch loop")
 	for _, childBranch := range childBranches[parentBranch] {
-		cloneKey, _, err := createCherryPickBug(jc, parentIssue, childBranch, repoOptions[childBranch], log)
+		cloneKey, msg, err := createCherryPickBug(jc, parentIssue, childBranch, repoOptions[childBranch], log)
 		if err != nil {
 			return nil, err
+		}
+		if cloneKey == "" {
+			log.Info(msg)
+			continue
 		}
 		log.Infof("Cloned %s as %s", parentIssue.Key, cloneKey)
 		createdIssues[cloneKey] = childBranch

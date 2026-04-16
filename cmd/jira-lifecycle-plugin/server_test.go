@@ -2672,6 +2672,78 @@ Instructions for interacting with me using PR comments are available [here](http
 			}}},
 		},
 		{
+			name: "Cherrypick PR with jlp-no-clone label skips clone creation",
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Assignee: &jira.User{Name: "testUser"},
+				Status:   &jira.Status{Name: "CLOSED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
+				},
+				Labels: []string{"jlp-no-clone"},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      severityCritical,
+					helpers.TargetVersionField: &v2,
+				},
+			}}},
+			prs:                 []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}, {Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] " + base.title}},
+			title:               "[v1] " + base.title,
+			cherrypick:          true,
+			cherryPickFromPRNum: 1,
+			options:             JiraBranchOptions{TargetVersion: &v1Str},
+			expectedComment: `org/repo#1:@user: The bug [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has the ` + "`jlp-no-clone`" + ` label, skipping clone creation.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+		},
+		{
+			name: "Cherrypick command with jlp-no-clone label skips clone creation",
+			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
+				Assignee: &jira.User{Name: "testUser"},
+				Status:   &jira.Status{Name: "CLOSED"},
+				Comments: &jira.Comments{Comments: []*jira.Comment{{
+					Body: "This is a bug",
+				}}},
+				Project: jira.Project{
+					Name: "OCPBUGS",
+					Key:  "OCPBUGS",
+				},
+				Labels: []string{"jlp-no-clone"},
+				Unknowns: tcontainer.MarshalMap{
+					helpers.SeverityField:      severityCritical,
+					helpers.TargetVersionField: &v2,
+				},
+			}}},
+			prs: []github.PullRequest{{Number: 2, Body: "This is a manually created cherrypick of #1.\n\n/assign user", Title: "[v1] " + base.title}},
+			overrideEvent: &event{
+				org: "org", repo: "repo", baseRef: "branch", number: 2, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/jira cherrypick OCPBUGS-123", title: "fixed it!", htmlUrl: "https://github.com/org/repo/pull/1", login: "user", cherrypick: true, cherrypickCmd: true, missing: true,
+			},
+			cherrypick: true,
+			missing:    true,
+			options:    JiraBranchOptions{TargetVersion: &v1Str},
+			expectedComment: `org/repo#2:@user: The bug [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123) has the ` + "`jlp-no-clone`" + ` label, skipping clone creation.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>/jira cherrypick OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`,
+		},
+		{
 			name: "Cherrypick comment results in cloned bug creation",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Assignee: &jira.User{Name: "testUser"},
