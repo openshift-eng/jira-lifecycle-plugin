@@ -175,10 +175,8 @@ func jiraStatesMatch(first, second []JiraBugState) bool {
 		return false
 	}
 
-	firstSet := NewJiraBugStateSet(first)
 	secondSet := NewJiraBugStateSet(second)
-
-	for state := range firstSet {
+	for _, state := range first {
 		if !secondSet.Has(state) {
 			return false
 		}
