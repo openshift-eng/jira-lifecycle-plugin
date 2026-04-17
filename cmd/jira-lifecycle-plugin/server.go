@@ -2261,8 +2261,21 @@ func createCherryPickBug(jc jcWithGetUser, bug *jira.Issue, branch string, optio
 	if releaseNoteType != nil {
 		update.Fields.Unknowns[helpers.ReleaseNoteTypeField] = releaseNoteType
 	}
-	sprintID, err := helpers.GetActiveSprintID(sprintField)
 	errs := []string{}
+	var sprints []jira.Sprint
+	switch v := sprintField.(type) {
+	case []jira.Sprint:
+		sprints = v
+	case nil:
+		// Nil is the expected state when not defined
+	default:
+		// keep flow resilient; cloning can proceed even if sprint parsing fails
+		errs = append(errs, fmt.Sprintf(`
+
+WARNING: Unexpected sprint field type %T on source issue. Please update sprint manually on clone.
+`, sprintField))
+	}
+	sprintID, err := helpers.GetActiveSprintID(sprints)
 	if err != nil {
 		errs = append(errs, fmt.Sprintf(`
 

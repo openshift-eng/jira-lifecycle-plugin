@@ -2,10 +2,9 @@ package helpers
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
-	"regexp"
-	"strconv"
+	"strings"
+	"time"
 
 	"github.com/andygrunwald/go-jira"
 )
@@ -155,28 +154,10 @@ func GetIssueReleaseNoteType(issue *jira.Issue) (*CustomField, error) {
 	return obj, err
 }
 
-var activeSprintReg = regexp.MustCompile(",state=ACTIVE,")
-var sprintIDReg = regexp.MustCompile("id=([0-9]+)")
-
-func GetActiveSprintID(sprintField any) (int, error) {
-	if sprintField == nil {
-		return -1, nil
-	}
-	sprintFieldSlice, ok := sprintField.([]any)
-	if !ok {
-		return -1, errors.New("failed to convert sprint field to slice of interfaces")
-	}
-	for _, sprint := range sprintFieldSlice {
-		sprintString := sprint.(string)
-		if activeSprintReg.MatchString(sprintString) {
-			if submatch := sprintIDReg.FindStringSubmatch(sprintString); submatch != nil {
-				sprintID, err := strconv.Atoi(submatch[1])
-				if err != nil {
-					// should be impossible based on the regex
-					return -1, fmt.Errorf("failed to parse sprint ID. Err: %w", err)
-				}
-				return sprintID, nil
-			}
+func GetActiveSprintID(sprints []jira.Sprint) (int, error) {
+	for _, sprint := range sprints {
+		if strings.ToUpper(sprint.State) == "ACTIVE" {
+			return sprint.ID, nil
 		}
 	}
 	return -1, nil
@@ -197,4 +178,8 @@ func GetIssueContributors(issue *jira.Issue) (*[]Contributor, error) {
 		return nil, err
 	}
 	return obj, err
+}
+
+func TimePtr(t time.Time) *time.Time {
+	return &t
 }
