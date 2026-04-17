@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/andygrunwald/go-jira"
 	"github.com/google/go-cmp/cmp"
@@ -105,8 +106,21 @@ func TestHandle(t *testing.T) {
 	updated2 := JiraBugState{Status: "UPDATED2"}
 	modified := JiraBugState{Status: "MODIFIED"}
 	verified := []JiraBugState{{Status: "VERIFIED"}}
-	active1 := "com.atlassian.greenhopper.service.sprint.Sprint@11b54434[id=57955,rapidViewId=14885,state=ACTIVE,name=uShift Sprint 248,startDate=2024-01-15T09:00:00.000Z,endDate=2024-02-05T09:00:00.000Z,completeDate=<null>,activatedDate=2024-01-15T08:17:37.677Z,sequence=57955,goal=,autoStartStop=false,synced=false]"
-	closed1 := "com.atlassian.greenhopper.service.sprint.Sprint@57a3e8ba[id=57484,rapidViewId=14885,state=CLOSED,name=uShift Sprint 247,startDate=2023-12-25T17:07:00.000Z,endDate=2024-01-15T17:07:00.000Z,completeDate=2024-01-15T08:15:40.614Z,activatedDate=2023-12-25T14:11:56.948Z,sequence=57484,goal=,autoStartStop=false,synced=false]"
+	active1 := jira.Sprint{
+		ID:        57955,
+		Name:      "uShift Sprint 248",
+		EndDate:   helpers.TimePtr(time.Date(2024, 2, 5, 9, 0, 0, 0, time.UTC)),
+		StartDate: helpers.TimePtr(time.Date(2024, 1, 15, 9, 0, 0, 0, time.UTC)),
+		State:     "active",
+	}
+	closed1 := jira.Sprint{
+		ID:           57484,
+		Name:         "uShift Sprint 247",
+		EndDate:      helpers.TimePtr(time.Date(2024, 1, 15, 17, 7, 0, 0, time.UTC)),
+		StartDate:    helpers.TimePtr(time.Date(2023, 12, 25, 17, 7, 0, 0, time.UTC)),
+		CompleteDate: helpers.TimePtr(time.Date(2024, 1, 15, 8, 15, 40, 614, time.UTC)),
+		State:        "closed",
+	}
 	jiraTransitions := []jira.Transition{
 		{
 			ID:   "1",
@@ -2424,7 +2438,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      severityCritical,
 					helpers.TargetVersionField: &v2,
-					helpers.SprintField:        []any{active1, closed1},
+					helpers.SprintField:        []jira.Sprint{active1, closed1},
 				},
 			}}},
 			prs:                 []github.PullRequest{{Number: base.number, Body: base.body, Title: base.title}, {Number: 2, Body: "This is an automated cherry-pick of #1.\n\n/assign user", Title: "[v1] " + base.title}},
