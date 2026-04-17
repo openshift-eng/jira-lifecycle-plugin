@@ -875,6 +875,24 @@ Instructions for interacting with me using PR comments are available [here](http
 </details>`,
 		},
 		{
+			name:                  "valid jira with linkified previous comment does not comment",
+			replaceReferencedBugs: []referencedIssue{{Project: "JIRA", ID: "123", IsBug: false}},
+			issues:                []jira.Issue{{ID: "1", Key: "JIRA-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "JIRA"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityModerate}}}},
+			prComments: map[int][]github.IssueComment{1: {{Body: `org/repo#1:@user: This pull request references [JIRA-123](https://my-jira.com/browse/JIRA-123) which is a valid jira issue.
+
+<details>
+
+In response to [this](https://github.com/org/repo/pull/1):
+
+>This PR fixes OCPBUGS-123
+
+
+Instructions for interacting with me using PR comments are available [here](https://prow.ci.openshift.org/command-help?repo=org%2Frepo).  If you have questions or suggestions related to my behavior, please file an issue against the [openshift-eng/jira-lifecycle-plugin](https://github.com/openshift-eng/jira-lifecycle-plugin/issues/new) repository.
+</details>`, User: github.User{Login: fakegithub.Bot}}}},
+			labels:         []string{labels.JiraValidRef},
+			expectedLabels: []string{labels.JiraValidRef},
+		},
+		{
 			name:                  "valid jira with incorrect version removes invalid label, adds valid label,comments",
 			replaceReferencedBugs: []referencedIssue{{Project: "JIRA", ID: "123", IsBug: false}},
 			issues:                []jira.Issue{{ID: "1", Key: "JIRA-123", Fields: &jira.IssueFields{Project: jira.Project{Key: "JIRA"}, Type: jira.IssueType{Name: "Issue"}, Unknowns: tcontainer.MarshalMap{helpers.SeverityField: severityModerate}}}},
@@ -5238,6 +5256,49 @@ func checkComments(client *fakegithub.FakeClient, name string, expectedComments 
 		if expectedComment != actualComment {
 			t.Errorf("%s: got incorrect comment: %v", name, cmp.Diff(expectedComment, actualComment))
 		}
+	}
+}
+
+func TestStripMarkdownLinks(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "no links",
+			input:    "This pull request references PROJECT-123 which is a valid jira issue.",
+			expected: "This pull request references PROJECT-123 which is a valid jira issue.",
+		},
+		{
+			name:     "single link",
+			input:    "This pull request references [PROJECT-123](https://my-jira.com/browse/PROJECT-123) which is a valid jira issue.",
+			expected: "This pull request references PROJECT-123 which is a valid jira issue.",
+		},
+		{
+			name:     "multiple links",
+			input:    "See [ABC-1](https://jira/browse/ABC-1) and [ABC-2](https://jira/browse/ABC-2) for details.",
+			expected: "See ABC-1 and ABC-2 for details.",
+		},
+		{
+			name:     "issueLink format",
+			input:    "This pull request references [Jira Issue OCPBUGS-123](https://my-jira.com/browse/OCPBUGS-123), which is valid.",
+			expected: "This pull request references Jira Issue OCPBUGS-123, which is valid.",
+		},
+		{
+			name:     "mixed links and plain text",
+			input:    "Bug [OCPBUGS-1](https://jira/browse/OCPBUGS-1) depends on OCPBUGS-2 which is not linked.",
+			expected: "Bug OCPBUGS-1 depends on OCPBUGS-2 which is not linked.",
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			actual := stripMarkdownLinks(tc.input)
+			if actual != tc.expected {
+				t.Errorf("stripMarkdownLinks(%q):\n  got:  %q\n  want: %q", tc.input, actual, tc.expected)
+			}
+		})
 	}
 }
 
