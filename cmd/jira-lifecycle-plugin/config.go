@@ -122,6 +122,16 @@ type JiraBranchOptions struct {
 	// the FixVersion and AffectsVersion fields of the bug are set to `premerge`.
 	PreMergeStateAfterClose *JiraBugState `json:"premerge_state_after_close,omitempty"`
 
+	// TaskStateAfterValidation is the state to which non-bug issues (Task, Story, etc.) will be moved
+	// after being deemed valid and linked to a PR. If unset, StateAfterValidation is used for all issue types.
+	TaskStateAfterValidation *JiraBugState `json:"task_state_after_validation,omitempty"`
+	// TaskStateAfterMerge is the state to which non-bug issues will be moved after all pull requests
+	// in the external bug tracker have been merged. If unset, StateAfterMerge is used for all issue types.
+	TaskStateAfterMerge *JiraBugState `json:"task_state_after_merge,omitempty"`
+	// TaskStateAfterClose is the state to which non-bug issues will be moved if all pull requests
+	// in the external bug tracker have been closed. If unset, StateAfterClose is used for all issue types.
+	TaskStateAfterClose *JiraBugState `json:"task_state_after_close,omitempty"`
+
 	// AllowedSecurityLevels is a list of the name of jira issue security levels that the jira plugin can
 	// link to in PRs. If an issue has a security level that is not in this list, the jira
 	// plugin will not link the issue to the PR.
@@ -165,10 +175,8 @@ func jiraStatesMatch(first, second []JiraBugState) bool {
 		return false
 	}
 
-	firstSet := NewJiraBugStateSet(first)
 	secondSet := NewJiraBugStateSet(second)
-
-	for state := range firstSet {
+	for _, state := range first {
 		if !secondSet.Has(state) {
 			return false
 		}
@@ -178,35 +186,47 @@ func jiraStatesMatch(first, second []JiraBugState) bool {
 }
 
 func (o JiraBranchOptions) matches(other JiraBranchOptions) bool {
-	validateByDefaultMatch := o.ValidateByDefault == nil && other.ValidateByDefault == nil ||
-		(o.ValidateByDefault != nil && other.ValidateByDefault != nil && *o.ValidateByDefault == *other.ValidateByDefault)
-	isOpenMatch := o.IsOpen == nil && other.IsOpen == nil ||
-		(o.IsOpen != nil && other.IsOpen != nil && *o.IsOpen == *other.IsOpen)
-	targetReleaseMatch := o.TargetVersion == nil && other.TargetVersion == nil ||
-		(o.TargetVersion != nil && other.TargetVersion != nil && *o.TargetVersion == *other.TargetVersion)
-	skipTargetVersionCheckMatch := o.SkipTargetVersionCheck == nil && other.SkipTargetVersionCheck == nil ||
-		(o.SkipTargetVersionCheck != nil && other.SkipTargetVersionCheck != nil && *o.SkipTargetVersionCheck == *other.SkipTargetVersionCheck)
-	bugStatesMatch := o.ValidStates == nil && other.ValidStates == nil ||
-		(o.ValidStates != nil && other.ValidStates != nil && jiraStatesMatch(*o.ValidStates, *other.ValidStates))
-	dependentBugStatesMatch := o.DependentBugStates == nil && other.DependentBugStates == nil ||
-		(o.DependentBugStates != nil && other.DependentBugStates != nil && jiraStatesMatch(*o.DependentBugStates, *other.DependentBugStates))
-	statesAfterValidationMatch := o.StateAfterValidation == nil && other.StateAfterValidation == nil ||
-		(o.StateAfterValidation != nil && other.StateAfterValidation != nil && *o.StateAfterValidation == *other.StateAfterValidation)
-	addExternalLinkMatch := o.AddExternalLink == nil && other.AddExternalLink == nil ||
-		(o.AddExternalLink != nil && other.AddExternalLink != nil && *o.AddExternalLink == *other.AddExternalLink)
-	statesAfterMergeMatch := o.StateAfterMerge == nil && other.StateAfterMerge == nil ||
-		(o.StateAfterMerge != nil && other.StateAfterMerge != nil && *o.StateAfterMerge == *other.StateAfterMerge)
-	preMergestatesAfterMergeMatch := o.PreMergeStateAfterMerge == nil && other.PreMergeStateAfterMerge == nil ||
-		(o.PreMergeStateAfterMerge != nil && other.PreMergeStateAfterMerge != nil && *o.PreMergeStateAfterMerge == *other.PreMergeStateAfterMerge)
-	releaseNotesMatch := o.RequireReleaseNotes == nil && other.RequireReleaseNotes == nil ||
-		(o.RequireReleaseNotes != nil && other.RequireReleaseNotes != nil && *o.RequireReleaseNotes == *other.RequireReleaseNotes)
-	releaseNotesTextMatch := o.ReleaseNotesDefaultText == nil && other.ReleaseNotesDefaultText == nil ||
-		(o.ReleaseNotesDefaultText != nil && other.ReleaseNotesDefaultText != nil && *o.ReleaseNotesDefaultText == *other.ReleaseNotesDefaultText)
-	ignoreCloneLabelsMatch := len(o.IgnoreCloneLabels) == 0 && len(other.IgnoreCloneLabels) == 0 ||
-		(sets.New[string](o.IgnoreCloneLabels...).Equal(sets.New[string](other.IgnoreCloneLabels...)))
-	return validateByDefaultMatch && isOpenMatch && targetReleaseMatch && skipTargetVersionCheckMatch && bugStatesMatch && dependentBugStatesMatch &&
-		statesAfterValidationMatch && addExternalLinkMatch && statesAfterMergeMatch && preMergestatesAfterMergeMatch &&
-		releaseNotesMatch && releaseNotesTextMatch && ignoreCloneLabelsMatch
+	return ptrEqual(o.ValidateByDefault, other.ValidateByDefault) &&
+		ptrEqual(o.IsOpen, other.IsOpen) &&
+		ptrEqual(o.TargetVersion, other.TargetVersion) &&
+		ptrEqual(o.SkipTargetVersionCheck, other.SkipTargetVersionCheck) &&
+		ptrSliceEqual(o.ValidStates, other.ValidStates, jiraStatesMatch) &&
+		ptrSliceEqual(o.DependentBugStates, other.DependentBugStates, jiraStatesMatch) &&
+		ptrEqual(o.StateAfterValidation, other.StateAfterValidation) &&
+		ptrEqual(o.AddExternalLink, other.AddExternalLink) &&
+		ptrEqual(o.StateAfterMerge, other.StateAfterMerge) &&
+		ptrEqual(o.PreMergeStateAfterMerge, other.PreMergeStateAfterMerge) &&
+		ptrEqual(o.RequireReleaseNotes, other.RequireReleaseNotes) &&
+		ptrEqual(o.ReleaseNotesDefaultText, other.ReleaseNotesDefaultText) &&
+		sets.New(o.IgnoreCloneLabels...).Equal(sets.New(other.IgnoreCloneLabels...)) &&
+		ptrEqual(o.TaskStateAfterValidation, other.TaskStateAfterValidation) &&
+		ptrEqual(o.TaskStateAfterMerge, other.TaskStateAfterMerge) &&
+		ptrEqual(o.TaskStateAfterClose, other.TaskStateAfterClose)
+}
+
+// getStateAfterValidation returns the appropriate state transition for validation based on issue type.
+// Bug issues use StateAfterValidation; all other types (Task, Story, etc.) use TaskStateAfterValidation if set.
+func (o JiraBranchOptions) getStateAfterValidation(it IssueType) *JiraBugState {
+	if it == IssueTypeBug || o.TaskStateAfterValidation == nil {
+		return o.StateAfterValidation
+	}
+	return o.TaskStateAfterValidation
+}
+
+// getStateAfterMerge returns the appropriate state transition for merge based on issue type.
+func (o JiraBranchOptions) getStateAfterMerge(it IssueType) *JiraBugState {
+	if it == IssueTypeBug || o.TaskStateAfterMerge == nil {
+		return o.StateAfterMerge
+	}
+	return o.TaskStateAfterMerge
+}
+
+// getStateAfterClose returns the appropriate state transition for close based on issue type.
+func (o JiraBranchOptions) getStateAfterClose(it IssueType) *JiraBugState {
+	if it == IssueTypeBug || o.TaskStateAfterClose == nil {
+		return o.StateAfterClose
+	}
+	return o.TaskStateAfterClose
 }
 
 const JiraOptionsWildcard = `*`
@@ -271,6 +291,15 @@ func ResolveJiraOptions(parent, child JiraBranchOptions) JiraBranchOptions {
 		if parent.PreMergeStateAfterClose != nil {
 			output.PreMergeStateAfterClose = parent.PreMergeStateAfterClose
 		}
+		if parent.TaskStateAfterValidation != nil {
+			output.TaskStateAfterValidation = parent.TaskStateAfterValidation
+		}
+		if parent.TaskStateAfterMerge != nil {
+			output.TaskStateAfterMerge = parent.TaskStateAfterMerge
+		}
+		if parent.TaskStateAfterClose != nil {
+			output.TaskStateAfterClose = parent.TaskStateAfterClose
+		}
 		if parent.AllowedSecurityLevels != nil {
 			output.AllowedSecurityLevels = sets.NewString(output.AllowedSecurityLevels...).Insert(parent.AllowedSecurityLevels...).List()
 		}
@@ -332,6 +361,15 @@ func ResolveJiraOptions(parent, child JiraBranchOptions) JiraBranchOptions {
 	}
 	if child.PreMergeStateAfterClose != nil {
 		output.PreMergeStateAfterClose = child.PreMergeStateAfterClose
+	}
+	if child.TaskStateAfterValidation != nil {
+		output.TaskStateAfterValidation = child.TaskStateAfterValidation
+	}
+	if child.TaskStateAfterMerge != nil {
+		output.TaskStateAfterMerge = child.TaskStateAfterMerge
+	}
+	if child.TaskStateAfterClose != nil {
+		output.TaskStateAfterClose = child.TaskStateAfterClose
 	}
 	if child.AllowedSecurityLevels != nil {
 		output.AllowedSecurityLevels = sets.NewString(output.AllowedSecurityLevels...).Insert(child.AllowedSecurityLevels...).List()
@@ -451,4 +489,24 @@ func (o *PreMergeVerificationOptions) Excluded(org, repo string) bool {
 		return true
 	}
 	return false
+}
+
+func ptrEqual[T comparable](a, b *T) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return *a == *b
+}
+
+func ptrSliceEqual[T any](a, b *[]T, eq func([]T, []T) bool) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return eq(*a, *b)
 }

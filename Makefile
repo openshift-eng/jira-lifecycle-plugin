@@ -19,3 +19,7 @@ GO_LD_EXTRAFLAGS=-X github.com/openshift-eng/jira-lifecycle-plugin/vendor/k8s.io
 vulncheck:
 	./hack/govulncheck-wrapper.sh
 .PHONY: vulncheck
+
+.PHONY: test
+test:
+	go test ./...

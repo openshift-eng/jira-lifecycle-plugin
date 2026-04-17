@@ -57,7 +57,7 @@ var (
 	existingBackportMatch    = regexp.MustCompile(`jlp-[^:]+:[^:]+`)
 	cherrypickPRMatch        = regexp.MustCompile(`This is an automated cherry-pick of #([0-9]+)`)
 	jiraIssueReferenceMatch  = regexp.MustCompile(`([[:alnum:]]+)-([[:digit:]]+)`)
-	bugProjects              = sets.New("OCPBUGS", "DFBUGS", "PROJQUAY")
+	bugProjects              = sets.New("OCPBUGS", "DFBUGS", "PROJQUAY", "LOG")
 )
 
 type referencedIssue struct {
@@ -96,6 +96,18 @@ func (jc *jcWithGetUserStruct) GetUser(accountID string) (*jira.User, error) {
 		return nil, jiraclient.HandleJiraError(response, err)
 	}
 	return user, nil
+}
+
+type IssueType string
+
+const IssueTypeBug IssueType = "bug"
+
+// issueType returns the issue type name, defaulting to IssueTypeBug if unavailable.
+func issueType(issue *jira.Issue) IssueType {
+	if issue.Fields != nil && issue.Fields.Type.Name != "" {
+		return IssueType(strings.ToLower(issue.Fields.Type.Name))
+	}
+	return IssueTypeBug
 }
 
 type server struct {
@@ -500,23 +512,13 @@ func handle(jc jcWithGetUser, ghc githubClient, inserter BigQueryInserter, repoO
 					} else {
 						premergeVerified := isPreMergeVerified(issue, prLabels)
 						if premergeVerified && branchOptions.PreMergeStateAfterValidation != nil {
-							if branchOptions.PreMergeStateAfterValidation.Status != "" && (issue.Fields.Status == nil || !strings.EqualFold(issue.Fields.Status.Name, branchOptions.PreMergeStateAfterValidation.Status)) {
-								if err := jc.UpdateStatus(issue.Key, branchOptions.PreMergeStateAfterValidation.Status); err != nil {
-									log.WithError(err).Warn("Unexpected error updating jira issue.")
-									response += formatError(fmt.Sprintf("updating to the %s state", branchOptions.PreMergeStateAfterValidation.Status), jc.JiraURL(), refIssue.Key(), err)
-									continue
-								}
-								premergeUpdated = true
+							changed, err := transitionIssue(jc, issue, branchOptions.PreMergeStateAfterValidation)
+							if err != nil {
+								log.WithError(err).Warn("Unexpected error updating jira issue.")
+								response += formatTransitionError(err, jc.JiraURL(), refIssue.Key())
+								continue
 							}
-							if branchOptions.PreMergeStateAfterValidation.Resolution != "" && (issue.Fields.Resolution == nil || !strings.EqualFold(issue.Fields.Status.Name, branchOptions.PreMergeStateAfterValidation.Resolution)) {
-								updateIssue := jira.Issue{Key: issue.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: branchOptions.PreMergeStateAfterValidation.Resolution}}}
-								if _, err := jc.UpdateIssue(&updateIssue); err != nil {
-									log.WithError(err).Warn("Unexpected error updating jira issue.")
-									response += formatError(fmt.Sprintf("updating to the %s resolution", branchOptions.PreMergeStateAfterMerge.Resolution), jc.JiraURL(), refIssue.Key(), err)
-									continue
-								}
-								premergeUpdated = true
-							}
+							premergeUpdated = changed
 						}
 						// if this is a premerge verified issue, we don't want to run the usual verification on it; just treat it as a reference instead
 						refIssue.IsBug = !premergeVerified
@@ -616,21 +618,14 @@ func handle(jc jcWithGetUser, ghc githubClient, inserter BigQueryInserter, repoO
 					log.Debug("Valid bug found.")
 					response += fmt.Sprintf(`This pull request references `+issueLink+`, which is valid.`, refIssue.Key(), jc.JiraURL(), refIssue.Key())
 					// if configured, move the bug to the new state
-					if branchOptions.StateAfterValidation != nil {
-						if branchOptions.StateAfterValidation.Status != "" && (issue.Fields.Status == nil || !strings.EqualFold(branchOptions.StateAfterValidation.Status, issue.Fields.Status.Name)) {
-							if err := jc.UpdateStatus(issue.ID, branchOptions.StateAfterValidation.Status); err != nil {
-								log.WithError(err).Warn("Unexpected error updating jira issue.")
-								return comment(formatError(fmt.Sprintf("updating to the %s state", branchOptions.StateAfterValidation.Status), jc.JiraURL(), refIssue.Key(), err))
-							}
-							if branchOptions.StateAfterValidation.Resolution != "" && (issue.Fields.Resolution == nil || !strings.EqualFold(branchOptions.StateAfterValidation.Resolution, issue.Fields.Resolution.Name)) {
-								updateIssue := jira.Issue{Key: issue.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: branchOptions.StateAfterValidation.Resolution}}}
-								if _, err := jc.UpdateIssue(&updateIssue); err != nil {
-									log.WithError(err).Warn("Unexpected error updating jira issue.")
-									return comment(formatError(fmt.Sprintf("updating to the %s resolution", branchOptions.StateAfterValidation.Resolution), jc.JiraURL(), refIssue.Key(), err))
-								}
-							}
-							response += fmt.Sprintf(" The bug has been moved to the %s state.", branchOptions.StateAfterValidation)
-						}
+					stateAfterValidation := branchOptions.getStateAfterValidation(issueType(issue))
+					changed, err := transitionIssue(jc, issue, stateAfterValidation)
+					if err != nil {
+						log.WithError(err).Warn("Unexpected error updating jira issue.")
+						return comment(formatTransitionError(err, jc.JiraURL(), refIssue.Key()))
+					}
+					if changed {
+						response += fmt.Sprintf(" The bug has been moved to the %s state.", stateAfterValidation)
 					}
 
 					response += "\n\n<details>"
@@ -1592,18 +1587,8 @@ func validateBug(bug *jira.Issue, dependents []dependent, options JiraBranchOpti
 	if options.ValidStates != nil {
 		var allowed []JiraBugState
 		allowed = append(allowed, *options.ValidStates...)
-		if options.StateAfterValidation != nil {
-			stateAlreadyExists := false
-			for _, state := range allowed {
-				if strings.EqualFold(state.Status, options.StateAfterValidation.Status) && strings.EqualFold(state.Resolution, options.StateAfterValidation.Resolution) {
-					stateAlreadyExists = true
-					break
-				}
-			}
-			if !stateAlreadyExists {
-				allowed = append(allowed, *options.StateAfterValidation)
-			}
-		}
+		allowed = appendUniqueState(allowed, options.StateAfterValidation)
+		allowed = appendUniqueState(allowed, options.TaskStateAfterValidation)
 		var status, resolution string
 		if bug.Fields.Status != nil {
 			status = bug.Fields.Status.Name
@@ -1727,12 +1712,7 @@ func validateBug(bug *jira.Issue, dependents []dependent, options JiraBranchOpti
 }
 
 func validateTargetVersion(issue *jira.Issue, requiredTargetVersion string) error {
-	issueType := ""
-	if issue.Fields != nil {
-		issueType = strings.ToLower(issue.Fields.Type.Name)
-	} else {
-		issueType = "bug"
-	}
+	issueType := issueType(issue)
 	targetVersion, err := helpers.GetIssueTargetVersion(issue)
 	if err != nil {
 		return fmt.Errorf("failed to get target version for %s: %v", issueType, err)
@@ -1767,7 +1747,7 @@ type prParts struct {
 }
 
 func handleMerge(e event, gc githubClient, jc jiraclient.Client, options JiraBranchOptions, verificationOptions PreMergeVerificationOptions, log *logrus.Entry, allRepos sets.Set[string]) error {
-	if options.StateAfterMerge == nil {
+	if options.StateAfterMerge == nil && options.TaskStateAfterMerge == nil {
 		return nil
 	}
 	if e.missing {
@@ -1787,7 +1767,7 @@ func handleMerge(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 		if err != nil || bug == nil {
 			return err
 		}
-		if options.ValidStates != nil || options.StateAfterValidation != nil {
+		if options.ValidStates != nil || options.StateAfterValidation != nil || options.TaskStateAfterValidation != nil {
 			// we should only migrate if we can be fairly certain that the bug
 			// is not in a state that required human intervention to get to.
 			// For instance, if a bug is closed after a PR merges it should not
@@ -1797,12 +1777,10 @@ func handleMerge(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 			if options.ValidStates != nil {
 				allowed = append(allowed, *options.ValidStates...)
 			}
-
-			if options.StateAfterValidation != nil {
-				allowed = append(allowed, *options.StateAfterValidation)
-			}
+			allowed = appendUniqueState(allowed, options.StateAfterValidation)
+			allowed = appendUniqueState(allowed, options.TaskStateAfterValidation)
 			if !bugMatchesStates(bug, allowed) {
-				msg += fmt.Sprintf(issueLink+" is in an unrecognized state (%s) and will not be moved to the %s state.", refIssue.Key(), jc.JiraURL(), refIssue.Key(), bug.Fields.Status.Name, options.StateAfterMerge)
+				msg += fmt.Sprintf(issueLink+" is in an unrecognized state (%s) and will not be moved to the %s state.", refIssue.Key(), jc.JiraURL(), refIssue.Key(), bug.Fields.Status.Name, options.getStateAfterMerge(issueType(bug)))
 				continue
 			}
 		}
@@ -1904,8 +1882,9 @@ All associated pull requests must be merged or unlinked from the Jira bug in ord
 
 `, strings.Join(statements, "\n"))
 
+		resolvedStateAfterMerge := options.getStateAfterMerge(issueType(bug))
 		outcomeMessage := func(action string) string {
-			return fmt.Sprintf(issueLink+" has %sbeen moved to the %s state.", refIssue.Key(), jc.JiraURL(), refIssue.Key(), action, options.StateAfterMerge)
+			return fmt.Sprintf(issueLink+" has %sbeen moved to the %s state.", refIssue.Key(), jc.JiraURL(), refIssue.Key(), action, resolvedStateAfterMerge)
 		}
 
 		prLabels, err := gc.GetIssueLabels(e.org, e.repo, e.number)
@@ -1937,7 +1916,7 @@ All associated pull requests must be merged or unlinked from the Jira bug in ord
     :heavy_check_mark:  All associated pull requests have merged.
     :heavy_check_mark:  All associated, merged pull requests were pre-merge verified.
 
-`+issueLink+` has been moved to the %s state and will move to the VERIFIED state when the change is available in an accepted nightly payload. :clock4:`, refIssue.Key(), jc.JiraURL(), refIssue.Key(), refIssue.Key(), jc.JiraURL(), refIssue.Key(), options.StateAfterMerge)
+`+issueLink+` has been moved to the %s state and will move to the VERIFIED state when the change is available in an accepted nightly payload. :clock4:`, refIssue.Key(), jc.JiraURL(), refIssue.Key(), refIssue.Key(), jc.JiraURL(), refIssue.Key(), resolvedStateAfterMerge)
 					}
 
 					if updateMsg := updateMergedBugStatus(jc, bug, options, log); updateMsg != "" {
@@ -1951,7 +1930,7 @@ All associated pull requests must be merged or unlinked from the Jira bug in ord
 			} else if isVerifiedLater(prLabels) {
 				// This logic means that the merged PR has been commit verified-later, and we need to handle it accordingly...
 				outcomeMessage = func(action string) string {
-					return fmt.Sprintf("This pull request has the `verified-later` tag and will need to be manually moved to VERIFIED after testing. "+issueLink+" has %sbeen moved to the `%s` state.", refIssue.Key(), jc.JiraURL(), refIssue.Key(), action, options.StateAfterMerge)
+					return fmt.Sprintf("This pull request has the `verified-later` tag and will need to be manually moved to VERIFIED after testing. "+issueLink+" has %sbeen moved to the `%s` state.", refIssue.Key(), jc.JiraURL(), refIssue.Key(), action, resolvedStateAfterMerge)
 				}
 				if updateMsg := updateMergedBugStatus(jc, bug, options, log); updateMsg != "" {
 					msg += updateMsg
@@ -1961,22 +1940,10 @@ All associated pull requests must be merged or unlinked from the Jira bug in ord
 				outcomeMessage = func(action string) string {
 					return fmt.Sprintf(issueLink+" has %sbeen moved to the %s state.", refIssue.Key(), jc.JiraURL(), refIssue.Key(), action, options.PreMergeStateAfterMerge)
 				}
-				if options.PreMergeStateAfterMerge != nil {
-					if options.PreMergeStateAfterMerge.Status != "" && (bug.Fields.Status == nil || !strings.EqualFold(bug.Fields.Status.Name, options.PreMergeStateAfterMerge.Status)) {
-						if err := jc.UpdateStatus(bug.Key, options.PreMergeStateAfterMerge.Status); err != nil {
-							log.WithError(err).Warn("Unexpected error updating jira bug.")
-							msg += formatError(fmt.Sprintf("updating to the %s state", options.PreMergeStateAfterMerge.Status), jc.JiraURL(), refIssue.Key(), err)
-							continue
-						}
-					}
-					if options.PreMergeStateAfterMerge.Resolution != "" && (bug.Fields.Resolution == nil || !strings.EqualFold(bug.Fields.Status.Name, options.PreMergeStateAfterMerge.Resolution)) {
-						updatebug := jira.Issue{Key: bug.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.PreMergeStateAfterMerge.Resolution}}}
-						if _, err := jc.UpdateIssue(&updatebug); err != nil {
-							log.WithError(err).Warn("Unexpected error updating jira bug.")
-							msg += formatError(fmt.Sprintf("updating to the %s resolution", options.PreMergeStateAfterMerge.Resolution), jc.JiraURL(), refIssue.Key(), err)
-							continue
-						}
-					}
+				if _, err := transitionIssue(jc, bug, options.PreMergeStateAfterMerge); err != nil {
+					log.WithError(err).Warn("Unexpected error updating jira bug.")
+					msg += formatTransitionError(err, jc.JiraURL(), refIssue.Key())
+					continue
 				}
 			} else {
 				if updateMsg := updateMergedBugStatus(jc, bug, options, log); updateMsg != "" {
@@ -2011,20 +1978,10 @@ All associated pull requests must be merged or unlinked from the Jira bug in ord
 }
 
 func updateMergedBugStatus(jc jiraclient.Client, bug *jira.Issue, options JiraBranchOptions, log *logrus.Entry) string {
-	if options.StateAfterMerge != nil {
-		if options.StateAfterMerge.Status != "" && (bug.Fields.Status == nil || !strings.EqualFold(options.StateAfterMerge.Status, bug.Fields.Status.Name)) {
-			if err := jc.UpdateStatus(bug.Key, options.StateAfterMerge.Status); err != nil {
-				log.WithError(err).Warn("Unexpected error updating jira issue.")
-				return formatError(fmt.Sprintf("updating to the %s state", options.StateAfterMerge.Status), jc.JiraURL(), bug.Key, err)
-			}
-			if options.StateAfterMerge.Resolution != "" && (bug.Fields.Resolution == nil || !strings.EqualFold(options.StateAfterMerge.Resolution, bug.Fields.Resolution.Name)) {
-				updateIssue := jira.Issue{Key: bug.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterMerge.Resolution}}}
-				if _, err := jc.UpdateIssue(&updateIssue); err != nil {
-					log.WithError(err).Warn("Unexpected error updating jira issue.")
-					return formatError(fmt.Sprintf("updating to the %s resolution", options.StateAfterMerge.Resolution), jc.JiraURL(), bug.Key, err)
-				}
-			}
-		}
+	stateAfterMerge := options.getStateAfterMerge(issueType(bug))
+	if _, err := transitionIssue(jc, bug, stateAfterMerge); err != nil {
+		log.WithError(err).Warn("Unexpected error updating jira issue.")
+		return formatTransitionError(err, jc.JiraURL(), bug.Key)
 	}
 	return ""
 }
@@ -2524,7 +2481,7 @@ func handleClose(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 				msg += formatError("removing this pull request from the external tracker bugs", jc.JiraURL(), refIssue.Key(), err) + "\n\n"
 				continue
 			}
-			if options.StateAfterClose != nil || options.PreMergeStateAfterClose != nil {
+			if options.StateAfterClose != nil || options.PreMergeStateAfterClose != nil || options.TaskStateAfterClose != nil {
 				issue, err := jc.GetIssue(refIssue.Key())
 				if err != nil {
 					log.WithError(err).Warn("Unexpected error getting Jira issue.")
@@ -2549,46 +2506,27 @@ func handleClose(e event, gc githubClient, jc jiraclient.Client, options JiraBra
 						} else {
 							premergeVerified = isPreMergeVerified(bug, labels)
 						}
-						updatedState := JiraBugState{}
+						targetState := options.getStateAfterClose(issueType(bug))
 						if premergeVerified {
-							updatedState = JiraBugState{Status: options.PreMergeStateAfterClose.Status, Resolution: options.PreMergeStateAfterClose.Resolution}
-							if options.PreMergeStateAfterClose.Status != "" && (bug.Fields.Status == nil || !strings.EqualFold(options.PreMergeStateAfterClose.Status, bug.Fields.Status.Name)) {
-								if err := jc.UpdateStatus(issue.ID, options.PreMergeStateAfterClose.Status); err != nil {
-									log.WithError(err).Warn("Unexpected error updating jira issue.")
-									msg += formatError(fmt.Sprintf("updating to the %s state", options.PreMergeStateAfterClose.Status), jc.JiraURL(), refIssue.Key(), err) + "\n\n"
-									continue
-								}
-								if options.PreMergeStateAfterClose.Resolution != "" && (bug.Fields.Resolution == nil || !strings.EqualFold(options.PreMergeStateAfterClose.Resolution, bug.Fields.Resolution.Name)) {
-									updateIssue := jira.Issue{Key: bug.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.PreMergeStateAfterClose.Resolution}}}
-									if _, err := jc.UpdateIssue(&updateIssue); err != nil {
-										log.WithError(err).Warn("Unexpected error updating jira issue.")
-										msg += formatError(fmt.Sprintf("updating to the %s resolution", options.PreMergeStateAfterClose.Resolution), jc.JiraURL(), refIssue.Key(), err) + "\n\n"
-										continue
-									}
-								}
-							}
-						} else {
-							updatedState = JiraBugState{Status: options.StateAfterClose.Status, Resolution: options.StateAfterClose.Resolution}
-							if options.StateAfterClose.Status != "" && (bug.Fields.Status == nil || !strings.EqualFold(options.StateAfterClose.Status, bug.Fields.Status.Name)) {
-								if err := jc.UpdateStatus(issue.ID, options.StateAfterClose.Status); err != nil {
-									log.WithError(err).Warn("Unexpected error updating jira issue.")
-									msg += formatError(fmt.Sprintf("updating to the %s state", options.StateAfterClose.Status), jc.JiraURL(), refIssue.Key(), err) + "\n\n"
-									continue
-								}
-								if options.StateAfterClose.Resolution != "" && (bug.Fields.Resolution == nil || !strings.EqualFold(options.StateAfterClose.Resolution, bug.Fields.Resolution.Name)) {
-									updateIssue := jira.Issue{Key: bug.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: options.StateAfterClose.Resolution}}}
-									if _, err := jc.UpdateIssue(&updateIssue); err != nil {
-										log.WithError(err).Warn("Unexpected error updating jira issue.")
-										msg += formatError(fmt.Sprintf("updating to the %s resolution", options.StateAfterClose.Resolution), jc.JiraURL(), refIssue.Key(), err) + "\n\n"
-										continue
-									}
-								}
-							}
+							targetState = options.PreMergeStateAfterClose
 						}
-						response += fmt.Sprintf(" All external bug links have been closed. The bug has been moved to the %s state.", PrettyStatus(updatedState.Status, updatedState.Resolution))
-						jiraComment := &jira.Comment{Body: fmt.Sprintf("Bug status changed to %s as previous linked PR https://github.com/%s/%s/pull/%d has been closed", options.StateAfterClose.Status, e.org, e.repo, e.number), Visibility: PrivateVisibility}
-						if _, err := jc.AddComment(bug.ID, jiraComment); err != nil {
-							response += "\nWarning: Failed to comment on Jira bug with reason for changed state."
+						updatedState := JiraBugState{}
+						if targetState != nil {
+							updatedState = *targetState
+						}
+						changeState, err := transitionIssue(jc, bug, targetState)
+						if err != nil {
+							log.WithError(err).Warn("Unexpected error updating jira issue.")
+							msg += formatTransitionError(err, jc.JiraURL(), refIssue.Key()) + "\n\n"
+							continue
+						}
+						response += " All external bug links have been closed."
+						if changeState {
+							response += fmt.Sprintf(" The bug has been moved to the %s state.", PrettyStatus(updatedState.Status, updatedState.Resolution))
+							jiraComment := &jira.Comment{Body: fmt.Sprintf("Bug status changed to %s as previous linked PR https://github.com/%s/%s/pull/%d has been closed", updatedState.Status, e.org, e.repo, e.number), Visibility: PrivateVisibility}
+							if _, err := jc.AddComment(bug.ID, jiraComment); err != nil {
+								response += "\nWarning: Failed to comment on Jira bug with reason for changed state."
+							}
 						}
 					}
 				}
@@ -2946,4 +2884,61 @@ func searchIssuesWithPagination(jc jiraclient.Client, jql string, pageSize int) 
 
 	logrus.Debugf("Pagination complete - retrieved %d total issues across %d pages", len(allIssues), pageNum-1)
 	return allIssues, nil
+}
+
+// appendUniqueState appends state to allowed if it is non-nil and not already present
+func appendUniqueState(allowed []JiraBugState, state *JiraBugState) []JiraBugState {
+	if state == nil {
+		return allowed
+	}
+	for _, s := range allowed {
+		if strings.EqualFold(s.Status, state.Status) && strings.EqualFold(s.Resolution, state.Resolution) {
+			return allowed
+		}
+	}
+	return append(allowed, *state)
+}
+
+// transitionIssue updates the status and/or resolution of a Jira issue to match
+// the target state. It skips fields that are already at the desired value and
+// returns whether any changes were made.
+// transitionError holds context about a failed state transition so callers
+// can pass the action description and underlying error separately to formatError.
+type transitionError struct {
+	action string
+	err    error
+}
+
+func (e *transitionError) Error() string { return fmt.Sprintf("%s: %s", e.action, e.err) }
+func (e *transitionError) Unwrap() error { return e.err }
+
+// formatTransitionError extracts the action and underlying error from a transitionError
+// to pass them separately to formatError, avoiding duplicate error text.
+func formatTransitionError(err error, endpoint, bugKey string) string {
+	var te *transitionError
+	if errors.As(err, &te) {
+		return formatError(te.action, endpoint, bugKey, te.err)
+	}
+	return formatError(err.Error(), endpoint, bugKey, err)
+}
+
+func transitionIssue(jc jiraclient.Client, issue *jira.Issue, targetState *JiraBugState) (bool, error) {
+	if targetState == nil {
+		return false, nil
+	}
+	changed := false
+	if targetState.Status != "" && (issue.Fields.Status == nil || !strings.EqualFold(targetState.Status, issue.Fields.Status.Name)) {
+		if err := jc.UpdateStatus(issue.ID, targetState.Status); err != nil {
+			return false, &transitionError{action: fmt.Sprintf("updating to the %s state", targetState.Status), err: err}
+		}
+		changed = true
+	}
+	if targetState.Resolution != "" && (issue.Fields.Resolution == nil || !strings.EqualFold(targetState.Resolution, issue.Fields.Resolution.Name)) {
+		updateIssue := jira.Issue{Key: issue.Key, Fields: &jira.IssueFields{Resolution: &jira.Resolution{Name: targetState.Resolution}}}
+		if _, err := jc.UpdateIssue(&updateIssue); err != nil {
+			return false, &transitionError{action: fmt.Sprintf("updating to the %s resolution", targetState.Resolution), err: err}
+		}
+		changed = true
+	}
+	return changed, nil
 }

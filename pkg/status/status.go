@@ -12,4 +12,7 @@ const (
 	Closed         = "CLOSED"
 	Refinement     = "REFINEMENT"
 	InProgress     = "IN PROGRESS"
+	ToDo           = "TO DO"
+	CodeReview     = "CODE REVIEW"
+	Review         = "REVIEW"
 )

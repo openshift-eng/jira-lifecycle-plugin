@@ -709,3 +709,82 @@ func TestPreMergeVerificationOptionsExcluded(t *testing.T) {
 		})
 	}
 }
+
+func TestPtrEqual(t *testing.T) {
+	a, b := "hello", "hello"
+	different := "world"
+
+	testCases := []struct {
+		name     string
+		a, b     *string
+		expected bool
+	}{
+		{name: "both nil", a: nil, b: nil, expected: true},
+		{name: "first nil", a: nil, b: &b, expected: false},
+		{name: "second nil", a: &a, b: nil, expected: false},
+		{name: "equal values", a: &a, b: &b, expected: true},
+		{name: "different values", a: &a, b: &different, expected: false},
+		{name: "same pointer", a: &a, b: &a, expected: true},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if actual := ptrEqual(tc.a, tc.b); actual != tc.expected {
+				t.Errorf("ptrEqual(%v, %v) = %t, want %t", tc.a, tc.b, actual, tc.expected)
+			}
+		})
+	}
+
+	// Verify it works with other comparable types
+	one, two := 1, 2
+	same := 1
+	t.Run("int equal", func(t *testing.T) {
+		if !ptrEqual(&one, &same) {
+			t.Error("expected equal ints to match")
+		}
+	})
+	t.Run("int not equal", func(t *testing.T) {
+		if ptrEqual(&one, &two) {
+			t.Error("expected different ints to not match")
+		}
+	})
+}
+
+func TestPtrSliceEqual(t *testing.T) {
+	s1 := []string{"a", "b"}
+	s2 := []string{"a", "b"}
+	s3 := []string{"c", "d"}
+	empty := []string{}
+
+	eq := func(a, b []string) bool {
+		if len(a) != len(b) {
+			return false
+		}
+		for i := range a {
+			if a[i] != b[i] {
+				return false
+			}
+		}
+		return true
+	}
+
+	testCases := []struct {
+		name     string
+		a, b     *[]string
+		expected bool
+	}{
+		{name: "both nil", a: nil, b: nil, expected: true},
+		{name: "first nil", a: nil, b: &s1, expected: false},
+		{name: "second nil", a: &s1, b: nil, expected: false},
+		{name: "equal slices", a: &s1, b: &s2, expected: true},
+		{name: "different slices", a: &s1, b: &s3, expected: false},
+		{name: "both empty", a: &empty, b: &empty, expected: true},
+		{name: "empty vs non-empty", a: &empty, b: &s1, expected: false},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if actual := ptrSliceEqual(tc.a, tc.b, eq); actual != tc.expected {
+				t.Errorf("ptrSliceEqual(%v, %v) = %t, want %t", tc.a, tc.b, actual, tc.expected)
+			}
+		})
+	}
+}
