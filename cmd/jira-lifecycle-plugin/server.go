@@ -57,8 +57,13 @@ var (
 	existingBackportMatch    = regexp.MustCompile(`jlp-[^:]+:[^:]+`)
 	cherrypickPRMatch        = regexp.MustCompile(`This is an automated cherry-pick of #([0-9]+)`)
 	jiraIssueReferenceMatch  = regexp.MustCompile(`([[:alnum:]]+)-([[:digit:]]+)`)
+	markdownLinkRegex        = regexp.MustCompile(`\[([^\]]+)\]\([^)]+\)`)
 	bugProjects              = sets.New("OCPBUGS", "DFBUGS", "PROJQUAY")
 )
+
+func stripMarkdownLinks(s string) string {
+	return markdownLinkRegex.ReplaceAllString(s, "$1")
+}
 
 type referencedIssue struct {
 	Project string
@@ -835,8 +840,11 @@ To reference a jira issue, add 'XYZ-NNN:' to the title of this pull request and 
 				}
 				if lastBotComment != nil {
 					// the comment function prepends the user and appends details (which may be different for different events),
-					// so we can't do an exact match. A `strings.Contains` should be good enough
-					if strings.Contains(lastBotComment.Body, response) {
+					// so we can't do an exact match. A `strings.Contains` should be good enough.
+					// We strip markdown links from both sides because the prow-jira plugin may convert
+					// plain issue keys (e.g. PROJECT-123) into markdown links ([PROJECT-123](url)) in
+					// existing comments, which would cause a false mismatch.
+					if strings.Contains(stripMarkdownLinks(lastBotComment.Body), stripMarkdownLinks(response)) {
 						duplicateComment = true
 					}
 				}
