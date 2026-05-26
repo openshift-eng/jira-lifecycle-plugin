@@ -19,7 +19,7 @@ type Config struct {
 	// Options for specific orgs. The `*` wildcard will apply to all orgs.
 	Orgs map[string]JiraOrgOptions `json:"orgs,omitempty"`
 	// PreMergeVerification options for Pre-Merge Verification.
-	PreMergeVerification PreMergeVerificationOptions `json:"premerge_verification,omitempty"`
+	PreMergeVerification PreMergeVerificationOptions `json:"premerge_verification"`
 }
 
 // JiraOrgOptions holds options for checking Jira bugs for an org.
@@ -203,7 +203,7 @@ func (o JiraBranchOptions) matches(other JiraBranchOptions) bool {
 	releaseNotesTextMatch := o.ReleaseNotesDefaultText == nil && other.ReleaseNotesDefaultText == nil ||
 		(o.ReleaseNotesDefaultText != nil && other.ReleaseNotesDefaultText != nil && *o.ReleaseNotesDefaultText == *other.ReleaseNotesDefaultText)
 	ignoreCloneLabelsMatch := len(o.IgnoreCloneLabels) == 0 && len(other.IgnoreCloneLabels) == 0 ||
-		(sets.New[string](o.IgnoreCloneLabels...).Equal(sets.New[string](other.IgnoreCloneLabels...)))
+		(sets.New(o.IgnoreCloneLabels...).Equal(sets.New(other.IgnoreCloneLabels...)))
 	return validateByDefaultMatch && isOpenMatch && targetReleaseMatch && skipTargetVersionCheckMatch && bugStatesMatch && dependentBugStatesMatch &&
 		statesAfterValidationMatch && addExternalLinkMatch && statesAfterMergeMatch && preMergestatesAfterMergeMatch &&
 		releaseNotesMatch && releaseNotesTextMatch && ignoreCloneLabelsMatch
@@ -447,8 +447,5 @@ func (b *Config) OptionsForPreMergeVerification() PreMergeVerificationOptions {
 
 // Excluded checks whether the specified repository is excluded from pre-merge validation
 func (o *PreMergeVerificationOptions) Excluded(org, repo string) bool {
-	if slices.Contains(o.ExcludedRepositories, fmt.Sprintf("%s/%s", org, repo)) {
-		return true
-	}
-	return false
+	return slices.Contains(o.ExcludedRepositories, fmt.Sprintf("%s/%s", org, repo))
 }
