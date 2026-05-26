@@ -372,6 +372,44 @@ func (s *server) handleIssueComments(l *logrus.Entry, e github.IssueCommentEvent
 	}
 }
 
+func reviewEventToIssueComment(re github.ReviewEvent) github.IssueCommentEvent {
+	return github.IssueCommentEvent{
+		Action: github.IssueCommentActionCreated,
+		Issue: github.Issue{
+			Number:      re.PullRequest.Number,
+			Title:       re.PullRequest.Title,
+			PullRequest: &struct{}{},
+		},
+		Comment: github.IssueComment{
+			Body:    re.Review.Body,
+			User:    re.Review.User,
+			HTMLURL: re.Review.HTMLURL,
+		},
+		Repo: re.Repo,
+	}
+}
+
+func (s *server) handleReviewEvent(l *logrus.Entry, re github.ReviewEvent) {
+	if re.Action != github.ReviewActionSubmitted {
+		return
+	}
+	ice := reviewEventToIssueComment(re)
+	cfg := s.config()
+
+	events, errs := digestComment(s.ghc, l, ice)
+	for _, err := range errs {
+		l.Errorf("failed to digest review comment: %v", err)
+	}
+	for _, event := range events {
+		branchOptions := cfg.OptionsForBranch(event.org, event.repo, event.baseRef)
+		repoOptions := cfg.OptionsForRepo(event.org, event.repo)
+		verificationOptions := cfg.OptionsForPreMergeVerification()
+		if err := handle(s.jc, s.ghc, s.bigqueryInserter, repoOptions, branchOptions, verificationOptions, l, *event, s.prowConfigAgent.Config().AllRepos); err != nil {
+			l.Errorf("failed to handle review comment: %v", err)
+		}
+	}
+}
+
 func handle(jc jiraclient.Client, ghc githubClient, inserter BigQueryInserter, repoOptions map[string]JiraBranchOptions, branchOptions JiraBranchOptions, verificationOptions PreMergeVerificationOptions, log *logrus.Entry, e event, allRepos sets.Set[string]) error {
 	comment := e.comment(ghc)
 	if !e.missing {

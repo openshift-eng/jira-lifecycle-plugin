@@ -223,6 +223,7 @@ func main() {
 	eventServer := githubeventserver.New(o.githubEventServerOptions, secret.GetTokenGenerator(o.webhookSecretFile), logger)
 	eventServer.RegisterHandleIssueCommentEvent(serv.handleIssueComments)
 	eventServer.RegisterHandlePullRequestEvent(serv.handlePullRequest)
+	eventServer.RegisterReviewEventHandler(serv.handleReviewEvent)
 	eventServer.RegisterHelpProvider(serv.helpProvider, logger)
 
 	health := pjutil.NewHealth()

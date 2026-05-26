@@ -7350,6 +7350,170 @@ Instructions for interacting with me using PR comments are available [here](http
 	}
 }
 
+func TestDigestReviewEvent(t *testing.T) {
+	var testCases = []struct {
+		name             string
+		re               github.ReviewEvent
+		title            string
+		merged           bool
+		expected         []*event
+		expectedComments []string
+		expectedErr      bool
+	}{
+		{
+			name: "edited review action is ignored",
+			re: github.ReviewEvent{
+				Action: github.ReviewActionEdited,
+				PullRequest: github.PullRequest{
+					Number: 1,
+					Title:  "OCPBUGS-123: fix something",
+					Base:   github.PullRequestBranch{Ref: "branch"},
+				},
+				Review: github.Review{
+					Body: "/verified by ci",
+					User: github.User{Login: "user"},
+				},
+				Repo: github.Repo{
+					Owner: github.User{Login: "org"},
+					Name:  "repo",
+				},
+			},
+		},
+		{
+			name: "dismissed review action is ignored",
+			re: github.ReviewEvent{
+				Action: github.ReviewActionDismissed,
+				PullRequest: github.PullRequest{
+					Number: 1,
+					Title:  "OCPBUGS-123: fix something",
+					Base:   github.PullRequestBranch{Ref: "branch"},
+				},
+				Review: github.Review{
+					Body: "/verified by ci",
+					User: github.User{Login: "user"},
+				},
+				Repo: github.Repo{
+					Owner: github.User{Login: "org"},
+					Name:  "repo",
+				},
+			},
+		},
+		{
+			name: "submitted review with /verified by is processed",
+			re: github.ReviewEvent{
+				Action: github.ReviewActionSubmitted,
+				PullRequest: github.PullRequest{
+					Number: 1,
+					Title:  "OCPBUGS-123: fix something",
+					Base:   github.PullRequestBranch{Ref: "branch"},
+				},
+				Review: github.Review{
+					Body:    "/verified by ci",
+					User:    github.User{Login: "user"},
+					HTMLURL: "www.com",
+				},
+				Repo: github.Repo{
+					Owner: github.User{Login: "org"},
+					Name:  "repo",
+				},
+			},
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/verified by ci", title: "OCPBUGS-123: fix something", htmlUrl: "www.com", login: "user", verify: []string{"ci"}},
+			},
+		},
+		{
+			name: "submitted review with no commands produces no events",
+			re: github.ReviewEvent{
+				Action: github.ReviewActionSubmitted,
+				PullRequest: github.PullRequest{
+					Number: 1,
+					Title:  "OCPBUGS-123: fix something",
+					Base:   github.PullRequestBranch{Ref: "branch"},
+				},
+				Review: github.Review{
+					Body:    "LGTM, looks good to me!",
+					User:    github.User{Login: "user"},
+					HTMLURL: "www.com",
+				},
+				Repo: github.Repo{
+					Owner: github.User{Login: "org"},
+					Name:  "repo",
+				},
+			},
+		},
+		{
+			name: "submitted review with /verified among other commands",
+			re: github.ReviewEvent{
+				Action: github.ReviewActionSubmitted,
+				PullRequest: github.PullRequest{
+					Number: 1,
+					Title:  "OCPBUGS-123: fix something",
+					Base:   github.PullRequestBranch{Ref: "branch"},
+				},
+				Review: github.Review{
+					Body:    "/jira refresh\n/verified by ci",
+					User:    github.User{Login: "user"},
+					HTMLURL: "www.com",
+				},
+				Repo: github.Repo{
+					Owner: github.User{Login: "org"},
+					Name:  "repo",
+				},
+			},
+			expected: []*event{
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/jira refresh\n/verified by ci", title: "OCPBUGS-123: fix something", htmlUrl: "www.com", login: "user", refresh: true},
+				{org: "org", repo: "repo", baseRef: "branch", number: 1, issues: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}}, body: "/jira refresh\n/verified by ci", title: "OCPBUGS-123: fix something", htmlUrl: "www.com", login: "user", verify: []string{"ci"}},
+			},
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			client := fakegithub.NewFakeClient()
+			client.PullRequests = map[int]*github.PullRequest{
+				1: {Base: github.PullRequestBranch{Ref: "branch"}, Title: testCase.re.PullRequest.Title, Merged: testCase.merged},
+			}
+			fakeClient := fakeGHClient{client}
+
+			var ice *github.IssueCommentEvent
+			if testCase.re.Action == github.ReviewActionSubmitted {
+				synthetic := reviewEventToIssueComment(testCase.re)
+				ice = &synthetic
+			}
+
+			if ice == nil {
+				// non-submitted actions should produce no events
+				if len(testCase.expected) != 0 {
+					t.Errorf("%s: expected no events for non-submitted action but test expects events", testCase.name)
+				}
+				return
+			}
+
+			events, errs := digestComment(fakeClient, logrus.WithField("testCase", testCase.name), *ice)
+			hasErr := false
+			for _, err := range errs {
+				if err != nil {
+					hasErr = true
+					break
+				}
+			}
+			if !hasErr && testCase.expectedErr {
+				t.Errorf("%s: expected an error but got none", testCase.name)
+			}
+			if hasErr && !testCase.expectedErr {
+				t.Errorf("%s: expected no error but got errors: %v", testCase.name, errs)
+			}
+
+			actual, expected := events, testCase.expected
+			if len(actual) != len(expected) || (len(actual) > 0 && !reflect.DeepEqual(actual, expected)) {
+				t.Errorf("%s: did not get correct events: %v", testCase.name, cmp.Diff(actual, expected, allowEventAndDate))
+			}
+
+			checkComments(client, testCase.name, testCase.expectedComments, t)
+		})
+	}
+}
+
 func TestBugKeyFromTitle(t *testing.T) {
 	var testCases = []struct {
 		title                string
