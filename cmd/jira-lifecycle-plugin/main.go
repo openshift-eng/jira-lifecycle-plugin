@@ -101,7 +101,7 @@ func (o *options) Validate() error {
 
 	if o.bigqueryEnable &&
 		(o.bigquerySecretFile == "" || o.bigqueryProjectID == "" || o.bigqueryDatasetID == "") {
-		return errors.New("All BigQuery flags must be set to enable Big Query uploading.")
+		return errors.New("all BigQuery flags must be set to enable Big Query uploading")
 	}
 
 	return nil

@@ -426,16 +426,18 @@ func handle(jc jiraclient.Client, ghc githubClient, inserter BigQueryInserter, r
 				if !bugAllowed {
 					// ignore bugs that are in non-allowed security levels for this repo
 					if e.opened || e.refresh {
-						response := fmt.Sprintf(issueLink+" is in a security level that is not in the allowed security levels for this repo.", refIssue.Key(), jc.JiraURL(), refIssue.Key())
+						var response strings.Builder
+						fmt.Fprintf(&response, issueLink+" is in a security level that is not in the allowed security levels for this repo.", refIssue.Key(), jc.JiraURL(), refIssue.Key())
 						if len(branchOptions.AllowedSecurityLevels) > 0 {
-							response += "\nAllowed security levels for this repo are:"
+							response.WriteString("\nAllowed security levels for this repo are:")
 							for _, group := range branchOptions.AllowedSecurityLevels {
-								response += "\n- " + group
+								response.WriteString("\n- ")
+								response.WriteString(group)
 							}
 						} else {
-							response += " There are no allowed security levels configured for this repo."
+							response.WriteString(" There are no allowed security levels configured for this repo.")
 						}
-						return comment(response)
+						return comment(response.String())
 					}
 					return nil
 				}
@@ -463,9 +465,10 @@ func handle(jc jiraclient.Client, ghc githubClient, inserter BigQueryInserter, r
 			log.WithError(err).Warn("Could not list labels on PR")
 		}
 		for _, label := range currentLabels {
-			if label.Name == labels.Verified {
+			switch label.Name {
+			case labels.Verified:
 				_ = removeVerifiedLabel(e, ghc, inserter, log, "modified")
-			} else if label.Name == labels.VerifiedLater {
+			case labels.VerifiedLater:
 				_ = removeVerifiedLaterLabel(e, ghc, inserter, log, "modified")
 			}
 		}
@@ -670,13 +673,13 @@ func handle(jc jiraclient.Client, ghc githubClient, inserter BigQueryInserter, r
 					}
 				} else {
 					log.Debug("Invalid bug found.")
-					var formattedReasons string
+					var formattedReasons strings.Builder
 					for _, reason := range fails {
-						formattedReasons += fmt.Sprintf(" - %s\n", reason)
+						fmt.Fprintf(&formattedReasons, " - %s\n", reason)
 					}
 					response += fmt.Sprintf(`This pull request references `+issueLink+`, which is invalid:
 %s
-Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jira bug are made, or edit the title of this pull request to link to a different bug.`, refIssue.Key(), jc.JiraURL(), refIssue.Key(), formattedReasons)
+Comment <code>/jira refresh</code> to re-evaluate validity if changes to the Jira bug are made, or edit the title of this pull request to link to a different bug.`, refIssue.Key(), jc.JiraURL(), refIssue.Key(), formattedReasons.String())
 				}
 
 				if branchOptions.AddExternalLink != nil && *branchOptions.AddExternalLink {
@@ -1020,7 +1023,7 @@ func replaceStringIfNeeded(text, old, new string) string {
 		return text
 	}
 
-	var result string
+	var result strings.Builder
 
 	// Golangs stdlib has no strings.IndexAll, only funcs to get the first
 	// or last index for a substring. Definitions/condition/assignments are not
@@ -1041,17 +1044,17 @@ func replaceStringIfNeeded(text, old, new string) string {
 
 	startingIdx = 0
 	for _, idx := range allOldIdx {
-		result += text[startingIdx:idx]
+		result.WriteString(text[startingIdx:idx])
 		if idx == 0 || (text[idx-1] != '[' && text[idx-1] != '/') && text[idx-1] != '`' {
-			result += new
+			result.WriteString(new)
 		} else {
-			result += old
+			result.WriteString(old)
 		}
 		startingIdx = idx + len(old)
 	}
-	result += text[startingIdx:]
+	result.WriteString(text[startingIdx:])
 
-	return result
+	return result.String()
 }
 
 func prURLFromCommentURL(url string) string {
@@ -1254,7 +1257,7 @@ func digestComment(gc githubClient, log *logrus.Entry, ice github.IssueCommentEv
 		return events, errs
 	}
 
-	for _, line := range strings.Split(ice.Comment.Body, "\n") {
+	for line := range strings.SplitSeq(ice.Comment.Body, "\n") {
 		event, err := digestLine(gc, log, ice, line)
 		if event != nil {
 			events = append(events, event)
@@ -1449,7 +1452,7 @@ func formatResponseRaw(body, bodyURL, login, reply, orgRepo string) string {
 `
 	// Quote the user's comment by prepending ">" to each line.
 	var quoted []string
-	for _, l := range strings.Split(body, "\n") {
+	for l := range strings.SplitSeq(body, "\n") {
 		quoted = append(quoted, ">"+l)
 	}
 	return formatResponse(login, reply, fmt.Sprintf(format, bodyURL, strings.Join(quoted, "\n")), orgRepo)
@@ -1520,11 +1523,12 @@ func processQuery(query *emailToLoginQuery, email string) string {
 	case 1:
 		return fmt.Sprintf("Requesting review from QA contact:\n/cc @%s", query.Search.Edges[0].Node.User.Login)
 	default:
-		response := fmt.Sprintf("Multiple GitHub users were found matching the public email listed for the QA contact in Jira (%s), skipping review request. List of users with matching email:", email)
+		var response strings.Builder
+		fmt.Fprintf(&response, "Multiple GitHub users were found matching the public email listed for the QA contact in Jira (%s), skipping review request. List of users with matching email:", email)
 		for _, edge := range query.Search.Edges {
-			response += fmt.Sprintf("\n\t- %s", edge.Node.User.Login)
+			fmt.Fprintf(&response, "\n\t- %s", edge.Node.User.Login)
 		}
-		return response
+		return response.String()
 	}
 }
 
@@ -2224,7 +2228,7 @@ func createCherryPickBug(jc jiraclient.Client, bug *jira.Issue, branch string, o
 	releaseNoteType := bugCopy.Fields.Unknowns[helpers.ReleaseNoteTypeField]
 	releaseNoteText := bugCopy.Fields.Unknowns[helpers.ReleaseNoteTextField]
 	if len(options.IgnoreCloneLabels) != 0 {
-		labelsSet := sets.New[string](bugCopy.Fields.Labels...)
+		labelsSet := sets.New(bugCopy.Fields.Labels...)
 		labelsSet.Delete(options.IgnoreCloneLabels...)
 		bugCopy.Fields.Labels = labelsSet.UnsortedList()
 	}
@@ -2303,8 +2307,8 @@ func createCherryPickBug(jc jiraclient.Client, bug *jira.Issue, branch string, o
 	switch v := sprintField.(type) {
 	case []jira.Sprint:
 		sprints = v
-	case []interface{}:
-		sprints = getSprints(sprintField.([]interface{}))
+	case []any:
+		sprints = getSprints(sprintField.([]any))
 	case nil:
 		// Nil is the expected state when not defined
 	default:
@@ -2359,13 +2363,13 @@ func handleBackport(e event, gc githubClient, jc jiraclient.Client, repoOptions 
 	}
 	missingDependencies := sets.New[string]()
 	childBranches := make(map[string][]string)
-	var cherrypickBranches string
+	var cherrypickBranches strings.Builder
 	// sort for deterministic tests
 	existingBranches := append(e.backportBranches, e.baseRef)
 	sort.Strings(existingBranches)
 	existingBranchesSet := sets.New(existingBranches...)
 	for _, branch := range e.backportBranches {
-		cherrypickBranches += fmt.Sprintf("\n/cherrypick %s", branch)
+		fmt.Fprintf(&cherrypickBranches, "\n/cherrypick %s", branch)
 		if _, ok := repoOptions[branch]; !ok {
 			continue
 		}
@@ -2387,13 +2391,15 @@ func handleBackport(e event, gc githubClient, jc jiraclient.Client, repoOptions 
 				branchExists = true
 			}
 			if !branchExists {
-				message := dependentBranches[0]
+				var message strings.Builder
+				message.WriteString(dependentBranches[0])
 				if len(dependentBranches) > 0 {
 					for _, dependentBranch := range dependentBranches[1:] {
-						message += " OR " + dependentBranch
+						message.WriteString(" OR ")
+						message.WriteString(dependentBranch)
 					}
 				}
-				missingDependencies.Insert(message + ", ")
+				missingDependencies.Insert(message.String() + ", ")
 			} else {
 				for _, dependentBranch := range dependentBranches {
 					childBranches[dependentBranch] = append(childBranches[dependentBranch], branch)
@@ -2402,13 +2408,16 @@ func handleBackport(e event, gc githubClient, jc jiraclient.Client, repoOptions 
 		}
 	}
 	if len(missingDependencies) != 0 {
-		message := "Missing required branches for backport chain:\n"
+		var message strings.Builder
+		message.WriteString("Missing required branches for backport chain:\n")
 		errorMsgs := missingDependencies.UnsortedList()
 		sort.Strings(errorMsgs)
 		for _, errorMsg := range errorMsgs {
-			message += "- " + errorMsg + "\n"
+			message.WriteString("- ")
+			message.WriteString(errorMsg)
+			message.WriteString("\n")
 		}
-		return comment(message)
+		return comment(message.String())
 	}
 	createdIssuesMessageLines := []string{}
 	for _, refIssue := range e.issues {
@@ -2444,7 +2453,7 @@ func handleBackport(e event, gc githubClient, jc jiraclient.Client, repoOptions 
 	// make message deterministic for tests
 	sort.Strings(createdIssuesMessageLines)
 	createdIssuesMessage := strings.Join(createdIssuesMessageLines, "\n")
-	return comment(fmt.Sprintf("The following backport issues have been created:\n%s\n\nQueuing cherrypicks to the requested branches to be created after this PR merges:%s", createdIssuesMessage, cherrypickBranches))
+	return comment(fmt.Sprintf("The following backport issues have been created:\n%s\n\nQueuing cherrypicks to the requested branches to be created after this PR merges:%s", createdIssuesMessage, cherrypickBranches.String()))
 }
 
 // createLinkedJiras recursively creates all descendants of the provided parent issue based on the child branches map
@@ -2950,7 +2959,7 @@ func notifyQAContact(jc jiraclient.Client, ghc githubClient, log *logrus.Entry, 
 
 // searchIssuesWithPagination performs a paginated search using Jira API v3
 // It properly handles pagination by following nextPageToken until all results are retrieved
-func searchIssuesWithPagination(jc jiraclient.Client, jql string, pageSize int) ([]jira.Issue, error) {
+func searchIssuesWithPagination(jc jiraclient.Client, jql string, pageSize int) ([]jira.Issue, error) { //nolint:unused
 	var allIssues []jira.Issue
 	var nextPageToken string
 	pageNum := 1
@@ -3000,7 +3009,7 @@ func searchIssuesWithPagination(jc jiraclient.Client, jql string, pageSize int) 
 	return allIssues, nil
 }
 
-func getSprints(raw []interface{}) []jira.Sprint {
+func getSprints(raw []any) []jira.Sprint {
 	sprints := make([]jira.Sprint, 0, len(raw))
 	for _, v := range raw {
 		s, ok := v.(jira.Sprint)

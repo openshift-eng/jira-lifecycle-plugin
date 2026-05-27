@@ -18,3 +18,5 @@
 
 .idea/
 .dccache
+# local Claude settings; global Claude gitignore does not work in devcontainer
+.claude/settings.local.json

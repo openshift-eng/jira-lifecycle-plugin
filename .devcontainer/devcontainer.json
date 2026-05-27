@@ -16,7 +16,7 @@
 		"--security-opt=label=disable" // this is needed for SELinux enabled systems
 	],
 	"containerUser": "dev",
-	"updateRemoteUserUID": true,
+	"updateRemoteUserUID": false,
 	"containerEnv": {
 		"HOME": "/home/dev"
 	}

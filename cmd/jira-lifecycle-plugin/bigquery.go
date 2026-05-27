@@ -55,10 +55,10 @@ func (i *VerificationInfo) Save() (map[string]bigquery.Value, string, error) {
 func (f *fakeBigQueryInserter) Put(ctx context.Context, data any) error {
 	info, ok := data.(VerificationInfo)
 	if !ok {
-		return errors.New("Data is not a VerficationInfo struct")
+		return errors.New("data is not a VerficationInfo struct")
 	}
 	if info.Timestamp.IsZero() {
-		return errors.New("Time is unset")
+		return errors.New("time is unset")
 	}
 	// set time of struct to zero for unit tests
 	info.Timestamp = time.Time{}
