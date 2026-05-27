@@ -10,22 +10,35 @@ import (
 )
 
 const (
-	QAContactField           = "customfield_10470"
-	SeverityField            = "customfield_10840"
-	TargetVersionField       = "customfield_10855"
-	ReleaseBlockerField      = "customfield_10847"
-	ReleaseNoteTextField     = "customfield_10783"
-	SprintField              = "customfield_10020"
-	ReleaseNoteTypeField     = "customfield_10785"
-	ContributorsField        = "customfield_10479"
-	RankField                = "customfield_10019" // "customfield_10019": "Rank"
-	DateOfFirstResponseField = "customfield_10024" // "customfield_10024": "[CHART] Date of First Response"
-	TimeInStatusField        = "customfield_10025" // "customfield_10025": "[CHART] Time in Status"
-	MeanTimeToAcknowledge    = "customfield_10962" // "customfield_10962": "MTTA" - Mean Time to Acknowledge
-	MeanTimeToResolution     = "customfield_10963" // "customfield_10963": "MTTR" - Mean Time to Resolution
-	TimeToResolution         = "customfield_10323" // "customfield_10323": "Time to resolution"
-	TimeToFirstResponse      = "customfield_10324" // "customfield_10324": "Time to first response"
+	QAContactField       = "customfield_10470"
+	SeverityField        = "customfield_10840"
+	TargetVersionField   = "customfield_10855"
+	ReleaseBlockerField  = "customfield_10847"
+	ReleaseNoteTextField = "customfield_10783"
+	SprintField          = "customfield_10020"
+	ReleaseNoteTypeField = "customfield_10785"
+	ContributorsField    = "customfield_10479"
 )
+
+var CustomFieldsToDelete = []string{
+	"comment",
+	"environment",
+	"issuelinks",
+	"worklog",
+	"customfield_10019", // "Rank"
+	"customfield_10024", // "[CHART] Date of First Response"
+	"customfield_10025", // "[CHART] Time in Status"
+	"customfield_10962", // "MTTA" - Mean Time to Acknowledge
+	"customfield_10963", // "MTTR" - Mean Time to Resolution
+	"customfield_10323", // "Time to resolution"
+	"customfield_10324", // "Time to first response"
+	"customfield_10414", // "Children count"
+	"customfield_10427", // "Updated by users count"
+	"customfield_10428", // "Issue link count"
+	"customfield_10429", // "Subtask count"
+	"customfield_10430", // "Comment count"
+	"customfield_10431", // "Attachment count"
+}
 
 // GetUnknownField will attempt to get the specified field from the Unknowns struct and unmarshal
 // the value into the provided function. If the field is not set, the first return value of this

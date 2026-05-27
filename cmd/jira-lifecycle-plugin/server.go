@@ -2212,14 +2212,9 @@ func createCherryPickBug(jc jiraclient.Client, bug *jira.Issue, branch string, o
 	bugCopy.Fields = &copyFields
 	// TODO: these fields can cause the clone to fail if not manually removed. It may be better to
 	// perform some recursion when cloning issues, as these only error when everything else is correct...
-	delete(bugCopy.Fields.Unknowns, "environment")
-	delete(bugCopy.Fields.Unknowns, helpers.RankField)
-	delete(bugCopy.Fields.Unknowns, helpers.DateOfFirstResponseField)
-	delete(bugCopy.Fields.Unknowns, helpers.TimeInStatusField)
-	delete(bugCopy.Fields.Unknowns, helpers.MeanTimeToAcknowledge)
-	delete(bugCopy.Fields.Unknowns, helpers.MeanTimeToResolution)
-	delete(bugCopy.Fields.Unknowns, helpers.TimeToResolution)
-	delete(bugCopy.Fields.Unknowns, helpers.TimeToFirstResponse)
+	for _, field := range helpers.CustomFieldsToDelete {
+		delete(bugCopy.Fields.Unknowns, field)
+	}
 	// Attachments cannot be set via the Create Issue API; they must be uploaded separately
 	bugCopy.Fields.Attachments = nil
 	// This is the sprint field; sprints are handled by a custom plugin, and the data given to us via
