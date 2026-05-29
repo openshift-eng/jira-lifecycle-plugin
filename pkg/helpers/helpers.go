@@ -21,10 +21,6 @@ const (
 )
 
 var CustomFieldsToDelete = []string{
-	"comment",
-	"environment",
-	"issuelinks",
-	"worklog",
 	"customfield_10019", // "Rank"
 	"customfield_10024", // "[CHART] Date of First Response"
 	"customfield_10025", // "[CHART] Time in Status"
