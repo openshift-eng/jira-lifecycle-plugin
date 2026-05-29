@@ -2219,8 +2219,12 @@ func createCherryPickBug(jc jiraclient.Client, bug *jira.Issue, branch string, o
 	for _, field := range helpers.CustomFieldsToDelete {
 		delete(bugCopy.Fields.Unknowns, field)
 	}
-	// Attachments cannot be set via the Create Issue API; they must be uploaded separately
+	// The following Fields cannot be set via the Create Issue API; they must be uploaded separately
 	bugCopy.Fields.Attachments = nil
+	bugCopy.Fields.Comments = nil
+	bugCopy.Fields.Environment = ""
+	bugCopy.Fields.IssueLinks = nil
+	bugCopy.Fields.Worklog = nil
 	// This is the sprint field; sprints are handled by a custom plugin, and the data given to us via
 	// GetIssue is invalid for setting the field ourselves
 	sprintField := bugCopy.Fields.Unknowns[helpers.SprintField]

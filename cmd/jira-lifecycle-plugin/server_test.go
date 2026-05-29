@@ -1937,10 +1937,8 @@ Instructions for interacting with me using PR comments are available [here](http
 			merged: false,
 			closed: true,
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
-				Status: &jira.Status{Name: "POST"},
+				Comments: nil,
+				Status:   &jira.Status{Name: "POST"},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField: severityCritical,
 				},
@@ -1970,8 +1968,6 @@ Instructions for interacting with me using PR comments are available [here](http
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "NEW"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}, {
 					Body:       "Bug status changed to NEW as previous linked PR https://github.com/org/repo/pull/1 has been closed",
 					Visibility: PrivateVisibility,
 				}}},
@@ -1994,10 +1990,8 @@ Instructions for interacting with me using PR comments are available [here](http
 			merged: false,
 			closed: true,
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
-				Status: &jira.Status{Name: "POST"},
+				Comments: nil,
+				Status:   &jira.Status{Name: "POST"},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField: severityCritical,
 				},
@@ -2031,8 +2025,6 @@ Instructions for interacting with me using PR comments are available [here](http
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "NEW2"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}, {
 					Body:       "Bug status changed to NEW as previous linked PR https://github.com/org/repo/pull/1 has been closed",
 					Visibility: PrivateVisibility,
 				}}},
@@ -2058,10 +2050,8 @@ Instructions for interacting with me using PR comments are available [here](http
 			closed:                true,
 			replaceReferencedBugs: []referencedIssue{{Project: "OCPBUGS", ID: "123", IsBug: true}, {Project: "OCPBUGS", ID: "124", IsBug: true}},
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
-				Status: &jira.Status{Name: "POST"},
+				Comments: nil,
+				Status:   &jira.Status{Name: "POST"},
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField: severityCritical,
 				},
@@ -2109,8 +2099,6 @@ Instructions for interacting with me using PR comments are available [here](http
 			expectedIssues: []*jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Status: &jira.Status{Name: "NEW"},
 				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}, {
 					Body:       "Bug status changed to NEW as previous linked PR https://github.com/org/repo/pull/1 has been closed",
 					Visibility: PrivateVisibility,
 				}}},
@@ -2219,9 +2207,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Assignee: &jira.User{Name: "testUser"},
 				Status:   &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments: nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -2253,9 +2239,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Assignee:    &jira.User{Name: "testUser"},
 				Status:      &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments:    nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -2274,9 +2258,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Assignee: &jira.User{Name: "testUser"},
 				Reporter: &jira.User{AccountID: "inactive-user-id", Name: "inactiveUser", Active: true},
 				Status:   &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments: nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -2308,9 +2290,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Assignee:    &jira.User{Name: "testUser"},
 				Status:      &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments:    nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -2328,9 +2308,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Assignee: &jira.User{Name: "testUser"},
 				Reporter: &jira.User{AccountID: "active-user-id", Name: "activeUser", Active: true},
 				Status:   &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments: nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -2363,9 +2341,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Reporter:    &jira.User{AccountID: "active-user-id", Name: "activeUser", Active: true},
 				Assignee:    &jira.User{Name: "testUser"},
 				Status:      &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments:    nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -2383,9 +2359,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Assignee: &jira.User{Name: "testUser"},
 				Reporter: &jira.User{AccountID: "deleted-user-id", Name: "deletedUser", Active: true},
 				Status:   &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments: nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -2417,9 +2391,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Assignee:    &jira.User{Name: "testUser"},
 				Status:      &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments:    nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -2436,9 +2408,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Assignee: &jira.User{Name: "testUser"},
 				Status:   &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments: nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -2471,9 +2441,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Assignee:    &jira.User{Name: "testUser"},
 				Status:      &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments:    nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -2490,9 +2458,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Assignee: &jira.User{Name: "testUser"},
 				Status:   &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments: nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -2525,9 +2491,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Assignee:    &jira.User{Name: "testUser"},
 				Status:      &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments:    nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -2545,9 +2509,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Assignee: &jira.User{Name: "testUser"},
 				Status:   &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments: nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -2580,9 +2542,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Assignee:    &jira.User{Name: "testUser"},
 				Status:      &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments:    nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -2600,9 +2560,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Assignee: &jira.User{Name: "testUser"},
 				Status:   &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments: nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -2634,9 +2592,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Assignee:    &jira.User{Name: "testUser"},
 				Status:      &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments:    nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -2654,9 +2610,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Assignee: &jira.User{Name: "testUser"},
 				Status:   &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments: nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -2668,9 +2622,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			}}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				Assignee: &jira.User{Name: "testUser"},
 				Status:   &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments: nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -2704,9 +2656,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments:    nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -2720,9 +2670,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-124. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments:    nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -2753,9 +2701,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Assignee: &jira.User{Name: "testUser"},
 				Status:   &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments: nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -2767,9 +2713,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			}}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				Assignee: &jira.User{Name: "testUser"},
 				Status:   &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments: nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -2813,9 +2757,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Assignee:    &jira.User{Name: "defaultAssignee"},
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments:    nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -2829,9 +2771,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-124. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments:    nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -2862,9 +2802,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Assignee: &jira.User{Name: "testUser"},
 				Status:   &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments: nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -2897,9 +2835,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Assignee: &jira.User{Name: "testUser"},
 				Status:   &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments: nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -2934,9 +2870,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Assignee: &jira.User{Name: "testUser"},
 				Status:   &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments: nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -2969,9 +2903,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments:    nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -2988,9 +2920,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Assignee: &jira.User{Name: "testUser"},
 				Status:   &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments: nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -3002,9 +2932,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			}}, {ID: "2", Key: "OCPBUGS-124", Fields: &jira.IssueFields{
 				Assignee: &jira.User{Name: "testUser"},
 				Status:   &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments: nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -3040,9 +2968,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments:    nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -3056,9 +2982,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-124. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments:    nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -3089,9 +3013,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Assignee: &jira.User{Name: "testUser"},
 				Status:   &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments: nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -3126,9 +3048,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Assignee:    &jira.User{Name: "testUser"},
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments:    nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -3143,10 +3063,8 @@ Instructions for interacting with me using PR comments are available [here](http
 		{
 			name: "parent PR of cherrypick not existing results in error",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
-				Status: &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Status:   &jira.Status{Name: "CLOSED"},
+				Comments: nil,
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      severityCritical,
 					helpers.TargetVersionField: &v2,
@@ -3173,10 +3091,8 @@ Instructions for interacting with me using PR comments are available [here](http
 		{
 			name: "failure to obtain parent bug for cherrypick results in error",
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
-				Status: &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Status:   &jira.Status{Name: "CLOSED"},
+				Comments: nil,
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      severityCritical,
 					helpers.TargetVersionField: &v2,
@@ -3214,9 +3130,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Assignee: &jira.User{Name: "testUser"},
 				Status:   &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments: nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -3258,9 +3172,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				IssueLinks: []*jira.IssueLink{&cloneLinkTo124, &blocksLinkTo124},
 				Status:     &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments:   nil,
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      severityCritical,
 					helpers.TargetVersionField: &v2,
@@ -3297,9 +3209,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				IssueLinks: []*jira.IssueLink{&cloneLinkTo124, &blocksLinkTo124},
 				Labels:     []string{"random-label", "random-label-2", "jlp-v2:OCPBUGS-125", "jlp-v1:OCPBUGS-124"},
 				Status:     &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments:   nil,
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      severityCritical,
 					helpers.TargetVersionField: &v2,
@@ -3329,9 +3239,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Assignee:   &jira.User{Name: "testUser"},
 				IssueLinks: []*jira.IssueLink{&cloneLinkTo124, &blocksLinkTo124},
 				Status:     &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments:   nil,
 				Unknowns: tcontainer.MarshalMap{
 					helpers.SeverityField:      severityCritical,
 					helpers.TargetVersionField: &v2,
@@ -3409,9 +3317,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Assignee: &jira.User{Name: "testUser"},
 				Status:   &jira.Status{Name: "CLOSED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments: nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -3451,9 +3357,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "CLOSED"}, // during a clone on a real jira server, this field would get unset/reset; the fake client copies
 				IssueLinks:  []*jira.IssueLink{&cloneOutward1, &blockInward1},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments:    nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -3648,9 +3552,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Assignee: &jira.User{Name: "testUser"},
 				Status:   &jira.Status{Name: "MODIFIED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments: nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -3699,9 +3601,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Labels:     []string{"jlp-v1:OCPBUGS-127", "jlp-v2:OCPBUGS-126", "jlp-v3:OCPBUGS-125", "jlp-v4:OCPBUGS-124"},
 				Status:     &jira.Status{Name: "MODIFIED"},
 				IssueLinks: []*jira.IssueLink{&cloneInward2, &blockOutward2},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments:   nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -3714,9 +3614,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Description: "This is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "MODIFIED"}, // during a clone on a real jira server, this field would get unset/reset; the fake client copies
 				IssueLinks:  []*jira.IssueLink{&cloneOutward1, &blockInward1, &cloneInward3, &blockOutward3},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments:    nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -3729,9 +3627,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Description: "This is a clone of issue OCPBUGS-124. The following is the description of the original issue: \n---\nThis is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "MODIFIED"}, // during a clone on a real jira server, this field would get unset/reset; the fake client copies
 				IssueLinks:  []*jira.IssueLink{&cloneOutward2, &blockInward2, &cloneInward4, &blockOutward4},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments:    nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -3744,9 +3640,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Description: "This is a clone of issue OCPBUGS-125. The following is the description of the original issue: \n---\nThis is a clone of issue OCPBUGS-124. The following is the description of the original issue: \n---\nThis is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "MODIFIED"}, // during a clone on a real jira server, this field would get unset/reset; the fake client copies
 				IssueLinks:  []*jira.IssueLink{&cloneOutward3, &blockInward3, &cloneInward5, &blockOutward5},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments:    nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -3759,9 +3653,7 @@ Instructions for interacting with me using PR comments are available [here](http
 				Description: "This is a clone of issue OCPBUGS-126. The following is the description of the original issue: \n---\nThis is a clone of issue OCPBUGS-125. The following is the description of the original issue: \n---\nThis is a clone of issue OCPBUGS-124. The following is the description of the original issue: \n---\nThis is a clone of issue OCPBUGS-123. The following is the description of the original issue: \n---\n",
 				Status:      &jira.Status{Name: "MODIFIED"}, // during a clone on a real jira server, this field would get unset/reset; the fake client copies
 				IssueLinks:  []*jira.IssueLink{&cloneOutward4, &blockInward4},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments:    nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
@@ -3776,9 +3668,7 @@ Instructions for interacting with me using PR comments are available [here](http
 			issues: []jira.Issue{{ID: "1", Key: "OCPBUGS-123", Fields: &jira.IssueFields{
 				Assignee: &jira.User{Name: "testUser"},
 				Status:   &jira.Status{Name: "MODIFIED"},
-				Comments: &jira.Comments{Comments: []*jira.Comment{{
-					Body: "This is a bug",
-				}}},
+				Comments: nil,
 				Project: jira.Project{
 					Name: "OCPBUGS",
 					Key:  "OCPBUGS",
