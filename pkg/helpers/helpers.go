@@ -34,6 +34,9 @@ var CustomFieldsToDelete = []string{
 	"customfield_10429", // "Subtask count"
 	"customfield_10430", // "Comment count"
 	"customfield_10431", // "Attachment count"
+	"customfield_10978", // "SFDC Cases Counter",
+	"customfield_10979", // "SFDC Cases Links",
+	"customfield_10980", // "SFDC Cases Open",
 }
 
 // GetUnknownField will attempt to get the specified field from the Unknowns struct and unmarshal
