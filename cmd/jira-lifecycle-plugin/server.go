@@ -1006,55 +1006,64 @@ func insertLinksIntoComment(body string, issueNames []string, jiraBaseURL string
 }
 
 func insertLinksIntoLine(line string, issueNames []string, jiraBaseURL string) string {
-	for _, issue := range issueNames {
+	sorted := make([]string, len(issueNames))
+	copy(sorted, issueNames)
+	sort.Slice(sorted, func(i, j int) bool {
+		return len(sorted[i]) > len(sorted[j])
+	})
+	for _, issue := range sorted {
 		replacement := fmt.Sprintf("[%s](%s/browse/%s)", issue, strings.TrimSuffix(jiraBaseURL, "/"), issue)
 		line = replaceStringIfNeeded(line, issue, replacement)
 	}
 	return line
 }
 
-// replaceStringIfNeeded replaces a string if it is not prefixed by:
-// * `[` which we use as heuristic for "Already replaced",
-// * `/` which we use as heuristic for "Part of a link in a previous replacement",
-// * ``` (backtick) which we use as heuristic for "Inline code".
-// If golang would support back-references in regex replacements, this would have been a lot
+// replaceStringIfNeeded replaces occurrences of old with new, skipping any
+// match that is not a standalone reference (e.g. part of a longer identifier,
+// already inside a markdown link, a URL path, or inline code).
 func replaceStringIfNeeded(text, old, new string) string {
 	if old == "" {
 		return text
 	}
 
 	var result strings.Builder
-
-	// Golangs stdlib has no strings.IndexAll, only funcs to get the first
-	// or last index for a substring. Definitions/condition/assignments are not
-	// in the header of the loop because that makes it completely unreadable.
-	var allOldIdx []int
-	var startingIdx int
+	start := 0
 	for {
-		idx := strings.Index(text[startingIdx:], old)
+		idx := strings.Index(text[start:], old)
 		if idx == -1 {
 			break
 		}
-		idx = startingIdx + idx
-		// Since we always look for a non-empty string, we know that idx++
-		// can not be out of bounds
-		allOldIdx = append(allOldIdx, idx)
-		startingIdx = idx + 1
-	}
-
-	startingIdx = 0
-	for _, idx := range allOldIdx {
-		result.WriteString(text[startingIdx:idx])
-		if idx == 0 || (text[idx-1] != '[' && text[idx-1] != '/') && text[idx-1] != '`' {
+		idx += start
+		result.WriteString(text[start:idx])
+		if isStandaloneMatch(text, idx, len(old)) {
 			result.WriteString(new)
 		} else {
 			result.WriteString(old)
 		}
-		startingIdx = idx + len(old)
+		start = idx + len(old)
 	}
-	result.WriteString(text[startingIdx:])
+	result.WriteString(text[start:])
 
 	return result.String()
+}
+
+// isStandaloneMatch returns true when the substring at text[idx:idx+length]
+// appears as an isolated reference — not embedded in a longer word, markdown
+// link, URL, or inline code.
+func isStandaloneMatch(text string, idx, length int) bool {
+	if idx > 0 {
+		prev := text[idx-1]
+		switch {
+		case prev == '[', prev == '/', prev == '`':
+			return false
+		case prev >= 'a' && prev <= 'z', prev >= 'A' && prev <= 'Z', prev >= '0' && prev <= '9':
+			return false
+		}
+	}
+	if end := idx + length; end < len(text) && text[end] >= '0' && text[end] <= '9' {
+		return false
+	}
+	return true
 }
 
 func prURLFromCommentURL(url string) string {

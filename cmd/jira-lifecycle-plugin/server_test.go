@@ -5457,6 +5457,68 @@ is very important` + "\n``ABC-123`` and `ABC-123` shouldn't be replaced, as well
 	}
 }
 
+func TestInsertLinksIntoLineMultipleIssues(t *testing.T) {
+	t.Parallel()
+	jiraURL := strings.TrimSuffix(fakejira.FakeJiraUrl, "/")
+	testCases := []struct {
+		name       string
+		line       string
+		issueNames []string
+		expected   string
+	}{
+		{
+			name:       "shorter issue key that is a substring of a longer one does not corrupt it",
+			line:       "XPROJ-1560: fix something",
+			issueNames: []string{"PROJ-1", "XPROJ-1560"},
+			expected:   "[XPROJ-1560](https://my-jira.com/browse/XPROJ-1560): fix something",
+		},
+		{
+			name:       "longer issue key replaced correctly regardless of slice order",
+			line:       "XPROJ-1560: fix something",
+			issueNames: []string{"XPROJ-1560", "PROJ-1"},
+			expected:   "[XPROJ-1560](https://my-jira.com/browse/XPROJ-1560): fix something",
+		},
+		{
+			name:       "both issues replaced when they appear separately in the line",
+			line:       "XPROJ-1560 and PROJ-1 are related",
+			issueNames: []string{"PROJ-1", "XPROJ-1560"},
+			expected:   "[XPROJ-1560](https://my-jira.com/browse/XPROJ-1560) and [PROJ-1](https://my-jira.com/browse/PROJ-1) are related",
+		},
+		{
+			name:       "issue key after hyphen is still replaced",
+			line:       "fix-XPROJ-1560: something",
+			issueNames: []string{"PROJ-1", "XPROJ-1560"},
+			expected:   "fix-[XPROJ-1560](https://my-jira.com/browse/XPROJ-1560): something",
+		},
+		{
+			name:       "issue key in parentheses is replaced",
+			line:       "(XPROJ-1560) and (PROJ-1)",
+			issueNames: []string{"PROJ-1", "XPROJ-1560"},
+			expected:   "([XPROJ-1560](https://my-jira.com/browse/XPROJ-1560)) and ([PROJ-1](https://my-jira.com/browse/PROJ-1))",
+		},
+		{
+			name:       "shorter issue number that is a prefix of a longer one is not replaced",
+			line:       "PROJ-1560: fix",
+			issueNames: []string{"PROJ-1"},
+			expected:   "PROJ-1560: fix",
+		},
+		{
+			name:       "issue key glued to preceding text is not replaced",
+			line:       "v2PROJ-123: fix",
+			issueNames: []string{"PROJ-123"},
+			expected:   "v2PROJ-123: fix",
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			actual := insertLinksIntoLine(tc.line, tc.issueNames, jiraURL)
+			if diff := cmp.Diff(actual, tc.expected); diff != "" {
+				t.Errorf("insertLinksIntoLine result differs from expected:\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestHelpProvider(t *testing.T) {
 	rawConfig := `disabled_jira_projects:
 - "private-project"
