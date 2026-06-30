@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -3576,10 +3575,10 @@ Instructions for interacting with me using PR comments are available [here](http
 				},
 			},
 			expectedComment: `org/repo#1:@user: The following backport issues have been created:
-- [OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) for branch v4
-- [OCPBUGS-125](https://my-jira.com/browse/OCPBUGS-125) for branch v3
-- [OCPBUGS-126](https://my-jira.com/browse/OCPBUGS-126) for branch v2
-- [OCPBUGS-127](https://my-jira.com/browse/OCPBUGS-127) for branch v1
+- [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) for branch v4
+- [Jira Issue OCPBUGS-125](https://my-jira.com/browse/OCPBUGS-125) for branch v3
+- [Jira Issue OCPBUGS-126](https://my-jira.com/browse/OCPBUGS-126) for branch v2
+- [Jira Issue OCPBUGS-127](https://my-jira.com/browse/OCPBUGS-127) for branch v1
 
 Queuing cherrypicks to the requested branches to be created after this PR merges:
 /cherrypick v1
@@ -5341,117 +5340,6 @@ func TestStripMarkdownLinks(t *testing.T) {
 			actual := stripMarkdownLinks(tc.input)
 			if actual != tc.expected {
 				t.Errorf("stripMarkdownLinks(%q):\n  got:  %q\n  want: %q", tc.input, actual, tc.expected)
-			}
-		})
-	}
-}
-
-func TestInsertLinksIntoComment(t *testing.T) {
-	t.Parallel()
-	const issueName = "ABC-123"
-	testCases := []struct {
-		name     string
-		body     string
-		expected string
-	}{
-		{
-			name: "Multiline body starting with issue name",
-			body: `ABC-123: Fix problems:
-* First problem
-* Second problem`,
-			expected: `[ABC-123](https://my-jira.com/browse/ABC-123): Fix problems:
-* First problem
-* Second problem`,
-		},
-		{
-			name: "Multiline body starting with already replaced issue name",
-			body: `[ABC-123](https://my-jira.com/browse/ABC-123): Fix problems:
-* First problem
-* Second problem`,
-			expected: `[ABC-123](https://my-jira.com/browse/ABC-123): Fix problems:
-* First problem
-* Second problem`,
-		},
-		{
-			name: "Multiline body with multiple occurrence in the middle",
-			body: `This change:
-* Does stuff related to ABC-123
-* And even more stuff related to ABC-123
-* But also something else`,
-			expected: `This change:
-* Does stuff related to [ABC-123](https://my-jira.com/browse/ABC-123)
-* And even more stuff related to [ABC-123](https://my-jira.com/browse/ABC-123)
-* But also something else`,
-		},
-		{
-			name: "Multiline body with multiple occurrence in the middle, some already replaced",
-			body: `This change:
-* Does stuff related to [ABC-123](https://my-jira.com/browse/ABC-123)
-* And even more stuff related to ABC-123
-* But also something else`,
-			expected: `This change:
-* Does stuff related to [ABC-123](https://my-jira.com/browse/ABC-123)
-* And even more stuff related to [ABC-123](https://my-jira.com/browse/ABC-123)
-* But also something else`,
-		},
-		{
-			name: "Multiline body with issue name at the end",
-			body: `This change:
-is very important
-because of ABC-123`,
-			expected: `This change:
-is very important
-because of [ABC-123](https://my-jira.com/browse/ABC-123)`,
-		},
-		{
-			name: "Multiline body with already replaced issue name at the end",
-			body: `This change:
-is very important
-because of [ABC-123](https://my-jira.com/browse/ABC-123)`,
-			expected: `This change:
-is very important
-because of [ABC-123](https://my-jira.com/browse/ABC-123)`,
-		},
-		{
-			name:     "Pasted links are not replaced, as they are already clickable",
-			body:     "https://my-jira.com/browse/ABC-123",
-			expected: "https://my-jira.com/browse/ABC-123",
-		},
-		{
-			name: "code section is not replaced",
-			body: `This change:
-is very important` + "\n```bash\n" +
-				`ABC-123` +
-				"\n```\n" + `ABC-123
-`,
-			expected: `This change:
-is very important` + "\n```bash\n" +
-				`ABC-123` +
-				"\n```\n" + `[ABC-123](https://my-jira.com/browse/ABC-123)
-`,
-		},
-		{
-			name: "inline code is not replaced",
-			body: `This change:
-is very important` + "\n``ABC-123`` and `ABC-123` shouldn't be replaced, as well as ``ABC-123: text text``. " +
-				`ABC-123 should be replaced.
-`,
-			expected: `This change:
-is very important` + "\n``ABC-123`` and `ABC-123` shouldn't be replaced, as well as ``ABC-123: text text``. " +
-				`[ABC-123](https://my-jira.com/browse/ABC-123) should be replaced.
-`,
-		},
-		{
-			name:     "Multiline codeblock that is denoted through four leading spaces",
-			body:     "I meant to do this test:\r\n\r\n    operator_test.go:1914: failed to read output from pod unique-id-header-test-1: container \"curl\" in pod \"unique-id-header-ABC-123\" is waiting to start: ContainerCreating\r\n\r\n",
-			expected: "I meant to do this test:\r\n\r\n    operator_test.go:1914: failed to read output from pod unique-id-header-test-1: container \"curl\" in pod \"unique-id-header-ABC-123\" is waiting to start: ContainerCreating\r\n\r\n",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			if diff := cmp.Diff(insertLinksIntoComment(tc.body, []string{issueName}, strings.TrimSuffix(fakejira.FakeJiraUrl, "/")), tc.expected); diff != "" {
-				t.Errorf("actual result differs from expected result: %s", diff)
 			}
 		})
 	}

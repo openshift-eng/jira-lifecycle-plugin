@@ -965,98 +965,6 @@ func isVerifiedLater(prLabels []github.Label) bool {
 	return false
 }
 
-type line struct {
-	content   string
-	replacing bool
-}
-
-func getLines(text string) []line {
-	var lines []line
-	rawLines := strings.Split(text, "\n")
-	var prefixCount int
-	for _, rawLine := range rawLines {
-		if strings.HasPrefix(rawLine, "```") {
-			prefixCount++
-		}
-		l := line{content: rawLine, replacing: true}
-
-		// Literal codeblocks
-		if strings.HasPrefix(rawLine, "    ") {
-			l.replacing = false
-		}
-		if prefixCount%2 == 1 {
-			l.replacing = false
-		}
-		lines = append(lines, l)
-	}
-	return lines
-}
-
-func insertLinksIntoComment(body string, issueNames []string, jiraBaseURL string) string {
-	var linesWithLinks []string
-	lines := getLines(body)
-	for _, line := range lines {
-		if line.replacing {
-			linesWithLinks = append(linesWithLinks, insertLinksIntoLine(line.content, issueNames, jiraBaseURL))
-			continue
-		}
-		linesWithLinks = append(linesWithLinks, line.content)
-	}
-	return strings.Join(linesWithLinks, "\n")
-}
-
-func insertLinksIntoLine(line string, issueNames []string, jiraBaseURL string) string {
-	for _, issue := range issueNames {
-		replacement := fmt.Sprintf("[%s](%s/browse/%s)", issue, strings.TrimSuffix(jiraBaseURL, "/"), issue)
-		line = replaceStringIfNeeded(line, issue, replacement)
-	}
-	return line
-}
-
-// replaceStringIfNeeded replaces a string if it is not prefixed by:
-// * `[` which we use as heuristic for "Already replaced",
-// * `/` which we use as heuristic for "Part of a link in a previous replacement",
-// * ``` (backtick) which we use as heuristic for "Inline code".
-// If golang would support back-references in regex replacements, this would have been a lot
-func replaceStringIfNeeded(text, old, new string) string {
-	if old == "" {
-		return text
-	}
-
-	var result strings.Builder
-
-	// Golangs stdlib has no strings.IndexAll, only funcs to get the first
-	// or last index for a substring. Definitions/condition/assignments are not
-	// in the header of the loop because that makes it completely unreadable.
-	var allOldIdx []int
-	var startingIdx int
-	for {
-		idx := strings.Index(text[startingIdx:], old)
-		if idx == -1 {
-			break
-		}
-		idx = startingIdx + idx
-		// Since we always look for a non-empty string, we know that idx++
-		// can not be out of bounds
-		allOldIdx = append(allOldIdx, idx)
-		startingIdx = idx + 1
-	}
-
-	startingIdx = 0
-	for _, idx := range allOldIdx {
-		result.WriteString(text[startingIdx:idx])
-		if idx == 0 || (text[idx-1] != '[' && text[idx-1] != '/') && text[idx-1] != '`' {
-			result.WriteString(new)
-		} else {
-			result.WriteString(old)
-		}
-		startingIdx = idx + len(old)
-	}
-	result.WriteString(text[startingIdx:])
-
-	return result.String()
-}
-
 func prURLFromCommentURL(url string) string {
 	newURL := url
 	if idx := strings.Index(url, "#"); idx != -1 {
@@ -2444,7 +2352,7 @@ func handleBackport(e event, gc githubClient, jc jiraclient.Client, repoOptions 
 		var newLabels []string
 		for key, branch := range createdIssues {
 			newLabels = append(newLabels, fmt.Sprintf("jlp-%s:%s", branch, key))
-			createdIssuesMessageLines = append(createdIssuesMessageLines, insertLinksIntoLine(fmt.Sprintf("- %s for branch %s", key, branch), []string{key}, jc.JiraURL()))
+			createdIssuesMessageLines = append(createdIssuesMessageLines, fmt.Sprintf("- %s for branch %s", fmt.Sprintf(issueLink, key, jc.JiraURL(), key), branch))
 		}
 		// sorting the labels isn't necessary for production but helps with tests
 		sort.Strings(newLabels)
