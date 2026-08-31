@@ -14,24 +14,24 @@ func TestGetActiveSprintIDs(t *testing.T) {
 	active1 := jira.Sprint{
 		ID:        57955,
 		Name:      "uShift Sprint 248",
-		EndDate:   TimePtr(time.Date(2024, 2, 5, 9, 0, 0, 0, time.UTC)),
-		StartDate: TimePtr(time.Date(2024, 1, 15, 9, 0, 0, 0, time.UTC)),
+		EndDate:   new(time.Date(2024, 2, 5, 9, 0, 0, 0, time.UTC)),
+		StartDate: new(time.Date(2024, 1, 15, 9, 0, 0, 0, time.UTC)),
 		State:     "active",
 	}
 	closed1 := jira.Sprint{
 		ID:           57484,
 		Name:         "uShift Sprint 247",
-		EndDate:      TimePtr(time.Date(2024, 1, 15, 17, 7, 0, 0, time.UTC)),
-		StartDate:    TimePtr(time.Date(2023, 12, 25, 17, 7, 0, 0, time.UTC)),
-		CompleteDate: TimePtr(time.Date(2024, 1, 15, 8, 15, 40, 614, time.UTC)),
+		EndDate:      new(time.Date(2024, 1, 15, 17, 7, 0, 0, time.UTC)),
+		StartDate:    new(time.Date(2023, 12, 25, 17, 7, 0, 0, time.UTC)),
+		CompleteDate: new(time.Date(2024, 1, 15, 8, 15, 40, 614, time.UTC)),
 		State:        "closed",
 	}
 	closed2 := jira.Sprint{
 		ID:           57484,
 		Name:         "uShift Sprint 247",
-		EndDate:      TimePtr(time.Date(2024, 1, 13, 8, 0, 0, 0, time.UTC)),
-		StartDate:    TimePtr(time.Date(2023, 12, 25, 8, 0, 0, 0, time.UTC)),
-		CompleteDate: TimePtr(time.Date(2024, 1, 15, 10, 54, 35, 488, time.UTC)),
+		EndDate:      new(time.Date(2024, 1, 13, 8, 0, 0, 0, time.UTC)),
+		StartDate:    new(time.Date(2023, 12, 25, 8, 0, 0, 0, time.UTC)),
+		CompleteDate: new(time.Date(2024, 1, 15, 10, 54, 35, 488, time.UTC)),
 		State:        "closed",
 	}
 	var testCases = []struct {

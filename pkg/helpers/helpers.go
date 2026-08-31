@@ -196,6 +196,7 @@ func GetIssueContributors(issue *jira.Issue) (*[]Contributor, error) {
 	return obj, err
 }
 
+//go:fix inline
 func TimePtr(t time.Time) *time.Time {
-	return &t
+	return new(t)
 }

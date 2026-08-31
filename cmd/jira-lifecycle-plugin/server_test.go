@@ -100,16 +100,16 @@ func TestHandle(t *testing.T) {
 	active1 := jira.Sprint{
 		ID:        57955,
 		Name:      "uShift Sprint 248",
-		EndDate:   helpers.TimePtr(time.Date(2024, 2, 5, 9, 0, 0, 0, time.UTC)),
-		StartDate: helpers.TimePtr(time.Date(2024, 1, 15, 9, 0, 0, 0, time.UTC)),
+		EndDate:   new(time.Date(2024, 2, 5, 9, 0, 0, 0, time.UTC)),
+		StartDate: new(time.Date(2024, 1, 15, 9, 0, 0, 0, time.UTC)),
 		State:     "active",
 	}
 	closed1 := jira.Sprint{
 		ID:           57484,
 		Name:         "uShift Sprint 247",
-		EndDate:      helpers.TimePtr(time.Date(2024, 1, 15, 17, 7, 0, 0, time.UTC)),
-		StartDate:    helpers.TimePtr(time.Date(2023, 12, 25, 17, 7, 0, 0, time.UTC)),
-		CompleteDate: helpers.TimePtr(time.Date(2024, 1, 15, 8, 15, 40, 614, time.UTC)),
+		EndDate:      new(time.Date(2024, 1, 15, 17, 7, 0, 0, time.UTC)),
+		StartDate:    new(time.Date(2023, 12, 25, 17, 7, 0, 0, time.UTC)),
+		CompleteDate: new(time.Date(2024, 1, 15, 8, 15, 40, 614, time.UTC)),
 		State:        "closed",
 	}
 	jiraTransitions := []jira.Transition{
@@ -7856,7 +7856,7 @@ func TestValidateBug(t *testing.T) {
 		{
 			name:        "dependent bug with z-stream version matches configured GA version via prefix matching",
 			issue:       &jira.Issue{Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}}},
-			dependents:  []dependent{{key: "OCPBUGS-124", bugState: JiraBugState{Status: "MODIFIED"}, targetVersion: strPtr("4.22.z")}},
+			dependents:  []dependent{{key: "OCPBUGS-124", bugState: JiraBugState{Status: "MODIFIED"}, targetVersion: new("4.22.z")}},
 			options:     JiraBranchOptions{DependentBugTargetVersions: &[]string{"4.22.0"}},
 			valid:       true,
 			validations: []string{`dependent [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) targets the "4.22.z" version, which is one of the valid target versions: 4.22.0`, "bug has dependents"},
@@ -7864,7 +7864,7 @@ func TestValidateBug(t *testing.T) {
 		{
 			name:        "dependent bug with GA version matches configured z-stream version via prefix matching",
 			issue:       &jira.Issue{Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}}},
-			dependents:  []dependent{{key: "OCPBUGS-124", bugState: JiraBugState{Status: "MODIFIED"}, targetVersion: strPtr("4.22.0")}},
+			dependents:  []dependent{{key: "OCPBUGS-124", bugState: JiraBugState{Status: "MODIFIED"}, targetVersion: new("4.22.0")}},
 			options:     JiraBranchOptions{DependentBugTargetVersions: &[]string{"4.22.z"}},
 			valid:       true,
 			validations: []string{`dependent [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) targets the "4.22.0" version, which is one of the valid target versions: 4.22.z`, "bug has dependents"},
@@ -7872,7 +7872,7 @@ func TestValidateBug(t *testing.T) {
 		{
 			name:        "dependent bug with mismatched minor version fails prefix matching",
 			issue:       &jira.Issue{Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}}},
-			dependents:  []dependent{{key: "OCPBUGS-124", bugState: JiraBugState{Status: "MODIFIED"}, targetVersion: strPtr("4.23.0")}},
+			dependents:  []dependent{{key: "OCPBUGS-124", bugState: JiraBugState{Status: "MODIFIED"}, targetVersion: new("4.23.0")}},
 			options:     JiraBranchOptions{DependentBugTargetVersions: &[]string{"4.22.0"}},
 			valid:       false,
 			validations: []string{"bug has dependents"},
@@ -7881,7 +7881,7 @@ func TestValidateBug(t *testing.T) {
 		{
 			name:        "dependent bug exact match still works with prefix matching",
 			issue:       &jira.Issue{Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}}},
-			dependents:  []dependent{{key: "OCPBUGS-124", bugState: JiraBugState{Status: "MODIFIED"}, targetVersion: strPtr("4.22.0")}},
+			dependents:  []dependent{{key: "OCPBUGS-124", bugState: JiraBugState{Status: "MODIFIED"}, targetVersion: new("4.22.0")}},
 			options:     JiraBranchOptions{DependentBugTargetVersions: &[]string{"4.22.0"}},
 			valid:       true,
 			validations: []string{`dependent [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) targets the "4.22.0" version, which is one of the valid target versions: 4.22.0`, "bug has dependents"},
@@ -7889,7 +7889,7 @@ func TestValidateBug(t *testing.T) {
 		{
 			name:        "DFBUGS dependent bug uses exact matching, z-stream does not match GA",
 			issue:       &jira.Issue{Fields: &jira.IssueFields{Project: jira.Project{Key: "DFBUGS"}}},
-			dependents:  []dependent{{key: "DFBUGS-124", bugState: JiraBugState{Status: "MODIFIED"}, targetVersion: strPtr("odf-v1.1.z")}},
+			dependents:  []dependent{{key: "DFBUGS-124", bugState: JiraBugState{Status: "MODIFIED"}, targetVersion: new("odf-v1.1.z")}},
 			options:     JiraBranchOptions{DependentBugTargetVersions: &[]string{"odf-v1.1.1"}},
 			valid:       false,
 			validations: []string{"bug has dependents"},
@@ -7898,7 +7898,7 @@ func TestValidateBug(t *testing.T) {
 		{
 			name:        "DFBUGS dependent bug exact match works",
 			issue:       &jira.Issue{Fields: &jira.IssueFields{Project: jira.Project{Key: "DFBUGS"}}},
-			dependents:  []dependent{{key: "DFBUGS-124", bugState: JiraBugState{Status: "MODIFIED"}, targetVersion: strPtr("odf-v1.1.1")}},
+			dependents:  []dependent{{key: "DFBUGS-124", bugState: JiraBugState{Status: "MODIFIED"}, targetVersion: new("odf-v1.1.1")}},
 			options:     JiraBranchOptions{DependentBugTargetVersions: &[]string{"odf-v1.1.1"}},
 			valid:       true,
 			validations: []string{`dependent [Jira Issue DFBUGS-124](https://my-jira.com/browse/DFBUGS-124) targets the "odf-v1.1.1" version, which is one of the valid target versions: odf-v1.1.1`, "bug has dependents"},
@@ -7906,7 +7906,7 @@ func TestValidateBug(t *testing.T) {
 		{
 			name:        "dependent bug matches one of multiple configured versions via prefix matching",
 			issue:       &jira.Issue{Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}}},
-			dependents:  []dependent{{key: "OCPBUGS-124", bugState: JiraBugState{Status: "MODIFIED"}, targetVersion: strPtr("4.21.z")}},
+			dependents:  []dependent{{key: "OCPBUGS-124", bugState: JiraBugState{Status: "MODIFIED"}, targetVersion: new("4.21.z")}},
 			options:     JiraBranchOptions{DependentBugTargetVersions: &[]string{"4.22.0", "4.21.0"}},
 			valid:       true,
 			validations: []string{`dependent [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) targets the "4.21.z" version, which is one of the valid target versions: 4.22.0, 4.21.0`, "bug has dependents"},
@@ -7914,7 +7914,7 @@ func TestValidateBug(t *testing.T) {
 		{
 			name:        "dependent bug with openshift-prefixed version matches configured version via prefix matching",
 			issue:       &jira.Issue{Fields: &jira.IssueFields{Project: jira.Project{Key: "OCPBUGS"}}},
-			dependents:  []dependent{{key: "OCPBUGS-124", bugState: JiraBugState{Status: "MODIFIED"}, targetVersion: strPtr("openshift-4.22.z")}},
+			dependents:  []dependent{{key: "OCPBUGS-124", bugState: JiraBugState{Status: "MODIFIED"}, targetVersion: new("openshift-4.22.z")}},
 			options:     JiraBranchOptions{DependentBugTargetVersions: &[]string{"4.22.0"}},
 			valid:       true,
 			validations: []string{`dependent [Jira Issue OCPBUGS-124](https://my-jira.com/browse/OCPBUGS-124) targets the "openshift-4.22.z" version, which is one of the valid target versions: 4.22.0`, "bug has dependents"},
@@ -8637,8 +8637,4 @@ func TestValidateTargetVersion(t *testing.T) {
 			}
 		})
 	}
-}
-
-func strPtr(s string) *string {
-	return &s
 }

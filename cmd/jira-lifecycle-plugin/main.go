@@ -199,7 +199,7 @@ func main() {
 	if o.bigquerySecretFile != "" {
 		bigqueryClient, err := bigquery.NewClient(context.TODO(),
 			o.bigqueryProjectID,
-			option.WithCredentialsFile(o.bigquerySecretFile),
+			option.WithAuthCredentialsFile(option.ServiceAccount, o.bigquerySecretFile),
 		)
 		if err != nil {
 			logrus.WithError(err).Fatal("Failed to create Big Query client")
