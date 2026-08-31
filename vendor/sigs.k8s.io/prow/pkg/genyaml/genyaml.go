@@ -80,7 +80,7 @@ import (
 	"unicode"
 
 	"github.com/clarketm/json"
-	yaml3 "gopkg.in/yaml.v3"
+	yaml3 "go.yaml.in/yaml/v3"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
@@ -259,7 +259,7 @@ func fieldTag(field *ast.Field, tag string) string {
 // fieldName extracts the name of the field as it should appear in YAML format and returns the resultant string.
 // "-" indicates that this field is not part of the YAML representation and is thus excluded.
 func fieldName(field *ast.Field, tag string) string {
-	tagVal := strings.Split(fieldTag(field, tag), ",")[0] // This can return "-".
+	tagVal, _, _ := strings.Cut(fieldTag(field, tag), ",") // This can return "-".
 	if tagVal == "" {
 		// Set field name to the defined name in struct if defined.
 		if field.Names != nil {

@@ -8030,7 +8030,7 @@ func TestGetCherrypickPRMatch(t *testing.T) {
 	}
 	for _, testCase := range testCases {
 		testPR := *pr
-		testPR.PullRequest.Body = cherrypicker.CreateCherrypickBody(prNum, testCase.requestor, testCase.note, nil)
+		testPR.PullRequest.Body = cherrypicker.CreateCherrypickBody(prNum, testCase.requestor, testCase.note, nil, nil)
 		cherrypick, cherrypickOfPRNum, err := getCherryPickMatch(testPR)
 		if err != nil {
 			t.Fatalf("%s: Got error but did not expect one: %v", testCase.name, err)
