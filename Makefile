@@ -16,6 +16,7 @@ GO_LD_EXTRAFLAGS=-X github.com/openshift-eng/jira-lifecycle-plugin/vendor/k8s.io
 GOLINT=golangci-lint run
 
 lint: verify-golint
+.PHONY: lint
 
 # Override the vulncheck target from build-machinery-go to use our wrapper
 # that supports ignoring vulnerabilities with no available fix
