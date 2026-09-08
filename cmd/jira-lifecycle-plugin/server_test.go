@@ -8638,3 +8638,79 @@ func TestValidateTargetVersion(t *testing.T) {
 		})
 	}
 }
+
+func TestCreateCherryPickBugReleaseBlocker(t *testing.T) {
+	releaseBlockerValue := map[string]any{"self": "https://my-jira.com/rest/api/2/customFieldOption/12345", "value": "Approved", "id": "12345"}
+	testCases := []struct {
+		name                         string
+		targetVersion                string
+		expectReleaseBlockerStripped bool
+	}{
+		{
+			name:                         "z-stream clone strips Release Blocker",
+			targetVersion:                "4.14.z",
+			expectReleaseBlockerStripped: true,
+		},
+		{
+			name:                         "non-z-stream clone preserves Release Blocker",
+			targetVersion:                "4.15.0",
+			expectReleaseBlockerStripped: false,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			targetVersion := tc.targetVersion
+			bug := &jira.Issue{
+				ID:  "1",
+				Key: "OCPBUGS-123",
+				Fields: &jira.IssueFields{
+					Status: &jira.Status{Name: "VERIFIED"},
+					Project: jira.Project{
+						Name: "OCPBUGS",
+						Key:  "OCPBUGS",
+					},
+					Labels: []string{},
+					Unknowns: tcontainer.MarshalMap{
+						helpers.SeverityField:       map[string]any{"Value": "Critical"},
+						helpers.TargetVersionField:  []*jira.Version{{Name: "4.14.0"}},
+						helpers.ReleaseBlockerField: releaseBlockerValue,
+					},
+				},
+			}
+			fc := &fakeJiraClient{
+				FakeClient: &fakejira.FakeClient{
+					Issues: []*jira.Issue{bug},
+				},
+			}
+			options := JiraBranchOptions{
+				TargetVersion: &targetVersion,
+			}
+			log := logrus.NewEntry(logrus.StandardLogger())
+			cloneKey, _, err := createCherryPickBug(fc, bug, "release-4.14", options, log)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if cloneKey == "" {
+				t.Fatal("expected a clone key but got empty string")
+			}
+			// Find the cloned issue in the fake client's issue list
+			var clonedIssue *jira.Issue
+			for _, issue := range fc.Issues {
+				if issue.Key == cloneKey {
+					clonedIssue = issue
+					break
+				}
+			}
+			if clonedIssue == nil {
+				t.Fatalf("cloned issue %s not found in fake client", cloneKey)
+			}
+			_, hasReleaseBlocker := clonedIssue.Fields.Unknowns[helpers.ReleaseBlockerField]
+			if tc.expectReleaseBlockerStripped && hasReleaseBlocker {
+				t.Errorf("expected Release Blocker field to be stripped for z-stream clone, but it was present")
+			}
+			if !tc.expectReleaseBlockerStripped && !hasReleaseBlocker {
+				t.Errorf("expected Release Blocker field to be preserved for non-z-stream clone, but it was absent")
+			}
+		})
+	}
+}

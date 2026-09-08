@@ -2166,6 +2166,11 @@ func createCherryPickBug(jc jiraclient.Client, bug *jira.Issue, branch string, o
 	for _, field := range helpers.CustomFieldsToDelete {
 		delete(bugCopy.Fields.Unknowns, field)
 	}
+	// Clear Release Blocker for z-stream clones; the field should be
+	// independently assessed per-release, not inherited from the parent bug.
+	if strings.HasSuffix(targetVersion, ".z") {
+		delete(bugCopy.Fields.Unknowns, helpers.ReleaseBlockerField)
+	}
 	// The following Fields cannot be set via the Create Issue API; they must be uploaded separately
 	bugCopy.Fields.Attachments = nil
 	bugCopy.Fields.Comments = nil
