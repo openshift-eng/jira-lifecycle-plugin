@@ -5434,7 +5434,7 @@ orgs:
 </ul>`,
 			"my-org/my-repo": `The plugin has the following configuration:<ul>
 <li>by default, valid bugs must be closed, target the "my-repo-default" version, and be in one of the following states: VALIDATED. After being linked to a pull request, bugs will be moved to the PRE state.</li>
-<li>on the "branch-that-likes-closed-bugs" branch, valid bugs must be closed, target the "my-repo-default" version, be in one of the following states: VERIFIED, CLOSED (ERRATA), depend on at least one other bug, and have all dependent bugs in one of the following states: CLOSED (ERRATA) (MODIFIED is also allowed when the PR's own OCPBUGS issue has the exact SecurityTracking label). After being linked to a pull request, bugs will be moved to the CLOSED (VALIDATED) state and moved to the CLOSED (FIXED) state when all linked pull requests are merged.</li>
+<li>on the "branch-that-likes-closed-bugs" branch, valid bugs must be closed, target the "my-repo-default" version, be in one of the following states: VERIFIED, CLOSED (ERRATA), depend on at least one other bug, and have all dependent bugs in one of the following states: CLOSED (ERRATA) (MODIFIED is also allowed when the PR's own OCPBUGS issue has the exact SecurityTracking label; configured MODIFIED or wildcard-state resolution constraints still apply). After being linked to a pull request, bugs will be moved to the CLOSED (VALIDATED) state and moved to the CLOSED (FIXED) state when all linked pull requests are merged.</li>
 <li>on the "my-org-branch" branch, valid bugs must be closed, target the "my-repo-default" version, and be in one of the following states: VALIDATED. After being linked to a pull request, bugs will be moved to the POST state and updated to refer to the pull request using the external bug tracker.</li>
 <li>on the "my-repo-branch" branch, valid bugs must be closed, target the "my-repo-branch" version, and be in one of the following states: MODIFIED. After being linked to a pull request, bugs will be moved to the PRE state, updated to refer to the pull request using the external bug tracker, and moved to the MODIFIED state when all linked pull requests are merged.</li>
 </ul>`,
@@ -7423,15 +7423,24 @@ func TestBugKeyFromTitle(t *testing.T) {
 func TestValidateBugSecurityTracking(t *testing.T) {
 	t.Parallel()
 	for _, testCase := range []struct {
-		name       string
-		project    string
-		labels     []string
-		state      JiraBugState
-		change     func(*jira.Issue, *[]dependent, *JiraBranchOptions)
-		wantValid  bool
-		wantReason string
+		name             string
+		project          string
+		labels           []string
+		state            JiraBugState
+		configuredStates []JiraBugState
+		change           func(*jira.Issue, *[]dependent, *JiraBranchOptions)
+		wantValid        bool
+		wantReason       string
 	}{
 		{name: "labeled OCPBUGS allows modified", wantValid: true},
+		{name: "configured modified resolution matches", state: JiraBugState{Status: status.Modified, Resolution: "FIXED"}, configuredStates: []JiraBugState{{Status: status.Modified, Resolution: "FIXED"}}, wantValid: true},
+		{name: "configured modified resolution rejects wontfix", state: JiraBugState{Status: status.Modified, Resolution: "WONTFIX"}, configuredStates: []JiraBugState{{Status: status.Modified, Resolution: "FIXED"}}, wantReason: "but it is MODIFIED (WONTFIX) instead"},
+		{name: "configured modified resolution rejects empty", configuredStates: []JiraBugState{{Status: status.Modified, Resolution: "FIXED"}}, wantReason: "but it is MODIFIED instead"},
+		{name: "configured status and resolution are case insensitive", state: JiraBugState{Status: "modified", Resolution: "fixed"}, configuredStates: []JiraBugState{{Status: "modified", Resolution: "FIXED"}}, wantValid: true},
+		{name: "case insensitive configured status preserves resolution", state: JiraBugState{Status: status.Modified, Resolution: "WONTFIX"}, configuredStates: []JiraBugState{{Status: "modified", Resolution: "FIXED"}}, wantReason: "but it is MODIFIED (WONTFIX) instead"},
+		{name: "configured unrestricted modified preserved", state: JiraBugState{Status: status.Modified, Resolution: "WONTFIX"}, configuredStates: []JiraBugState{{Status: status.Modified}}, wantValid: true},
+		{name: "configured wildcard resolution matches", state: JiraBugState{Status: status.Modified, Resolution: "FIXED"}, configuredStates: []JiraBugState{{Resolution: "FIXED"}}, wantValid: true},
+		{name: "configured wildcard resolution rejects wontfix", state: JiraBugState{Status: status.Modified, Resolution: "WONTFIX"}, configuredStates: []JiraBugState{{Resolution: "FIXED"}}, wantReason: "but it is MODIFIED (WONTFIX) instead"},
 		{name: "label among others", labels: []string{"other", "SecurityTracking"}, wantValid: true},
 		{name: "ordinary issue unchanged", labels: []string{}, wantReason: "expected dependent"},
 		{name: "unrelated label unchanged", labels: []string{"security"}, wantReason: "expected dependent"},
@@ -7503,7 +7512,10 @@ func TestValidateBugSecurityTracking(t *testing.T) {
 				dependencyState.Status = status.Modified
 			}
 			dependents := []dependent{{key: project + "-2", bugState: dependencyState, targetVersion: new("4.21.0")}}
-			states := []JiraBugState{{Status: status.OnQA}, {Status: status.Verified}, {Status: status.ReleasePending}, {Status: status.Closed, Resolution: "ERRATA"}}
+			states := testCase.configuredStates
+			if states == nil {
+				states = []JiraBugState{{Status: status.OnQA}, {Status: status.Verified}, {Status: status.ReleasePending}, {Status: status.Closed, Resolution: "ERRATA"}}
+			}
 			originalStates := append([]JiraBugState{}, states...)
 			options := JiraBranchOptions{
 				IsOpen: new(true), TargetVersion: new("4.20.0"), ValidStates: &[]JiraBugState{{Status: status.Modified}},
