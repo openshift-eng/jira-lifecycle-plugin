@@ -136,7 +136,7 @@ func (s *server) helpProvider(enabledRepos []config.OrgRepo) (*pluginhelp.Plugin
 			}
 			if opts[branch].DependentBugStates != nil {
 				pretty := strings.Join(prettyStates(*opts[branch].DependentBugStates), ", ")
-				conditions = append(conditions, fmt.Sprintf("have all dependent bugs in one of the following states: %s", pretty))
+				conditions = append(conditions, fmt.Sprintf("have all dependent bugs in one of the following states: %s (MODIFIED is also allowed when the PR's own OCPBUGS issue has the exact SecurityTracking label)", pretty))
 			}
 			if opts[branch].DependentBugTargetVersions != nil {
 				conditions = append(conditions, fmt.Sprintf("have all dependent bugs in one of the following target versions: %s", strings.Join(*opts[branch].DependentBugTargetVersions, ", ")))
@@ -1582,6 +1582,11 @@ func validateBug(bug *jira.Issue, dependents []dependent, options JiraBranchOpti
 	}
 
 	if options.DependentBugStates != nil {
+		if bug.Fields != nil && bug.Fields.Project.Key == "OCPBUGS" && slices.Contains(bug.Fields.Labels, "SecurityTracking") {
+			allowed := append([]JiraBugState{}, *options.DependentBugStates...)
+			allowed = append(allowed, JiraBugState{Status: status.Modified})
+			options.DependentBugStates = &allowed
+		}
 		for _, depBug := range dependents {
 			if bug.Fields != nil {
 				if !strings.HasPrefix(depBug.key, bug.Fields.Project.Key+"-") {
