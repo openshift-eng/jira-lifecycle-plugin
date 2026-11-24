@@ -136,7 +136,7 @@ func (s *server) helpProvider(enabledRepos []config.OrgRepo) (*pluginhelp.Plugin
 			}
 			if opts[branch].DependentBugStates != nil {
 				pretty := strings.Join(prettyStates(*opts[branch].DependentBugStates), ", ")
-				conditions = append(conditions, fmt.Sprintf("have all dependent bugs in one of the following states: %s (MODIFIED is also allowed when the PR's own OCPBUGS issue has the exact SecurityTracking label; configured MODIFIED or wildcard-state resolution constraints still apply)", pretty))
+				conditions = append(conditions, fmt.Sprintf("have all dependent bugs in one of the following states: %s (MODIFIED and ON_QA are also allowed when the PR's own OCPBUGS issue has the exact SecurityTracking label; configured MODIFIED/ON_QA or wildcard-state resolution constraints still apply)", pretty))
 			}
 			if opts[branch].DependentBugTargetVersions != nil {
 				conditions = append(conditions, fmt.Sprintf("have all dependent bugs in one of the following target versions: %s", strings.Join(*opts[branch].DependentBugTargetVersions, ", ")))
@@ -1583,12 +1583,15 @@ func validateBug(bug *jira.Issue, dependents []dependent, options JiraBranchOpti
 
 	if options.DependentBugStates != nil {
 		if bug.Fields != nil && bug.Fields.Project.Key == "OCPBUGS" && slices.Contains(bug.Fields.Labels, "SecurityTracking") {
-			modifiedConfigured := slices.ContainsFunc(*options.DependentBugStates, func(state JiraBugState) bool {
-				return state.Status == "" || strings.EqualFold(state.Status, status.Modified)
-			})
-			if !modifiedConfigured {
-				allowed := append([]JiraBugState{}, *options.DependentBugStates...)
-				allowed = append(allowed, JiraBugState{Status: status.Modified})
+			allowed := append([]JiraBugState{}, *options.DependentBugStates...)
+			for _, extra := range []string{status.Modified, status.OnQA} {
+				if !slices.ContainsFunc(allowed, func(state JiraBugState) bool {
+					return state.Status == "" || strings.EqualFold(state.Status, extra)
+				}) {
+					allowed = append(allowed, JiraBugState{Status: extra})
+				}
+			}
+			if len(allowed) != len(*options.DependentBugStates) {
 				options.DependentBugStates = &allowed
 			}
 		}
